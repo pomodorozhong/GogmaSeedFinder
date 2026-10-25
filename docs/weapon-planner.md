@@ -58,7 +58,8 @@ A weapon marked **Optional** is left out of a route when its goal cannot be
 reached within the roll limits or when it needs roll positions that other
 weapons use. Required weapons always take priority over optional ones; within
 each group, weapons earlier in the list keep their place. A left-out weapon is
-removed from both streams, and the route names it with the reason. If the
+removed from both streams, so each weapon is checked against both streams
+together before it is left out; the route names it with the reason. If the
 search budget runs out before an optional weapon is checked, it is left out as
 "not checked" rather than reported as a conflict, since it may have fit. A required
 weapon that cannot reach its goal at all still makes the route incomplete.

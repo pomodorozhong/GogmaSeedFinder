@@ -199,6 +199,16 @@ test("weapons that cannot fit are left out, required before optional, earlier be
   assert.deepEqual(ids(await selectTargets(req(["b"]), unreachable, ["a", "b", "c"])), [["a", "c"], ["b:unreachable"]]);
 });
 
+test("a weapon is excluded only when it conflicts in a stream, not because of a weapon dropped in the other", async () => {
+  const req = { targets: ["a", "b", "c"].map((id) => ({ id, planner: { optional: id !== "a" } })), limits: { bonus: 10, skill: 10 } };
+  const choices = (finishes, action) => Object.entries(finishes).map(([id, finish]) => ({ id, choices: [{ finish, action }] }));
+  // Bonus alone would drop C behind B; skill alone would drop B behind A.
+  const pool = { bonus: choices({ a: 1, b: 2, c: 2 }, "reset"), skill: choices({ a: 1, b: 1, c: 2 }, "skill") };
+  const selection = await selectTargets(req, pool, ["a", "b", "c"]);
+  assert.deepEqual([...selection.kept].sort(), ["a", "c"]);
+  assert.deepEqual(selection.dropped.map((v) => `${v.id}:${v.reason}`), ["b:conflict"]);
+});
+
 test("optional weapons left out because the search budget ran out are marked unchecked, not conflicting", async () => {
   const req = { targets: ["a", "b", "c"].map((id) => ({ id, planner: { optional: id !== "a" } })), limits: { bonus: 10, skill: 10 } };
   // Keep finishes with acquisitions force the budgeted search.

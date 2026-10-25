@@ -273,39 +273,47 @@ export function replayRoute(request, mode, bonus, skill, provider) {
 // required before optional, and a weapon is kept only if every weapon kept so
 // far still fits within the roll limit. A required weapon with no reachable
 // goal is never dropped, so the route reports it as missing instead.
-// Dropping a weapon removes it from both streams: half a weapon is not a goal.
+// Dropping a weapon removes it from both streams: half a weapon is not a goal,
+// so each weapon is tested against both streams before it is dropped.
 export async function selectTargets(request, pool, order, options = {}) {
   const optional = new Set(request.targets.filter((t) => t.planner.optional).map((t) => t.id));
-  let kept = [...order.filter((id) => !optional.has(id)), ...order.filter((id) => optional.has(id))];
   const dropped = new Map();
   let exhausted = false;
-  for (const stream of ["bonus", "skill"]) {
-    const byId = new Map(pool[stream].map((target) => [target.id, target]));
-    const limit = request.limits[stream];
-    for (const id of kept) if (!byId.get(id).choices.length && optional.has(id)) dropped.set(id, "unreachable");
-    kept = kept.filter((id) => !dropped.has(id));
-    if (kept.some((id) => !byId.get(id).choices.length)) continue;
-    const budget = { nodes: 0, max: options.maxNodes ?? 200_000, work: 0, maxWork: options.maxWork ?? 300_000_000 };
-    const all = eventSchedule(kept.map((id) => byId.get(id)), limit, budget);
-    if (all.choices) continue;
-    const fit = [];
-    for (let i = 0; i < kept.length; i += 1) {
-      const trial = eventSchedule([...fit, byId.get(kept[i])], limit, budget);
-      if (trial.exhausted) {
-        // Out of budget: keep the remaining required weapons for the final
-        // search to judge, and drop the remaining optional ones unchecked —
-        // they may well have fit.
-        exhausted = true;
-        for (const id of kept.slice(i)) if (optional.has(id)) dropped.set(id, "unchecked"); else fit.push(byId.get(id));
-        break;
-      }
-      if (trial.choices) fit.push(byId.get(kept[i]));
-      else dropped.set(kept[i], "conflict");
-      await pause();
+  const streams = ["bonus", "skill"].map((stream) => ({
+    limit: request.limits[stream],
+    byId: new Map(pool[stream].map((target) => [target.id, target])),
+    budget: { nodes: 0, max: options.maxNodes ?? 200_000, work: 0, maxWork: options.maxWork ?? 300_000_000 },
+  }));
+  for (const id of order) if (optional.has(id) && streams.some(({ byId }) => !byId.get(id).choices.length)) dropped.set(id, "unreachable");
+  const kept = [...order.filter((id) => !optional.has(id)), ...order.filter((id) => optional.has(id) && !dropped.has(id))];
+  // A stream with an unreachable required weapon is reported as missing, so
+  // it cannot exclude anything.
+  const active = streams.filter(({ byId }) => kept.every((id) => byId.get(id).choices.length));
+  const fits = (ids) => {
+    for (const { byId, limit, budget } of active) {
+      const trial = eventSchedule(ids.map((id) => byId.get(id)), limit, budget);
+      if (trial.exhausted) return null;
+      if (!trial.choices) return false;
     }
-    kept = kept.filter((id) => !dropped.has(id));
+    return true;
+  };
+  const all = fits(kept);
+  const fit = all ? [...kept] : [];
+  for (let i = 0; !all && i < kept.length; i += 1) {
+    const trial = all === null ? null : fits([...fit, kept[i]]);
+    if (trial === null) {
+      // Out of budget: keep the remaining required weapons for the final
+      // search to judge, and drop the remaining optional ones unchecked —
+      // they may well have fit.
+      exhausted = true;
+      for (const id of kept.slice(i)) if (optional.has(id)) dropped.set(id, "unchecked"); else fit.push(id);
+      break;
+    }
+    if (trial) fit.push(kept[i]);
+    else dropped.set(kept[i], "conflict");
+    await pause();
   }
-  return { kept: new Set(kept), dropped: [...dropped].map(([id, reason]) => ({ id, reason, optional: optional.has(id) })), exhausted };
+  return { kept: new Set(fit), dropped: [...dropped].map(([id, reason]) => ({ id, reason, optional: optional.has(id) })), exhausted };
 }
 
 async function planRoute(request, pool, mode, order, provider, options) {
