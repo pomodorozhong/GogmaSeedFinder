@@ -1,6 +1,6 @@
 import { t, localizedTargetName } from "./i18n.js";
 import { pl } from "./planner-text.js";
-import { availableStats, BONUS_CATEGORY, layoutOf, normalizedPlanner, routePosition, routeWeaponsMatch, samePosition, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { availableStats, BONUS_CATEGORY, layoutOf, normalizedPlanner, routePosition, routeWeaponsMatch, samePosition, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
 
 const STORAGE_KEY = "gogma-weapon-planner-v1";
 const esc = (text) => String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -100,6 +100,15 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   function comboRow(pair = { seriesIndex: 11, groupIndex: 13 }) {
     return `<div class="pl-combo"><select data-pair="series" aria-label="${html("Series skill")}">${comboOptions(series, pair.seriesIndex)}</select><span>＋</span><select data-pair="group" aria-label="${html("Group skill")}">${comboOptions(groups, pair.groupIndex)}</select><button type="button" class="text-button" data-pl-action="remove-pair" aria-label="${html("Remove combination")}">×</button></div>`;
   }
+  // Status maximums depend on II/EX values edited in the same form, so they are
+  // checked on submit instead of by the input's max.
+  const statusStat = (key, target) => key === "element" && target.attributeForce >= 6;
+  function rollHint(key, target) {
+    const unit = key === "affinity" ? "%" : "";
+    const max = statMaximum(key, target);
+    const values = statRollValues(key, target).map(([tier, value]) => `${tier} ${value === null ? "?" : `+${value}${unit}`}`);
+    return `<small class="pl-roll-values">${esc(values.join(" · "))}${max === null ? "" : ` · <strong>${html("Max")} +${max}${unit}</strong>`}</small>`;
+  }
   function renderEditor(id) {
     const raw = getTargets().find((target) => target.id === id);
     if (!raw) return;
@@ -109,7 +118,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const bonusOptions = bonuses.filter(([id]) => availableStats(target).includes(({ 0: "attack", 1: "affinity", 2: "element", 3: target.weaponType >= 12 ? "ammo" : "sharpness" })[BONUS_CATEGORY[id]])).map(([id]) => [id, bonusName(target.weaponType, id)]);
     const categories = [...new Set(bonusOptions.map(([id]) => BONUS_CATEGORY[id]))].map((category) => [category, statName(({ 0: "attack", 1: "affinity", 2: "element", 3: target.weaponType >= 12 ? "ammo" : "sharpness" })[category], target)]);
     q("#pl-editor").innerHTML = `<form id="pl-goal-form" class="pl-editor"><div class="pl-section-heading"><h3>${html("Edit weapon goals")} · ${esc(nameOf(target))}</h3><button class="text-button" type="button" data-pl-action="cancel-edit">${html("Cancel")}</button></div><label class="pl-name-field">${html("Weapon name")}<input name="label" value="${esc(target.label)}" maxlength="24" placeholder="${html("Optional name")}"></label>
-      <div class="pl-editor-section"><label class="pl-toggle"><input name="bonusEnabled" type="checkbox"${p.bonusEnabled ? " checked" : ""}>${html("Use bonus goals")}</label><p class="pl-fine">${html("Blank stats are ignored. Attack uses unbloated raw; affinity uses percentage points. These are gains from the five slots, not final weapon stats.")}</p><div class="pl-goal-table-wrap"><table class="pl-goal-table"><thead><tr><th>${html("Stat")}</th><th class="pl-teal">✓ ${html("Acceptable")}</th><th class="pl-gold">★ ${html("Top desired")}</th></tr></thead><tbody>${availableStats(target).map((key) => `<tr><th>${esc(statName(key, target))}${key === "affinity" ? " (%)" : ""}</th>${["acceptable", "preferred"].map((mode) => `<td><input type="number" min="0" max="9999" step="1" data-stat="${key}" data-tier="${mode}" value="${p[mode].stats[key] ?? ""}" aria-label="${esc(`${tierName(mode)} · ${statName(key, target)}`)}"></td>`).join("")}</tr>`).join("")}</tbody></table></div></div>
+      <div class="pl-editor-section"><label class="pl-toggle"><input name="bonusEnabled" type="checkbox"${p.bonusEnabled ? " checked" : ""}>${html("Use bonus goals")}</label><p class="pl-fine">${html("Blank stats are ignored. Attack uses unbloated raw; affinity uses percentage points. These are gains from the five slots, not final weapon stats.")}</p><div class="pl-goal-table-wrap"><table class="pl-goal-table"><thead><tr><th>${html("Stat")}</th><th class="pl-teal">✓ ${html("Acceptable")}</th><th class="pl-gold">★ ${html("Top desired")}</th></tr></thead><tbody>${availableStats(target).map((key) => `<tr><th>${esc(statName(key, target))}${key === "affinity" ? " (%)" : ""}${rollHint(key, target)}</th>${["acceptable", "preferred"].map((mode) => `<td><input type="number" min="0" max="${statusStat(key, target) ? 9999 : statMaximum(key, target)}" step="1" data-stat="${key}" data-tier="${mode}" value="${p[mode].stats[key] ?? ""}" aria-label="${esc(`${tierName(mode)} · ${statName(key, target)}`)}"></td>`).join("")}</tr>`).join("")}</tbody></table></div></div>
       <div class="pl-editor-section"><label class="pl-toggle"><input name="skillEnabled" type="checkbox"${p.skillEnabled ? " checked" : ""}>${html("Use skill goals")}</label><p class="pl-fine">${html("A match for any pair in a column meets that goal. Top desired results also count as acceptable.")}</p><div class="pl-skill-goals">${["acceptable", "preferred"].map((mode) => `<section><h4 class="${mode === "preferred" ? "pl-gold" : "pl-teal"}">${mode === "preferred" ? "★" : "✓"} ${esc(tierName(mode))}</h4><div data-pairs="${mode}">${p[mode].skills.map(comboRow).join("")}</div><button type="button" class="text-button" data-pl-action="add-pair" data-tier="${mode}">＋ ${html("Add combination")}</button></section>`).join("")}</div></div>
       <details class="pl-current-details"><summary>${html("Current weapon (optional)")}</summary><p class="pl-fine">${html("Enter all five current bonuses to skip goals already met. An ordered category layout alone allows Keep Bonuses, but cannot prove a goal is already met.")}</p><h4>${html("Current bonuses in game order")}</h4><div class="pl-five-slots">${Array.from({ length: 5 }, (_, index) => `<label>${html("Slot {n}", { n: index + 1 })}<select data-current-bonus="${index}">${options(bonusOptions, p.currentBonuses?.[index], true)}</select></label>`).join("")}</div><h4>${html("Or known categories in game order")}</h4><div class="pl-five-slots">${Array.from({ length: 5 }, (_, index) => `<label>${html("Slot {n}", { n: index + 1 })}<select data-current-category="${index}">${options(categories, target.keepCategories?.[index], true)}</select></label>`).join("")}</div><h4>${html("Current skills")}</h4><div class="pl-current-pair"><select name="currentSeries" aria-label="${html("Series skill")}">${comboOptions(series, p.currentSkill === null ? null : Math.floor(p.currentSkill / 14), true)}</select><span>＋</span><select name="currentGroup" aria-label="${html("Group skill")}">${comboOptions(groups, p.currentSkill === null ? null : p.currentSkill % 14, true)}</select></div></details>
       ${target.attributeForce >= 6 && target.weaponType < 12 ? `<div class="pl-status-values"><h4>${html("Status boost values")}</h4><p class="pl-fine">${html("Enter the II and EX gains shown on this weapon to use a status minimum.")}</p>${[0, 1].map((index) => `<label>${index === 0 ? "II" : "EX"}<input name="element${index}" type="number" min="0" max="9999" step="1" value="${p.elementValues[index] ?? ""}"></label>`).join("")}</div>` : ""}<p id="pl-editor-error" class="error" role="alert" hidden></p><div class="pl-editor-footer"><button class="secondary" type="submit">${html("Save goals")}</button><button class="text-button" type="button" data-pl-action="cancel-edit">${html("Cancel")}</button></div></form>`;
@@ -141,6 +150,12 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       if ((si === "") !== (gi === "")) throw new Error(pl("Select both current skills or leave both unknown."));
       p.currentSkill = si === "" ? null : Number(si) * 14 + Number(gi);
       if (target.attributeForce >= 6 && target.weaponType < 12) p.elementValues = [0, 1].map((i) => form.elements[`element${i}`].value === "" ? null : Number(form.elements[`element${i}`].value));
+      for (const mode of ["acceptable", "preferred"]) {
+        for (const [key, min] of Object.entries(p[mode].stats)) {
+          const max = statMaximum(key, target);
+          if (max !== null && min > max) throw new Error(pl("{stat} can gain at most +{max} from five slots.", { stat: statName(key, target), max: `${max}${key === "affinity" ? "%" : ""}` }));
+        }
+      }
       // Validate goals without requiring a discovered seed in the editor.
       validatePlannerRequest({ origin: { baseSeed: 0, bonusCounter: 0, skillCounter: 0 }, targets: [target], limits: { bonus: 0, skill: 0 } });
       target.keepSource = "手入力";

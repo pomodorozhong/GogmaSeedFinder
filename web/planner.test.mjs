@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import { initSync, predict_gogma_rolls, predict_gogma_keep_rolls, predict_skill_rolls } from "./pkg/gogma_wasm_search.js";
-import { bonusTotals, layoutOf, matchesTier, normalizedPlanner, resultQuality, routeWeaponsMatch, statGoalMatches, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { bonusTotals, layoutOf, matchesTier, normalizedPlanner, resultQuality, routeWeaponsMatch, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
 import { optimizeStream, planWeapons } from "./planner-engine.js";
 
 initSync({ module: await readFile(new URL("./pkg/gogma_wasm_search_bg.wasm", import.meta.url)) });
@@ -142,6 +142,21 @@ test("status values and counter overflow are validated before searching", () => 
   assert.doesNotThrow(() => validatePlannerRequest(request([t])));
   const req = request([t]); req.origin.bonusCounter = 0xffffffff;
   assert.throws(() => validatePlannerRequest(req), /state/);
+});
+
+test("stat maximums follow the two-copy and two-slot sharpness/ammo limits", () => {
+  const blade = target("blade");
+  assert.deepEqual(statRollValues("attack", blade), [["II", 6], ["III", 9], ["EX", 12]]);
+  assert.equal(statMaximum("attack", blade), 48);
+  assert.equal(bonusTotals([15, 15, 12, 12, 8], blade).attack, 48);
+  assert.equal(statMaximum("affinity", blade), 42);
+  assert.equal(statMaximum("sharpness", blade), 100);
+  assert.equal(statMaximum("element", blade), 2 * 60 + 2 * 90);
+  assert.equal(statMaximum("ammo", target("gun", 12, 0)), 4);
+  const status = target("status", 3, 6);
+  assert.equal(statMaximum("element", status), null);
+  status.planner.elementValues = [30, 50];
+  assert.equal(statMaximum("element", status), 160);
 });
 
 test("all planner copy has Japanese and Traditional Chinese translations", async () => {

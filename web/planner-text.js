@@ -38,6 +38,8 @@ export const PLANNER_TEXT = {
   "Status": ["状態異常", "異常狀態"],
   "Sharpness": ["斬れ味", "斬味"],
   "Ammo": ["装填数", "裝填數"],
+  "Max": ["最大", "最大"],
+  "{stat} can gain at most +{max} from five slots.": ["{stat}の上昇値は5枠で最大+{max}です。", "{stat}在5格中最多加成+{max}。"],
   "Skill combinations": ["スキルの組み合わせ", "技能組合"],
   "A match for any pair in a column meets that goal. Top desired results also count as acceptable.": ["各列のいずれかの組み合わせに一致すれば達成です。最優先の結果は許容目標としても扱います。", "符合該欄任一組合即達成目標。最理想的結果也視為可接受。"],
   "Series skill": ["シリーズスキル", "系列技能"],

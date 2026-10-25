@@ -34,6 +34,24 @@ export function bonusTotals(bonuses, target) {
   return total;
 }
 
+// Per-slot gains for one stat, lowest tier first. Status values are null until
+// entered from the actual weapon.
+export function statRollValues(key, target) {
+  if (key === "attack") return [["II", 6], ["III", 9], ["EX", 12]];
+  if (key === "affinity") return [["II", 6], ["III", 8], ["EX", 10]];
+  if (key === "element") return [["II", elementValues(target)[0]], ["EX", elementValues(target)[1]]];
+  return key === "ammo" ? [["I", 1], ["EX", 2]] : [["I", 30], ["EX", 50]];
+}
+
+// Highest gain five slots can roll: no bonus appears more than twice, and
+// sharpness/ammo fill at most two slots. Null while a status value is unknown.
+export function statMaximum(key, target) {
+  const values = statRollValues(key, target).map(([, value]) => value);
+  if (values.some((value) => !Number.isFinite(value))) return null;
+  const slots = key === "sharpness" || key === "ammo" ? 2 : 5;
+  return values.flatMap((value) => [value, value]).sort((a, b) => b - a).slice(0, slots).reduce((sum, value) => sum + value, 0);
+}
+
 export function layoutOf(bonuses) {
   return bonuses.map((id) => BONUS_CATEGORY[id]);
 }
