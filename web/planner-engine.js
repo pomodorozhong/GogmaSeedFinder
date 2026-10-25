@@ -124,13 +124,18 @@ function eventSchedule(targets, horizon, budget) {
     let bestIndex = 0;
     let minimum = Infinity;
     for (let i = 0; i < remaining.length; i += 1) {
+      // Only whether this target beats the current minimum matters, so stop
+      // counting once it cannot. Scanned choices count toward the budget too:
+      // with many weapons a single node can scan thousands of choices.
       let count = 0;
       for (const choice of remaining[i].choices) {
-        if (choice.finish > horizon) break;
+        if (choice.finish > horizon || count >= minimum) break;
+        budget.work += 1;
         if (choice.finish === 0 || !occupied[choice.finish]) count += 1;
       }
       if (count < minimum) { minimum = count; bestIndex = i; }
     }
+    if (budget.work > budget.maxWork) { exhausted = true; return false; }
     if (!minimum) return false;
     const target = remaining[bestIndex];
     const rest = remaining.filter((_, i) => i !== bestIndex);
@@ -164,7 +169,7 @@ function eventSchedule(targets, horizon, budget) {
 export async function optimizeStream(targets, limit, complete = true, options = {}) {
   const missing = targets.filter((target) => !target.choices.length).map((target) => target.id);
   if (missing.length) return { status: complete ? "missing" : "incomplete", missing, proven: complete, horizon: null, choices: [] };
-  const budget = { nodes: 0, max: options.maxNodes ?? 200_000 };
+  const budget = { nodes: 0, max: options.maxNodes ?? 200_000, work: 0, maxWork: options.maxWork ?? 300_000_000 };
   const first = eventSchedule(targets, limit, budget);
   if (!first.choices) return { status: first.exhausted || !complete ? "incomplete" : "missing", missing: [], proven: !first.exhausted && complete, horizon: null, choices: [] };
   let best = first.choices;
