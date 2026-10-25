@@ -2,6 +2,9 @@
 // stats. Attack is unbloated raw; affinity is in percentage points.
 export const BONUS_CATEGORY = Object.freeze({ 8: 0, 12: 0, 15: 0, 9: 1, 13: 1, 16: 1, 11: 2, 14: 2, 6: 3, 10: 3 });
 export const STAT_KEYS = ["attack", "affinity", "element", "sharpness", "ammo"];
+// Search time grows about linearly with weapon count; the scheduling search is
+// budgeted per route, so a large selection costs time, not unbounded work.
+export const MAX_SELECTED = 100;
 export const ELEMENT_VALUES = [[90, 110], [50, 80], [30, 50], [60, 90], [60, 90], [60, 90], [60, 90], [60, 90], [50, 80], [60, 80], [50, 80], [40, 60], [0, 0], [0, 0]];
 
 export function elementValues(target) {
@@ -138,7 +141,7 @@ export function resultQuality(result, target, stream) {
 export function validatePlannerRequest(request) {
   const { origin, targets, limits } = request;
   if (!Number.isInteger(origin?.baseSeed) || origin.baseSeed < 0 || origin.baseSeed > 99_999_999) throw new Error("state");
-  if (!Array.isArray(targets) || !targets.length || targets.length > 8 || new Set(targets.map((t) => t.id)).size !== targets.length) throw new Error("targets");
+  if (!Array.isArray(targets) || !targets.length || targets.length > MAX_SELECTED || new Set(targets.map((t) => t.id)).size !== targets.length) throw new Error("targets");
   for (const stream of ["bonus", "skill"]) {
     if (!Number.isInteger(limits?.[stream]) || limits[stream] < 0 || limits[stream] > 10_000) throw new Error("limits");
     if (targets.some((target) => hasGoal(target, stream))) {

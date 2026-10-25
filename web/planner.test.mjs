@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import { initSync, predict_gogma_rolls, predict_gogma_keep_rolls, predict_skill_rolls } from "./pkg/gogma_wasm_search.js";
-import { bonusTotals, copiedPlanner, layoutOf, matchesTier, normalizedPlanner, resultQuality, routeWeaponsMatch, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { bonusTotals, copiedPlanner, layoutOf, MAX_SELECTED, matchesTier, normalizedPlanner, resultQuality, routeWeaponsMatch, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
 import { optimizeStream, planWeapons } from "./planner-engine.js";
 
 initSync({ module: await readFile(new URL("./pkg/gogma_wasm_search_bg.wasm", import.meta.url)) });
@@ -176,6 +176,13 @@ test("copied goals keep the new weapon's own rolls and drop element goals whose 
   assert.deepEqual(otherPoison.acceptable.stats, { element: 40 });
   assert.deepEqual(otherPoison.elementValues, [10, 20]);
   assert.deepEqual(copiedPlanner(poison, target("sleep", 3, 8)).elementValues, [null, null]);
+});
+
+test("up to MAX_SELECTED weapons can be planned together", () => {
+  assert.equal(MAX_SELECTED, 100);
+  const many = Array.from({ length: MAX_SELECTED + 1 }, (_, i) => target(`w${i}`));
+  assert.doesNotThrow(() => validatePlannerRequest(request(many.slice(0, MAX_SELECTED))));
+  assert.throws(() => validatePlannerRequest(request(many)), /targets/);
 });
 
 test("all planner copy has Japanese and Traditional Chinese translations", async () => {

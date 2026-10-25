@@ -1,6 +1,6 @@
 import { t, localizedTargetName } from "./i18n.js";
 import { pl } from "./planner-text.js";
-import { availableStats, BONUS_CATEGORY, copiedPlanner, layoutOf, normalizedPlanner, routePosition, routeWeaponsMatch, samePosition, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { availableStats, BONUS_CATEGORY, copiedPlanner, layoutOf, MAX_SELECTED, normalizedPlanner, routePosition, routeWeaponsMatch, samePosition, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
 
 const STORAGE_KEY = "gogma-weapon-planner-v1";
 const esc = (text) => String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -9,14 +9,14 @@ const actionName = (action) => pl(({ reset: "Reset Bonuses", keep: "Keep Bonuses
 const tierName = (tier) => pl(tier === "preferred" ? "Top desired" : "Acceptable");
 const number = (value) => value === null || value === undefined ? pl("Unknown") : value.toLocaleString();
 const stateCode = (state) => state.baseSeed === null ? pl("Unknown") : `GSF2-B${state.baseSeed}-G${state.bonusCounter ?? "?"}-S${state.skillCounter ?? "?"}`;
-const errorText = (key) => pl(({ targets: "Select between 1 and 8 weapons.", state: "Enter a known base seed and the counters for the streams you want to plan.", limits: "Enter whole-number roll limits from 0 to 10,000.", goals: "Enable at least one goal per weapon and enter a stat minimum or skill pair.", statusValues: "Enter both status boost values before using a status minimum." })[key] ?? "Unable to calculate the guide. {detail}", { detail: key });
+const errorText = (key) => pl(({ targets: "Select between 1 and {max} weapons.", state: "Enter a known base seed and the counters for the streams you want to plan.", limits: "Enter whole-number roll limits from 0 to 10,000.", goals: "Enable at least one goal per weapon and enter a stat minimum or skill pair.", statusValues: "Enter both status boost values before using a status minimum." })[key] ?? "Unable to calculate the guide. {detail}", { detail: key, max: MAX_SELECTED });
 
 export function initPlanner({ root, getState, getTargets, setTargets, saveStep, openState, metadata }) {
   const { weapons, attributes, bonuses, bonusName, series, groups, defaultSkills } = metadata;
   let stored;
   try { stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null"); } catch { stored = null; }
   const cache = {
-    selected: Array.isArray(stored?.selected) ? stored.selected.filter((v) => typeof v === "string") : getTargets().slice(0, 8).map((target) => target.id),
+    selected: Array.isArray(stored?.selected) ? stored.selected.filter((v) => typeof v === "string") : getTargets().slice(0, MAX_SELECTED).map((target) => target.id),
     limits: { bonus: stored?.limits?.bonus ?? 250, skill: stored?.limits?.skill ?? 1000 },
     side: stored?.side === "right" ? "right" : "left",
     routes: stored?.routes && typeof stored.routes === "object" ? stored.routes : {},
@@ -66,7 +66,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   root.innerHTML = `
     <header class="pl-page-heading"><div><p class="step">WEAPON PLANNER</p><h2>${html("Plan your weapons, roll by roll.")}</h2><p class="pl-muted">${html("Choose your weapons and minimum stat gains. Get a complete bonus and skill route.")}</p></div><span id="pl-storage" class="pl-storage"></span></header>
     <div class="pl-state-strip"><span>${html("Saved position")}</span><code id="pl-position"></code><button class="text-button" type="button" data-pl-action="state">${html("Set current state")}</button></div>
-    <section class="pl-section" aria-labelledby="pl-weapons-title"><div class="pl-section-heading"><div><h3 id="pl-weapons-title"><span class="pl-index">01</span> ${html("Your weapons")}</h3><p class="pl-muted">${html("Select up to 8 weapons. Each copy is planned separately.")}</p></div><button class="secondary small-button" type="button" data-pl-action="add">＋ ${html("Add weapon")}</button></div>
+    <section class="pl-section" aria-labelledby="pl-weapons-title"><div class="pl-section-heading"><div><h3 id="pl-weapons-title"><span class="pl-index">01</span> ${html("Your weapons")}</h3><p class="pl-muted">${html("Select up to {max} weapons. Each copy is planned separately.", { max: MAX_SELECTED })}</p></div><button class="secondary small-button" type="button" data-pl-action="add">＋ ${html("Add weapon")}</button></div>
       <form id="pl-add-form" class="pl-add-form" hidden><label>${html("Weapon name")}<input name="label" maxlength="24" placeholder="${html("Optional name")}"></label><label>${html("Weapon type")}<select name="weaponType">${options(weapons, 3)}</select></label><label>${html("Element / status")}<select name="attributeForce">${options(attributes, 1)}</select></label><label>${html("Copy goals from")}<select name="copyFrom"></select></label><button class="secondary small-button" type="submit">${html("Add weapon")}</button><button class="text-button" type="button" data-pl-action="cancel-add">${html("Cancel")}</button></form>
       <div id="pl-weapons" class="pl-weapon-grid"></div><div id="pl-editor"></div>
     </section>
@@ -383,7 +383,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   root.addEventListener("change", (event) => {
     const input = event.target;
     if (input.matches("[data-pl-select]")) {
-      if (input.checked && cache.selected.length >= 8) { input.checked = false; setError(pl("Select between 1 and 8 weapons.")); return; }
+      if (input.checked && cache.selected.length >= MAX_SELECTED) { input.checked = false; setError(errorText("targets")); return; }
       cache.selected = input.checked ? [...cache.selected, input.dataset.plSelect] : cache.selected.filter((id) => id !== input.dataset.plSelect);
       invalidate(); renderWeapons();
     } else if (input.matches("[data-copy-goals]")) { copyGoals(input.value); input.value = ""; }
@@ -399,7 +399,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     if (!target.label) target.label = uniqueLabel(nameOf(target));
     const source = getTargets().find((v) => v.id === form.elements.copyFrom.value);
     target.planner = source ? copiedPlanner(source, target) : normalizedPlanner(target);
-    if (cache.selected.length < 8) cache.selected.push(target.id);
+    if (cache.selected.length < MAX_SELECTED) cache.selected.push(target.id);
     setTargets([...getTargets(), target]); invalidate(); renderWeapons();
     q("#pl-add-form").hidden = true; form.elements.label.value = "";
     renderEditor(target.id);
