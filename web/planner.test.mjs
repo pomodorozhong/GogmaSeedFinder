@@ -347,6 +347,17 @@ test("the acceptable route takes top-desired finishes only when they cost no ext
   assert.equal(finishOf(result, "a").finish, 1);
 });
 
+test("a later upgrade cannot take an earlier weapon's top-desired finish", async () => {
+  const direct = (finish, top = false) => ({ finish, action: "reset", top });
+  const result = await optimizeStream([
+    { id: "a", choices: [direct(1), direct(2, true)] },
+    { id: "b", choices: [direct(2), direct(3, true)] },
+    { id: "c", choices: [direct(1), direct(3, true)] },
+  ], 10);
+  assert.equal(result.horizon, 3);
+  assert.deepEqual(Object.fromEntries(result.choices.map((c) => [c.id, c.finish])), { a: 2, b: 3, c: 1 });
+});
+
 test("real WASM: a free Keep upgrade to top desired is taken without lengthening the acceptable route", async () => {
   // Reported case: Ice HH could stop acceptable at G26, but Thunder HH needs
   // G46 anyway, so Ice can Keep through G27–35 to a top-desired result.

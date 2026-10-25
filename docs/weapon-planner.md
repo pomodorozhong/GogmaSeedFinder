@@ -89,6 +89,7 @@ Among schedules of the minimum length, the acceptable route prefers top-desired
 finishes: positions up to the horizon are rolled anyway, so such an upgrade is
 free. Weapons are upgraded greedily in list order, on a separate budget that
 never changes the total or whether the minimum is proven. A weapon that already
+finishes top desired keeps that finish when later weapons are upgraded. A weapon that already
 meets its acceptable goal can be upgraded the same way.
 
 The scheduling search has a 200,000-node complexity budget per route, plus a

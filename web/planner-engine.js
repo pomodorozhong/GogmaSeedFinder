@@ -209,9 +209,13 @@ export async function optimizeStream(targets, limit, complete = true, options = 
   if (!exhausted) {
     const upgradeBudget = { nodes: 0, max: options.maxNodes ?? 200_000, work: 0, maxWork: options.maxWork ?? 300_000_000 };
     let current = targets;
+    const topOnly = (i) => current.map((t, j) => j === i ? { ...t, choices: t.choices.filter((c) => c.top) } : t);
     for (let i = 0; i < current.length; i += 1) {
-      if (best.find((c) => c.id === current[i].id)?.top || !current[i].choices.some((c) => c.top && c.finish <= horizon)) continue;
-      const trialTargets = current.map((t, j) => j === i ? { ...t, choices: t.choices.filter((c) => c.top) } : t);
+      // A weapon already finishing top desired is locked there, so a later
+      // weapon's upgrade cannot cost it its own.
+      if (best.find((c) => c.id === current[i].id)?.top) { current = topOnly(i); continue; }
+      if (!current[i].choices.some((c) => c.top && c.finish <= horizon)) continue;
+      const trialTargets = topOnly(i);
       const trial = eventSchedule(trialTargets, horizon, upgradeBudget);
       if (trial.exhausted) break;
       if (trial.choices) { current = trialTargets; best = trial.choices; }
