@@ -18,6 +18,8 @@ const before = (positions, end) => {
 // its final Keep (or a direct Reset/current-layout Keep). Earlier draws are
 // fillers. Thus the scheduling search needs at most two events per weapon.
 // Ordered layouts are retained: equal category counts are not interchangeable.
+// Acceptable candidates carry `top` when they also meet the top-desired goal,
+// so the acceptable route can take a free upgrade (see optimizeStream).
 export async function buildCandidatePools(request, provider, report = () => {}, options = {}) {
   const cap = options.candidateCap ?? 200_000;
   const pools = Object.fromEntries(MODES.map((mode) => [mode, { bonus: [], skill: [], complete: true }]));
@@ -38,7 +40,8 @@ export async function buildCandidatePools(request, provider, report = () => {}, 
         // already exceed a maximum.
         const hasMaximum = [target.planner.acceptable, target.planner.preferred].some((tier) => Object.keys(tier.maxStats).length > 0);
         const bound = stream === "bonus" && hasMaximum ? null : lowerBound;
-        if (!hasGoal(target, stream) || ((current ?? bound) !== null && matchesTier(current ?? bound, target, stream, mode))) sets[mode].push({ finish: 0, action: "already" });
+        const known = current ?? bound;
+        if (!hasGoal(target, stream) || (known !== null && matchesTier(known, target, stream, mode))) sets[mode].push({ finish: 0, action: "already", top: mode === "acceptable" && hasGoal(target, stream) && matchesTier(known, target, stream, "preferred") });
       }
       const needed = MODES.filter((mode) => sets[mode].length === 0);
       const count = request.limits[stream];
@@ -47,7 +50,8 @@ export async function buildCandidatePools(request, provider, report = () => {}, 
           if (!skillCache.has(key)) skillCache.set(key, provider.skills(target, 0, count));
           const rolls = skillCache.get(key);
           for (let index = 0; index < count; index += 1) {
-            for (const mode of needed) if (matchesTier(rolls[index], target, stream, mode)) sets[mode].push({ finish: index + 1, action: "skill" });
+            const top = matchesTier(rolls[index], target, stream, "preferred");
+            for (const mode of needed) if (matchesTier(rolls[index], target, stream, mode)) sets[mode].push({ finish: index + 1, action: "skill", top: mode === "acceptable" && top });
           }
         } else {
           if (!resetCache.has(key)) resetCache.set(key, provider.reset(target, 0, count));
@@ -58,7 +62,8 @@ export async function buildCandidatePools(request, provider, report = () => {}, 
           for (let index = 0; index < count; index += 1) {
             const result = Array.from(rolls.subarray(index * 5, index * 5 + 5));
             const totals = bonusTotals(result, target);
-            for (const mode of needed) if (matchesTier(totals, target, stream, mode)) sets[mode].push({ finish: index + 1, action: "reset" });
+            const top = matchesTier(totals, target, stream, "preferred");
+            for (const mode of needed) if (matchesTier(totals, target, stream, mode)) sets[mode].push({ finish: index + 1, action: "reset", top: mode === "acceptable" && top });
             const layout = layoutOf(result);
             const lk = layoutKey(layout);
             if (!layouts.has(lk)) layouts.set(lk, { layout, positions: [], initial: false });
@@ -75,21 +80,29 @@ export async function buildCandidatePools(request, provider, report = () => {}, 
             const kept = provider.keep(target, 0, count, layout);
             for (let index = known ? 0 : positions[0]; index < count; index += 1) {
               const totals = bonusTotals(kept.subarray(index * 5, index * 5 + 5), target);
+              const top = matchesTier(totals, target, stream, "preferred");
               for (const mode of needed) {
                 if (!matchesTier(totals, target, stream, mode)) continue;
                 if (sets[mode].length >= cap) { pools[mode].complete = false; continue; }
-                sets[mode].push({ finish: index + 1, action: "keep", layout, acquisitions: known ? null : positions });
+                sets[mode].push({ finish: index + 1, action: "keep", layout, acquisitions: known ? null : positions, top: mode === "acceptable" && top });
               }
             }
             if (++li % 6 === 0) { await pause(); report({ phase: "layouts", target: ti + 1, layouts: li, total: layouts.size }); }
           }
         }
       }
+      // A weapon that already meets its acceptable goal can still be
+      // upgraded for free; the top-desired candidates are its options.
+      if (sets.acceptable.length === 1 && sets.acceptable[0].action === "already" && !sets.acceptable[0].top) {
+        sets.acceptable.push(...sets.preferred.filter((v) => v.action !== "already").map((v) => ({ ...v, top: true })));
+      }
       for (const mode of MODES) {
         const choices = sets[mode].sort((a, b) => a.finish - b.finish || Number(Boolean(a.acquisitions)) - Number(Boolean(b.acquisitions)));
-        // A direct finish dominates any two-event finish at the same position.
-        const direct = new Set(choices.filter((v) => !v.acquisitions).map((v) => v.finish));
-        pools[mode][stream].push({ id: target.id, choices: choices.filter((v) => !v.acquisitions || !direct.has(v.finish)) });
+        // A direct finish dominates any two-event finish at the same position,
+        // unless only the two-event finish is a top-desired result.
+        const direct = new Map();
+        for (const v of choices) if (!v.acquisitions) direct.set(v.finish, Boolean(direct.get(v.finish) || v.top));
+        pools[mode][stream].push({ id: target.id, choices: choices.filter((v) => !v.acquisitions || !direct.has(v.finish) || (v.top && !direct.get(v.finish))) });
       }
     }
     await pause();
@@ -189,7 +202,24 @@ export async function optimizeStream(targets, limit, complete = true, options = 
     else lo = mid + 1;
     await pause();
   }
-  return { status: "complete", horizon: Math.max(0, ...best.map((c) => c.finish)), choices: best.map(({ acquisitions, ...choice }) => choice), proven: complete && !exhausted, nodes: budget.nodes };
+  const horizon = Math.max(0, ...best.map((c) => c.finish));
+  // Among schedules of this minimum length, prefer top-desired finishes:
+  // positions up to the horizon are rolled anyway, so an upgrade is free.
+  // Weapons are upgraded greedily in list order on a separate budget, which
+  // never affects whether the minimum is proven.
+  if (!exhausted) {
+    const upgradeBudget = { nodes: 0, max: options.maxNodes ?? 200_000, work: 0, maxWork: options.maxWork ?? 300_000_000 };
+    let current = targets;
+    for (let i = 0; i < current.length; i += 1) {
+      if (best.find((c) => c.id === current[i].id)?.top || !current[i].choices.some((c) => c.top && c.finish <= horizon)) continue;
+      const trialTargets = current.map((t, j) => j === i ? { ...t, choices: t.choices.filter((c) => c.top) } : t);
+      const trial = eventSchedule(trialTargets, horizon, upgradeBudget);
+      if (trial.exhausted) break;
+      if (trial.choices) { current = trialTargets; best = trial.choices; }
+      await pause();
+    }
+  }
+  return { status: "complete", horizon, choices: best.map(({ acquisitions, ...choice }) => choice), proven: complete && !exhausted, nodes: budget.nodes };
 }
 
 export function replayRoute(request, mode, bonus, skill, provider) {

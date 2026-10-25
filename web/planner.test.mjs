@@ -331,6 +331,41 @@ test("routes respect maximums, and an unknown weapon is not assumed to be under 
   assert.ok(finish.totals.attack >= 24);
 });
 
+test("the acceptable route takes top-desired finishes only when they cost no extra rolls", async () => {
+  const direct = (finish, top = false) => ({ finish, action: "reset", top });
+  const finishOf = (result, id) => result.choices.find((c) => c.id === id);
+  // A top finish at 2 fits inside B's horizon of 3: free upgrade.
+  let result = await optimizeStream([{ id: "a", choices: [direct(1), direct(2, true)] }, { id: "b", choices: [direct(3)] }], 10);
+  assert.equal(result.horizon, 3);
+  assert.deepEqual(finishOf(result, "a"), { id: "a", finish: 2, action: "reset", top: true });
+  // The only top finish collides with B: no upgrade.
+  result = await optimizeStream([{ id: "a", choices: [direct(1), direct(3, true)] }, { id: "b", choices: [direct(3)] }], 10);
+  assert.equal(finishOf(result, "a").finish, 1);
+  // A later top finish would lengthen the route: no upgrade.
+  result = await optimizeStream([{ id: "a", choices: [direct(1), direct(5, true)] }, { id: "b", choices: [direct(3)] }], 10);
+  assert.equal(result.horizon, 3);
+  assert.equal(finishOf(result, "a").finish, 1);
+});
+
+test("real WASM: a free Keep upgrade to top desired is taken without lengthening the acceptable route", async () => {
+  // Reported case: Ice HH could stop acceptable at G26, but Thunder HH needs
+  // G46 anyway, so Ice can Keep through G27–35 to a top-desired result.
+  const horn = (id, attributeForce) => {
+    const t = target(id, 5, attributeForce);
+    t.planner.skillEnabled = false;
+    t.planner.acceptable = { stats: { attack: 36 }, maxStats: { affinity: 0 }, skills: [] };
+    t.planner.preferred = { stats: { attack: 42 }, maxStats: { affinity: 0 }, skills: [] };
+    return t;
+  };
+  const req = { origin: { baseSeed: 67_723_575, bonusCounter: 87, skillCounter: 77 }, targets: [horn("ice", 3), horn("thunder", 4)], limits: { bonus: 60, skill: 0 } };
+  const route = (await planWeapons(req, provider(req))).acceptable;
+  assert.equal(route.bonus.horizon, 46);
+  assert.ok(route.proven);
+  const finish = (id) => route.steps.find((s) => s.targetId === id && s.intent === "finish");
+  assert.deepEqual([finish("ice").action, finish("ice").end, finish("ice").rolls.at(-1).quality], ["keep", 35, "preferred"]);
+  assert.deepEqual([finish("thunder").end, finish("thunder").rolls.at(-1).quality], [46, "preferred"]);
+});
+
 test("all planner copy has Japanese and Traditional Chinese translations", async () => {
   const source = await readFile(new URL("./planner-text.js", import.meta.url), "utf8");
   const dictionary = vm.runInNewContext(source.slice(source.indexOf("export const PLANNER_TEXT =") + 7, source.indexOf("export function pl(")) + "\nPLANNER_TEXT;");
