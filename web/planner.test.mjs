@@ -473,6 +473,18 @@ test("zero minimums need no speculative roll, even when current tiers are unknow
   assert.equal(routes.preferred.total, 0);
 });
 
+test("a top-desired maximum does not hide the acceptable tier's zero-roll finish", async () => {
+  const t = target("one"); t.planner.skillEnabled = false;
+  t.planner.acceptable.stats = { attack: 0 };
+  t.planner.preferred.stats = { attack: 42 }; t.planner.preferred.maxStats = { affinity: 0 };
+  for (const limit of [0, 5]) {
+    const req = request([t], limit, 0);
+    const route = (await planWeapons(req, provider(req))).acceptable;
+    assert.ok(route.complete && route.proven);
+    assert.equal(route.total, 0);
+  }
+});
+
 // Independent exhaustive action simulation checks the event reduction and
 // minimum proof against every Reset/Keep/weapon choice in short real streams.
 function bruteForceHorizon(req, api, mode) {

@@ -1,4 +1,4 @@
-import { bonusTotals, hasGoal, layoutOf, matchesTier, rangeCanMatch, resultQuality, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { bonusGoalAlwaysMet, bonusTotals, hasGoal, layoutOf, matchesTier, rangeCanMatch, resultQuality, validLayout, validatePlannerRequest } from "./planner-model.js";
 
 const MODES = ["acceptable", "preferred"];
 const pause = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -34,14 +34,13 @@ export async function buildCandidatePools(request, provider, report = () => {}, 
       const current = stream === "bonus"
         ? (target.planner.currentBonuses ? bonusTotals(target.planner.currentBonuses, target) : null)
         : target.planner.currentSkill;
+      // Without known current bonuses, a bonus goal is met at zero rolls only
+      // when every weapon would meet it (see bonusGoalAlwaysMet).
+      const met = (mode) => !hasGoal(target, stream) || (current !== null
+        ? matchesTier(current, target, stream, mode)
+        : stream === "bonus" && bonusGoalAlwaysMet(target, mode));
       for (const mode of MODES) {
-        const lowerBound = stream === "bonus" ? { attack: 0, affinity: 0, element: 0, sharpness: 0, ammo: 0 } : null;
-        // The all-zero lower bound proves minimums only; an unknown weapon may
-        // already exceed a maximum.
-        const hasMaximum = [target.planner.acceptable, target.planner.preferred].some((tier) => Object.keys(tier.maxStats).length > 0);
-        const bound = stream === "bonus" && hasMaximum ? null : lowerBound;
-        const known = current ?? bound;
-        if (!hasGoal(target, stream) || (known !== null && matchesTier(known, target, stream, mode))) sets[mode].push({ finish: 0, action: "already", top: mode === "acceptable" && hasGoal(target, stream) && matchesTier(known, target, stream, "preferred") });
+        if (met(mode)) sets[mode].push({ finish: 0, action: "already", top: mode === "acceptable" && hasGoal(target, stream) && met("preferred") });
       }
       const needed = MODES.filter((mode) => sets[mode].length === 0);
       const count = request.limits[stream];

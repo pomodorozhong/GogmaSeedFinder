@@ -24,7 +24,9 @@ stat, leaving the five slots to the others. A tier may hold only maximums. An
 unknown status value proves neither bound, so a status maximum above 0 needs
 the II/EX values; max 0 does not. Max-0 stats must leave enough categories to
 fill five slots, and a minimum may not exceed its maximum. Without known current
-bonuses, a weapon is never assumed to be under a maximum already. Keep layouts
+bonuses, a weapon is never assumed to be under a maximum already; each tier is
+judged on its own, so one tier's maximum does not stop another tier without
+maximums from being met at zero rolls. Keep layouts
 are pruned only when no tier choice within the fixed categories could fit the
 range. Saves from an earlier draft that excluded stats load as max 0 in both
 tiers. Each stat row lists the gain of every roll tier and the most five slots

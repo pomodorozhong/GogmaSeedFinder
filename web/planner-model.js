@@ -164,6 +164,17 @@ export function matchesTier(result, target, stream, mode) {
     : skillGoalMatches(result, tier.skills));
 }
 
+// Whether any weapon, whatever its current bonuses, already meets the mode's
+// goal. Only a tier without maximums can be proven this way: an unknown weapon
+// may already exceed a maximum. Each tier is judged on its own, so another
+// tier's maximum cannot hide a zero-roll finish.
+export function bonusGoalAlwaysMet(target, mode) {
+  if (!hasGoal(target, "bonus")) return true;
+  const zero = Object.fromEntries(STAT_KEYS.map((stat) => [stat, 0]));
+  return tiersFor(target, "bonus", mode).some((tier) => hasBonusGoal(tier)
+    && !Object.keys(tier.maxStats ?? {}).length && statGoalMatches(zero, tier.stats));
+}
+
 // Whether some result whose totals lie between low and high could meet the
 // mode's goal. Keep fixes the categories but not the tiers, and each slot's
 // tier is independent, so each stat can reach anywhere in its own range.
