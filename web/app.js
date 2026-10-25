@@ -13,7 +13,7 @@ import {
 } from "./artian-base-rng.js";
 import { localizedTargetName, t } from "./i18n.js";
 import { initPlanner } from "./planner-ui.js";
-import { layoutOf, normalizedPlanner, samePosition } from "./planner-model.js";
+import { layoutOf, normalizedPlanner } from "./planner-model.js";
 import { pl } from "./planner-text.js";
 
 const WEAPON_TYPES = [
@@ -489,8 +489,11 @@ initPlanner({
     persistAppState();
     void Promise.all([refreshComparisonPredictions(), refreshSkillPredictions()]);
   },
+  // Bonus and skill steps may be saved in either order, so only the step's own
+  // counter (and the shared base seed) must match, and only it advances.
   saveStep: (step, target) => {
-    if (!samePosition(saveState, step.before)) throw new Error(pl("Position or weapons changed. Build new guides before saving more steps."));
+    const key = `${step.stream}Counter`;
+    if (saveState.baseSeed !== step.before.baseSeed || saveState[key] !== step.before[key]) throw new Error(pl("Position or weapons changed. Build new guides before saving more steps."));
     const registered = comparisonTargets.find((candidate) => candidate.id === target.id);
     if (!registered) throw new Error(pl("Position or weapons changed. Build new guides before saving more steps."));
     registered.planner = normalizedPlanner(registered);
@@ -502,8 +505,7 @@ initPlanner({
     } else registered.planner.currentSkill = result;
     saveState = {
       ...saveState,
-      bonusCounter: step.after.bonusCounter,
-      skillCounter: step.after.skillCounter,
+      [key]: step.after[key],
       [step.stream === "bonus" ? "bonusSource" : "skillSource"]: "予測結果",
     };
     renderComparisonTargets();

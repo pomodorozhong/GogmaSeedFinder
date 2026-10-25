@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import { initSync, predict_gogma_rolls, predict_gogma_keep_rolls, predict_skill_rolls } from "./pkg/gogma_wasm_search.js";
-import { bonusTotals, canFillSlots, copiedPlanner, layoutOf, MAX_SELECTED, rangeCanMatch, matchesTier, normalizedPlanner, resultQuality, routeWeaponsMatch, skillGoalMatches, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { bonusTotals, canFillSlots, copiedPlanner, layoutOf, MAX_SELECTED, rangeCanMatch, matchesTier, normalizedPlanner, normalizedProgress, routePosition, streamSteps, resultQuality, routeWeaponsMatch, skillGoalMatches, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
 import { optimizeStream, planWeapons, selectTargets } from "./planner-engine.js";
 
 initSync({ module: await readFile(new URL("./pkg/gogma_wasm_search_bg.wasm", import.meta.url)) });
@@ -364,6 +364,24 @@ test("real WASM: a free Keep upgrade to top desired is taken without lengthening
   const finish = (id) => route.steps.find((s) => s.targetId === id && s.intent === "finish");
   assert.deepEqual([finish("ice").action, finish("ice").end, finish("ice").rolls.at(-1).quality], ["keep", 35, "preferred"]);
   assert.deepEqual([finish("thunder").end, finish("thunder").rolls.at(-1).quality], [46, "preferred"]);
+});
+
+test("bonus and skill progress are independent, so skill steps can be saved first", async () => {
+  const t = target("both");
+  const req = request([t], 300, 1000);
+  const route = (await planWeapons(req, provider(req))).acceptable;
+  const bonus = streamSteps(route, "bonus");
+  const skill = streamSteps(route, "skill");
+  assert.ok(bonus.length > 0 && skill.length > 0);
+  // Skills first: only the skill counter moves; the bonus counter stays at the origin.
+  assert.deepEqual(routePosition(route, { bonus: 0, skill: 1 }), { ...req.origin, skillCounter: skill[0].after.skillCounter });
+  assert.deepEqual(routePosition(route, { bonus: bonus.length, skill: 0 }), { ...req.origin, bonusCounter: bonus.at(-1).after.bonusCounter });
+  const saved = structuredClone(t);
+  saved.planner.currentSkill = skill[0].rolls.at(-1).raw;
+  assert.equal(routeWeaponsMatch(route, { bonus: 0, skill: 1 }, [saved]), skill[0].targetId === t.id);
+  // An older single count covered bonus steps first.
+  assert.deepEqual(normalizedProgress(route, bonus.length + 1), { bonus: bonus.length, skill: 1 });
+  assert.deepEqual(normalizedProgress(route, { bonus: 99, skill: -1 }), { bonus: bonus.length, skill: 0 });
 });
 
 test("all planner copy has Japanese and Traditional Chinese translations", async () => {

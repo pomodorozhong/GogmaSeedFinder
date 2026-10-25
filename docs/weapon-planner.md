@@ -105,15 +105,18 @@ only offers execution controls for a complete route.
 ## Following the guide
 
 Bonus (G) and skill (S) steps are shown as two tables because they use separate
-counters; step numbers stay in route order. The guide sits to the left of the
-tables on desktop. Clicking a route row
+counters; step numbers stay in route order. Each table keeps its own progress,
+so bonus and skill steps can be saved in either order: saving a step checks and
+advances only its own counter. The guide sits to the left of the tables on
+desktop. Clicking a route row
 previews its full repeat block; the attached chevron points to that row. On narrow
 screens the guide stacks above the horizontally scrollable tables.
 
 Click the expected result that matches the game to record progress within a
 block. This only marks a place in the reference list. It does not complete the
 step or change saved counters. Future previews have a **Back to current step**
-control; only the current route row has a checkbox. Saved rows have a checkmark.
+control; only each table's current row has a checkbox. Saved rows have a
+checkmark.
 
 Use the specified weapon and menu action, accept each result, and save in game
 after the block. **Done & saved** explicitly confirms that work and applies the

@@ -1,6 +1,6 @@
 import { t, localizedTargetName } from "./i18n.js";
 import { pl } from "./planner-text.js";
-import { availableStats, BONUS_CATEGORY, copiedPlanner, hasBonusGoal, layoutOf, MAX_SELECTED, normalizedPlanner, routePosition, routeWeaponsMatch, samePosition, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { availableStats, BONUS_CATEGORY, copiedPlanner, hasBonusGoal, layoutOf, MAX_SELECTED, normalizedPlanner, normalizedProgress, routePosition, routeWeaponsMatch, samePosition, statMaximum, statRollValues, streamSteps, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
 
 const STORAGE_KEY = "gogma-weapon-planner-v1";
 const esc = (text) => String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -20,7 +20,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     limits: { bonus: stored?.limits?.bonus ?? 250, skill: stored?.limits?.skill ?? 1000 },
     routes: stored?.routes && typeof stored.routes === "object" ? stored.routes : {},
     mode: stored?.mode === "preferred" ? "preferred" : "acceptable",
-    completed: Number.isInteger(stored?.completed) && stored.completed >= 0 ? stored.completed : 0,
+    completed: stored?.completed,
     matches: stored?.matches && typeof stored.matches === "object" ? stored.matches : {},
     signature: typeof stored?.signature === "string" ? stored.signature : "",
   };
@@ -29,9 +29,20 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const route = cache.routes[mode];
     if (route && (!Array.isArray(route.steps) || !Array.isArray(route.targets) || !route.origin || !route.bonus || !route.skill || route.steps.some((step) => !step.after || !Array.isArray(step.rolls) || !step.rolls.length))) delete cache.routes[mode];
   }
-  if (!cache.routes[cache.mode]) cache.completed = 0;
-  else cache.completed = Math.min(cache.completed, cache.routes[cache.mode].steps.length);
-  let inspected = cache.completed;
+  cache.completed = cache.routes[cache.mode] ? normalizedProgress(cache.routes[cache.mode], cache.completed) : { bonus: 0, skill: 0 };
+  // Each stream has its own current step: the first unsaved step in its table.
+  const totalDone = () => cache.completed.bonus + cache.completed.skill;
+  const currentIndex = (r, stream) => {
+    const steps = streamSteps(r, stream);
+    return cache.completed[stream] < steps.length ? r.steps.indexOf(steps[cache.completed[stream]]) : -1;
+  };
+  const isCurrent = (r, index) => currentIndex(r, r.steps[index].stream) === index;
+  const isSaved = (r, index) => streamSteps(r, r.steps[index].stream).indexOf(r.steps[index]) < cache.completed[r.steps[index].stream];
+  const nextCurrent = (r, stream = "bonus") => {
+    const index = [stream, stream === "bonus" ? "skill" : "bonus"].map((v) => currentIndex(r, v)).find((v) => v >= 0);
+    return index ?? Math.max(0, r.steps.length - 1);
+  };
+  let inspected = cache.routes[cache.mode] ? nextCurrent(cache.routes[cache.mode]) : 0;
   let worker = null;
   let activeContext = "";
   let editing = null;
@@ -254,7 +265,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       const data = cache.routes[mode];
       if (!data) return `<div class="pl-route is-pending"><strong>${html(mode === "preferred" ? "Top desired route" : "Fastest acceptable")}</strong><p class="pl-muted">…</p></div>`;
       const incomplete = data.bonus.status === "incomplete" || data.skill.status === "incomplete";
-      return `<button type="button" class="pl-route" data-pl-route="${mode}" aria-pressed="${cache.mode === mode}"${cache.completed > 0 && cache.mode !== mode ? " disabled" : ""}><div class="pl-route-title"><span class="pl-radio" aria-hidden="true"></span><strong>${html(mode === "preferred" ? "Top desired route" : "Fastest acceptable")}</strong></div><div class="pl-route-total"><strong>${data.total === null ? "—" : data.total}</strong><span>${html(data.complete ? "rolls" : incomplete ? "Search incomplete" : "No complete route")}</span></div><p class="pl-muted">${data.complete ? html("{bonus} bonus + {skill} skill", { bonus: data.bonus.horizon, skill: data.skill.horizon }) : html("Increase the roll limits or relax your goals.")}</p>${data.complete && data.dropped?.length ? `<p class="pl-drop-note">${html("Leaves out {n}: {names}", { n: data.dropped.length, names: shortNames(data) })}</p>` : ""}<div class="pl-route-bottom"><span>${html(data.complete ? data.proven ? "Minimum proven" : "Best found" : incomplete ? "Search incomplete" : "No complete route")}</span><span>${html("Within your roll limits")}</span></div></button>`;
+      return `<button type="button" class="pl-route" data-pl-route="${mode}" aria-pressed="${cache.mode === mode}"${totalDone() > 0 && cache.mode !== mode ? " disabled" : ""}><div class="pl-route-title"><span class="pl-radio" aria-hidden="true"></span><strong>${html(mode === "preferred" ? "Top desired route" : "Fastest acceptable")}</strong></div><div class="pl-route-total"><strong>${data.total === null ? "—" : data.total}</strong><span>${html(data.complete ? "rolls" : incomplete ? "Search incomplete" : "No complete route")}</span></div><p class="pl-muted">${data.complete ? html("{bonus} bonus + {skill} skill", { bonus: data.bonus.horizon, skill: data.skill.horizon }) : html("Increase the roll limits or relax your goals.")}</p>${data.complete && data.dropped?.length ? `<p class="pl-drop-note">${html("Leaves out {n}: {names}", { n: data.dropped.length, names: shortNames(data) })}</p>` : ""}<div class="pl-route-bottom"><span>${html(data.complete ? data.proven ? "Minimum proven" : "Best found" : incomplete ? "Search incomplete" : "No complete route")}</span><span>${html("Within your roll limits")}</span></div></button>`;
     }).join("");
     if (!r) return;
     const ok = compatible();
@@ -266,7 +277,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       return;
     }
     if (!ok) note = pl("Position or weapons changed. Build new guides before saving more steps.");
-    else if (cache.completed > 0 && cache.completed < r.steps.length) note = pl("This route is in progress. Build new guides from your saved position to change routes.");
+    else if (totalDone() > 0 && totalDone() < r.steps.length) note = pl("This route is in progress. Build new guides from your saved position to change routes.");
     else if (!r.proven && r.complete) note = pl("The search reached its complexity budget. A shorter route may exist within these roll limits.");
     if (!r.complete) {
       const streamErrors = [["bonus", "Bonus goals not completed"], ["skill", "Skill goals not completed"]].filter(([stream]) => r[stream].status !== "complete").map(([stream, label]) => `${pl(label)}: ${r[stream].missing.length ? r[stream].missing.map((id) => nameOf(r.targets.find((v) => v.id === id))).join(", ") : pl(r[stream].status === "incomplete" ? "Search incomplete" : "Conflicting roll positions")}`);
@@ -275,40 +286,42 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     }
     if (r.complete && r.dropped?.length) note = [pl("Left out of this route: {names}", { names: droppedNames(r) }), note].filter(Boolean).join(" · ");
     q("#pl-route-note").textContent = note;
-    const choices = r.complete && r.alternatives?.length && cache.completed === 0 && ok ? [r, ...r.alternatives] : [];
+    const choices = r.complete && r.alternatives?.length && totalDone() === 0 && ok ? [r, ...r.alternatives] : [];
     q("#pl-alternatives").hidden = !choices.length;
     q("#pl-alternatives").innerHTML = choices.length ? `<p>${html("Some weapons need the same rolls. Choose which route to follow:")}</p>${choices.map((choice, index) => `<button type="button" class="pl-alternative" data-pl-alt="${index}" aria-pressed="${index === 0}"><span class="pl-radio" aria-hidden="true"></span><span><strong>${html("{rolls} rolls", { rolls: choice.total })}</strong> · ${esc(shortNames(choice, "conflict") ? pl("leaves out {names}", { names: shortNames(choice, "conflict") }) : pl("finishes every weapon"))}</span></button>`).join("")}` : "";
     q("#pl-route-note").className = note ? `pl-route-note${!ok || !r.complete || r.dropped?.length ? " is-warning" : ""}` : "";
     q("#pl-workspace").hidden = !r.complete || r.steps.length === 0;
     q("#pl-detail-heading").hidden = !r.complete || r.steps.length === 0;
-    q("#pl-saved-count").textContent = pl("{done} of {total} steps saved", { done: cache.completed, total: r.steps.length });
-    const done = r.complete && (r.steps.length === 0 || cache.completed === r.steps.length);
+    q("#pl-saved-count").textContent = pl("{done} of {total} steps saved", { done: totalDone(), total: r.steps.length });
+    const done = r.complete && (r.steps.length === 0 || totalDone() === r.steps.length);
     q("#pl-route-complete").hidden = !done;
     q("#pl-route-complete").textContent = done ? `✓ ${r.dropped?.length ? pl("Route complete. Weapons left out: {names}", { names: shortNames(r) }) : pl(r.steps.length ? "Route complete. All chosen goals are met." : "Your current weapons already meet this route’s goals.")}` : "";
     if (!r.complete || !r.steps.length) return;
     inspected = Math.max(0, Math.min(inspected, r.steps.length - 1));
     const row = (step, index) => {
       const target = r.targets.find((v) => v.id === step.targetId);
-      const saved = index < cache.completed;
-      const current = index === cache.completed;
+      const saved = isSaved(r, index);
+      const current = isCurrent(r, index);
       const prefix = step.stream === "bonus" ? "G" : "S";
       return `<tr data-pl-step="${index}" tabindex="0" class="${inspected === index ? "is-inspected " : ""}${current ? "is-current " : ""}${saved ? "is-saved" : ""}" aria-label="${esc(`${pl("Step {n} of {total}", { n: index + 1, total: r.steps.length })}: ${nameOf(target)}, ${actionName(step.action)}`)}"><td class="pl-saved-cell">${saved ? `<span class="pl-saved-check" aria-label="${html("Saved")}">✓</span>` : current ? `<input type="checkbox" data-pl-done="${index}" aria-label="${html("Done & saved")}"${!ok || worker ? " disabled" : ""}>` : ""}</td><td><strong class="pl-roll-range">${prefix}${step.start}${step.end !== step.start ? `–${step.end}` : ""}</strong><small>× ${step.rolls.length}</small></td><td><strong class="pl-table-weapon">${esc(nameOf(target))}</strong><span class="pl-table-action">${esc(actionName(step.action))}</span>${badge(step)}</td><td>${resultMarkup(step.rolls.at(-1), step, target)}</td></tr>`;
     };
-    // Bonus (G) and skill (S) steps use separate counters, so each gets its
-    // own table. Step indices stay global because saving follows route order.
+    // Bonus (G) and skill (S) steps use separate counters, so each gets its own
+    // table and its own progress; either can be saved first.
     const indexed = r.steps.map((step, index) => [step, index]);
     q("#pl-rows").innerHTML = [["bonus", "Bonus steps", "Bonus gains"], ["skill", "Skill steps", "Skills"]].map(([stream, title, result]) => {
       const rows = indexed.filter(([step]) => step.stream === stream);
-      return rows.length ? `<section class="pl-stream-table"><h4 class="pl-stream-title">${html(title)} <span>${stream === "bonus" ? "G" : "S"}</span></h4><div class="pl-table-scroll"><table class="pl-route-table"><thead><tr><th>${html("Saved")}</th><th>${html("Rolls")}</th><th>${html("Weapon & action")}</th><th>${html(result)}</th></tr></thead><tbody>${rows.map(([step, index]) => row(step, index)).join("")}</tbody></table></div></section>` : "";
+      return rows.length ? `<section class="pl-stream-table"><h4 class="pl-stream-title">${html(title)} <span>${stream === "bonus" ? "G" : "S"} · ${html("{done} of {total} steps saved", { done: cache.completed[stream], total: rows.length })}</span></h4><div class="pl-table-scroll"><table class="pl-route-table"><thead><tr><th>${html("Saved")}</th><th>${html("Rolls")}</th><th>${html("Weapon & action")}</th><th>${html(result)}</th></tr></thead><tbody>${rows.map(([step, index]) => row(step, index)).join("")}</tbody></table></div></section>` : "";
     }).join("");
     renderGuide(); schedulePointer();
   }
+  // The other stream's counter depends on how far that stream has been saved.
+  const stepState = (r, step, side) => ({ ...routePosition(r, cache.completed), [`${step.stream}Counter`]: step[side][`${step.stream}Counter`] });
   function renderGuide() {
     const r = route();
     const step = r?.steps[inspected];
     if (!step) return;
-    const current = inspected === cache.completed;
-    const saved = inspected < cache.completed;
+    const current = isCurrent(r, inspected);
+    const saved = isSaved(r, inspected);
     const target = r.targets.find((v) => v.id === step.targetId);
     const matched = Math.max(0, Math.min(step.rolls.length, Number(cache.matches[inspected]) || 0));
     const prefix = step.stream === "bonus" ? "G" : "S";
@@ -319,7 +332,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
         const tag = current && compatible() ? "button" : "div";
         return `<${tag}${tag === "button" ? ` type="button" data-pl-match="${index + 1}" aria-label="${html("Match draw {n}", { n: index + 1 })}" aria-pressed="${matched === index + 1}"` : ""} class="pl-expected-roll${index < matched && current ? " is-passed" : ""}${index + 1 === matched && current ? " is-matched" : ""}"><span class="pl-draw-number"><strong>${index + 1}</strong><small>${prefix}${roll.offset}</small></span><span class="pl-draw-result">${resultMarkup(roll, step, target)}${step.intent !== "advance" && index === step.rolls.length - 1 ? badge(step) : ""}</span>${current && matched === index + 1 ? '<span class="pl-match-check">✓</span>' : ""}</${tag}>`;
       }).join("")}</div>
-      <footer class="pl-guide-footer">${current ? `<div><strong>${html("{matched}/{total} matched · {remaining} remaining", { matched, total: step.rolls.length, remaining: step.rolls.length - matched })}</strong><button type="button" class="primary" data-pl-action="done"${!compatible() || worker ? " disabled" : ""}>${html("Done & saved")} →</button></div><p class="pl-fine">${html("Finish this block and save in game, then confirm here.")}</p><p class="pl-fine">${html("Matching a result only marks your place; it does not save a step or advance the counters.")}</p>` : cache.completed < r.steps.length ? `<button type="button" class="secondary" data-pl-action="current">← ${html("Back to current step")}</button>` : `<span class="pl-teal">✓ ${r.dropped?.length ? html("Route complete. Weapons left out: {names}", { names: shortNames(r) }) : html("Route complete. All chosen goals are met.")}</span>`}</footer><details class="pl-state-details"><summary>${html("Saved state details")}</summary><p>${html("Before")} <code>${esc(stateCode(step.before))}</code></p><p>${html("After")} <code>${esc(stateCode(step.after))}</code></p></details></div>`;
+      <footer class="pl-guide-footer">${current ? `<div><strong>${html("{matched}/{total} matched · {remaining} remaining", { matched, total: step.rolls.length, remaining: step.rolls.length - matched })}</strong><button type="button" class="primary" data-pl-action="done"${!compatible() || worker ? " disabled" : ""}>${html("Done & saved")} →</button></div><p class="pl-fine">${html("Finish this block and save in game, then confirm here.")}</p><p class="pl-fine">${html("Matching a result only marks your place; it does not save a step or advance the counters.")}</p>` : totalDone() < r.steps.length ? `<button type="button" class="secondary" data-pl-action="current">← ${html("Back to current step")}</button>` : `<span class="pl-teal">✓ ${r.dropped?.length ? html("Route complete. Weapons left out: {names}", { names: shortNames(r) }) : html("Route complete. All chosen goals are met.")}</span>`}</footer><details class="pl-state-details"><summary>${html("Saved state details")}</summary><p>${html("Before")} <code>${esc(stateCode(stepState(r, step, "before")))}</code></p><p>${html("After")} <code>${esc(stateCode(stepState(r, step, "after")))}</code></p></details></div>`;
     schedulePointer();
   }
   function schedulePointer() {
@@ -347,7 +360,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const request = { origin: getState(), targets: prepared(), limits: { ...cache.limits } };
     try { validatePlannerRequest(request); } catch (error) { setError(errorText(error.message)); return; }
     stopWorker();
-    cache.routes = {}; cache.completed = 0; cache.matches = {}; cache.mode = "acceptable"; inspected = 0; stale = false; cache.signature = signature();
+    cache.routes = {}; cache.completed = { bonus: 0, skill: 0 }; cache.matches = {}; cache.mode = "acceptable"; inspected = 0; stale = false; cache.signature = signature();
     persist(); renderResults();
     worker = new Worker(new URL("./planner-worker.js", import.meta.url), { type: "module" });
     activeContext = JSON.stringify([getState(), prepared()]);
@@ -370,15 +383,16 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     worker.onerror = (error) => { if (worker !== searchWorker) return; stopWorker(); setError(pl("Unable to calculate the guide. {detail}", { detail: error.message })); renderResults(); };
     worker.postMessage({ request });
   }
-  function markDone() {
+  function markDone(index = inspected) {
     const r = route();
-    if (worker || !r?.complete || !compatible() || cache.completed >= r.steps.length) return;
-    const step = r.steps[cache.completed];
+    if (worker || !r?.complete || !compatible() || !r.steps[index] || !isCurrent(r, index)) return;
+    const step = r.steps[index];
     // saveStep verifies the old counters again and is the only planner action
     // permitted to mutate the app's shared save state.
     try {
       saveStep(step, r.targets.find((v) => v.id === step.targetId));
-      cache.completed += 1; inspected = Math.min(cache.completed, r.steps.length - 1);
+      cache.completed = { ...cache.completed, [step.stream]: cache.completed[step.stream] + 1 };
+      inspected = nextCurrent(r, step.stream);
       persist(); renderWeapons(); renderResults();
       setStatus(pl("Progress saved in this browser"));
     } catch (error) { setError(error.message); renderResults(); }
@@ -403,19 +417,19 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     else if (action === "remove-pair") button.closest(".pl-combo").remove();
     else if (action === "cancel") { stopWorker(); persist(); renderResults(); setStatus(pl("Search cancelled. Any completed route remains available.")); }
     else if (action === "done") markDone();
-    else if (action === "current") { inspected = cache.completed; renderResults(); q(`#pl-rows [data-pl-step="${inspected}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
+    else if (action === "current") { inspected = nextCurrent(route(), route().steps[inspected]?.stream); renderResults(); q(`#pl-rows [data-pl-step="${inspected}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
     const alternative = event.target.closest("[data-pl-alt]");
     const r = route();
-    if (alternative && r?.alternatives && cache.completed === 0 && Number(alternative.dataset.plAlt) > 0) {
+    if (alternative && r?.alternatives && totalDone() === 0 && Number(alternative.dataset.plAlt) > 0) {
       const index = Number(alternative.dataset.plAlt) - 1;
       const { alternatives, ...current } = r;
       cache.routes[cache.mode] = { ...alternatives[index], alternatives: [current, ...alternatives.filter((_, i) => i !== index)] };
       cache.matches = {}; inspected = 0; persist(); renderResults();
     }
     const routeButton = event.target.closest("[data-pl-route]");
-    if (routeButton && !routeButton.disabled && (cache.completed === 0 || cache.mode === routeButton.dataset.plRoute)) { cache.mode = routeButton.dataset.plRoute; cache.matches = {}; inspected = 0; persist(); renderResults(); }
+    if (routeButton && !routeButton.disabled && (totalDone() === 0 || cache.mode === routeButton.dataset.plRoute)) { cache.mode = routeButton.dataset.plRoute; cache.matches = {}; inspected = 0; persist(); renderResults(); }
     const match = event.target.closest("[data-pl-match]");
-    if (match && inspected === cache.completed && compatible()) { const scrollTop = q(".pl-expected-list").scrollTop; cache.matches[inspected] = Number(match.dataset.plMatch); persist(); renderGuide(); q(".pl-expected-list").scrollTop = scrollTop; q(`[data-pl-match="${match.dataset.plMatch}"]`)?.focus({ preventScroll: true }); }
+    if (match && isCurrent(route(), inspected) && compatible()) { const scrollTop = q(".pl-expected-list").scrollTop; cache.matches[inspected] = Number(match.dataset.plMatch); persist(); renderGuide(); q(".pl-expected-list").scrollTop = scrollTop; q(`[data-pl-match="${match.dataset.plMatch}"]`)?.focus({ preventScroll: true }); }
     const row = event.target.closest("[data-pl-step]");
     if (row && !event.target.closest("input")) { inspected = Number(row.dataset.plStep); renderResults(); }
   });
@@ -432,7 +446,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       setTargets(getTargets().map((v) => v.id === input.dataset.plOptional ? { ...v, planner: { ...normalizedPlanner(v), optional: input.checked } } : v));
       invalidate(); renderWeapons();
     } else if (input.matches("[data-copy-goals]")) { copyGoals(input.value); input.value = ""; }
-    else if (input.matches("[data-pl-done]")) markDone();
+    else if (input.matches("[data-pl-done]")) markDone(Number(input.dataset.plDone));
     else if (input.closest("#pl-limits")) { cache.limits[input.name] = Number(input.value); invalidate(); }
   });
   q("#pl-add-form").addEventListener("submit", (event) => {

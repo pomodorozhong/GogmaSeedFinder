@@ -205,8 +205,28 @@ export function samePosition(a, b) {
   return ["baseSeed", "bonusCounter", "skillCounter"].every((key) => a[key] === b[key]);
 }
 
+export const streamSteps = (route, stream) => route.steps.filter((step) => step.stream === stream);
+
+// Bonus and skill steps use independent counters, so they can be saved in
+// either order: progress is { bonus, skill }, the saved steps of each stream in
+// route order. Older saves kept one count over the route, bonus steps first.
+export function normalizedProgress(route, completed) {
+  const count = (stream, value) => Math.max(0, Math.min(streamSteps(route, stream).length, Number.isInteger(value) ? value : 0));
+  if (Number.isInteger(completed)) {
+    const bonus = count("bonus", completed);
+    return { bonus, skill: count("skill", completed - bonus) };
+  }
+  return { bonus: count("bonus", completed?.bonus), skill: count("skill", completed?.skill) };
+}
+
 export function routePosition(route, completed) {
-  return completed > 0 ? route.steps[completed - 1].after : route.origin;
+  const done = normalizedProgress(route, completed);
+  const position = { ...route.origin };
+  for (const stream of ["bonus", "skill"]) {
+    const key = `${stream}Counter`;
+    if (done[stream] > 0) position[key] = streamSteps(route, stream)[done[stream] - 1].after[key];
+  }
+  return position;
 }
 
 export function routeWeaponsMatch(route, completed, registered) {
@@ -218,7 +238,8 @@ export function routeWeaponsMatch(route, completed, registered) {
       skill: target.planner.currentSkill,
       layout: target.keepCategories,
     };
-    for (const step of route.steps.slice(0, completed)) {
+    const done = normalizedProgress(route, completed);
+    for (const step of [...streamSteps(route, "bonus").slice(0, done.bonus), ...streamSteps(route, "skill").slice(0, done.skill)]) {
       if (step.targetId !== target.id) continue;
       const raw = step.rolls.at(-1).raw;
       if (step.stream === "bonus") { expected.bonuses = raw; expected.layout = layoutOf(raw); }
