@@ -11,7 +11,7 @@ chunks so that progress and cancellation messages can be handled between
 chunks.
 
 After a candidate is selected, the main-page WASM instance generates up to
-1,000 future results. A unique search candidate is selected automatically. The
+10,000 future results. A unique search candidate is selected automatically. The
 UI verifies the observed prefix, supports prediction for another weapon and
 attribute with the same base seed/counter, and filters desired bonuses as an
 unordered multiset. The normal UI treats the pre-observation save snapshot as
@@ -20,13 +20,13 @@ Gogma counter remains internal search metadata. Every predicted row exposes a
 versioned save-state code, so a save made after that row can be reopened as a
 new relative origin and recalculated for a different weapon or attribute.
 
-The page has five task tabs and a persistent panel for the base seed, bonus
+The page has eight task tabs and a persistent panel for the base seed, bonus
 counter, and skill counter. All three values can be entered manually; an
 unknown counter may remain blank. The guide uses real bonus and skill names to
 show that one common base seed feeds two independently saved counter positions.
 It also includes a two-weapon example in which a result at original position 20
 is saved as the new zero before continuing to the original position 44. Up to
-sixteen weapon profiles can be registered and stored in local storage. The
+140 weapon profiles can be registered and stored in local storage. The
 future-prediction panels use nearly the full
 viewport width. The bonus comparison table renders each weapon's five slots in
 one vertical column with compact labels such as `攻EX`, `会EX`, `属II`, `斬EX`,
@@ -50,7 +50,7 @@ their outputs do not depend on the individual weapon profile.
 
 The selected base seed can also be used for a bounded skill-counter search.
 The user enters consecutive Series/Group skill results, and a unique position
-produces up to 1,000 future skill pairs. Group skill `ヌシの魂` is always
+produces up to 10,000 future skill pairs. Group skill `ヌシの魂` is always
 highlighted; Series highlights are user-selectable and include
 `黒蝕竜の力`, `雷顎竜の闘志`, `兇爪竜の力`, and `巨戟龍の黙示録`.
 Skill rows also expose the saved continuation state after that roll. An
@@ -95,11 +95,12 @@ The script:
 Serve the directory over HTTP because JavaScript modules, Web Workers, and
 WebAssembly cannot be tested reliably by opening `index.html` as a local file:
 
-```powershell
-python -m http.server 4173 --bind 127.0.0.1 --directory web
+```sh
+npm install
+npm run serve
 ```
 
-Then open `http://127.0.0.1:4173/`.
+Then open `http://127.0.0.1:4341/`. UI-only changes use the tracked WASM package; `npm run build` writes a static `dist/` directory.
 
 ## Verified browser run
 
