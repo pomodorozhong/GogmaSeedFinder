@@ -226,6 +226,10 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     q("#pl-results").hidden = !hasRoutes;
     if (!hasRoutes) { q("#pl-rows").replaceChildren(); q("#pl-guide").replaceChildren(); return; }
     const r = route();
+    // Goals, weapons or limits changed after the build (invalidate clears the
+    // signature). An old route must not look like a current answer.
+    const outdated = !worker && cache.signature !== signature();
+    q("#pl-routes").classList.toggle("is-outdated", outdated);
     q("#pl-routes").innerHTML = modes.map((mode) => {
       const data = cache.routes[mode];
       if (!data) return `<div class="pl-route is-pending"><strong>${html(mode === "preferred" ? "Top desired route" : "Fastest acceptable")}</strong><p class="pl-muted">…</p></div>`;
@@ -237,6 +241,12 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     if (!r) return;
     const ok = compatible();
     let note = "";
+    if (outdated) {
+      q("#pl-route-note").textContent = pl("Your goals, weapons or limits changed after this route was built. Build new guides to see an updated route.");
+      q("#pl-route-note").className = "pl-route-note is-warning";
+      for (const id of ["#pl-alternatives", "#pl-workspace", "#pl-detail-heading", "#pl-route-complete"]) q(id).hidden = true;
+      return;
+    }
     if (!ok) note = pl("Position or weapons changed. Build new guides before saving more steps.");
     else if (cache.completed > 0 && cache.completed < r.steps.length) note = pl("This route is in progress. Build new guides from your saved position to change routes.");
     else if (!r.proven && r.complete) note = pl("The search reached its complexity budget. A shorter route may exist within these roll limits.");

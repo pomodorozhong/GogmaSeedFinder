@@ -140,6 +140,7 @@ export const PLANNER_TEXT = {
   "Route complete. All chosen goals are met.": ["ルート完了。選択した目標をすべて達成しました。", "路線完成，已達成所有選定目標。"],
   "Your current weapons already meet this route’s goals.": ["現在の武器は、このルートの目標をすべて満たしています。", "目前武器已符合此路線的所有目標。"],
   "Position or weapons changed. Build new guides before saving more steps.": ["現在位置または武器が変わりました。次の確認前に手順を再作成してください。", "位置或武器已變更，請先重新建立步驟再繼續確認。"],
+  "Your goals, weapons or limits changed after this route was built. Build new guides to see an updated route.": ["ルート作成後に目標・武器・上限が変わりました。最新のルートを見るには手順を再作成してください。", "建立路線後目標、武器或上限已變更。請重新建立步驟以查看最新路線。"],
   "Build new guides to apply the updated goals or limits.": ["変更した目標・上限を反映するには、手順を再作成してください。", "請重新建立步驟，以套用更新後的目標或上限。"],
   "This route is in progress. Build new guides from your saved position to change routes.": ["このルートを実行中です。別のルートへ変更する場合、保存済み位置から手順を再作成してください。", "此路線已開始執行。若要切換路線，請從已儲存位置重新建立步驟。"],
   "Progress saved in this browser": ["進捗をこのブラウザに保存済み", "進度已儲存在此瀏覽器"],

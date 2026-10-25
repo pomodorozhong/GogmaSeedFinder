@@ -85,6 +85,7 @@
 .pl-feedback .error { margin: 10px 0; }
 .pl-legend { display: flex; gap: 14px; align-items: center; font-size: 11px; }
 .pl-routes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.pl-routes.is-outdated .pl-route { opacity: .45; pointer-events: none; }
 .planner .pl-route { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 16px 18px; text-align: left; color: #eee8d7; }
 .pl-route[aria-pressed="true"] { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); background: var(--pl-gold-bg); }
 .pl-route:disabled { opacity: .65; }
