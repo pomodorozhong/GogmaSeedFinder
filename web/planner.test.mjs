@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import { initSync, predict_gogma_rolls, predict_gogma_keep_rolls, predict_skill_rolls } from "./pkg/gogma_wasm_search.js";
-import { bonusTotals, canFillSlots, copiedPlanner, layoutOf, MAX_SELECTED, rangeCanMatch, matchesTier, normalizedPlanner, resultQuality, routeWeaponsMatch, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { bonusTotals, canFillSlots, copiedPlanner, layoutOf, MAX_SELECTED, rangeCanMatch, matchesTier, normalizedPlanner, resultQuality, routeWeaponsMatch, skillGoalMatches, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
 import { optimizeStream, planWeapons, selectTargets } from "./planner-engine.js";
 
 initSync({ module: await readFile(new URL("./pkg/gogma_wasm_search_bg.wasm", import.meta.url)) });
@@ -228,6 +228,39 @@ test("competing weapons produce a route for each choice of which one to finish",
   assert.equal(route.alternatives.length, 1);
   assert.deepEqual(route.alternatives[0].dropped.map((v) => v.id), ["first"]);
   assert.ok(route.alternatives[0].steps.every((step) => step.targetId === "second"));
+});
+
+test("Any in a skill pair accepts one skill on its own", () => {
+  const ebonyLord = 5 * 14 + 13;
+  const otherLord = 18 * 14 + 13;
+  const ebonyOther = 5 * 14 + 2;
+  assert.ok(skillGoalMatches(otherLord, [{ seriesIndex: null, groupIndex: 13 }]));
+  assert.ok(!skillGoalMatches(ebonyOther, [{ seriesIndex: null, groupIndex: 13 }]));
+  assert.ok(skillGoalMatches(ebonyOther, [{ seriesIndex: 5, groupIndex: null }]));
+  assert.ok(!skillGoalMatches(otherLord, [{ seriesIndex: 5, groupIndex: 13 }]));
+  const t = target("horn", 5, 1);
+  t.planner = normalizedPlanner({ ...t, planner: { acceptable: { skills: [{ seriesIndex: null, groupIndex: 13 }, { seriesIndex: 5, groupIndex: null }, { seriesIndex: 21, groupIndex: 0 }] }, preferred: { skills: [{ seriesIndex: 5, groupIndex: 13 }] } } });
+  assert.deepEqual(t.planner.acceptable.skills, [{ seriesIndex: null, groupIndex: 13 }, { seriesIndex: 5, groupIndex: null }]);
+  assert.equal(resultQuality(ebonyLord, t, "skill"), "preferred");
+  assert.equal(resultQuality(otherLord, t, "skill"), "acceptable");
+  assert.equal(resultQuality(ebonyOther, t, "skill"), "acceptable");
+  assert.equal(resultQuality(18 * 14 + 2, t, "skill"), "none");
+});
+
+test("an Any skill pair finishes no later than the exact pair it contains", async () => {
+  const plan = async (pair) => {
+    const t = target("horn", 5, 1);
+    t.planner.bonusEnabled = false;
+    t.planner.acceptable.skills = [pair];
+    t.planner.preferred.skills = [];
+    const req = request([t], 0, 1000);
+    return (await planWeapons(req, provider(req))).acceptable;
+  };
+  const exact = await plan({ seriesIndex: 5, groupIndex: 13 });
+  const any = await plan({ seriesIndex: null, groupIndex: 13 });
+  assert.ok(any.complete);
+  assert.ok(!exact.complete || any.total <= exact.total);
+  assert.equal(any.steps.at(-1).rolls.at(-1).raw % 14, 13);
 });
 
 test("stat goals are min/max ranges; blank sides are unbounded and max 0 excludes a stat", () => {

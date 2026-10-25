@@ -81,8 +81,10 @@ export function statGoalMatches(totals, minimums, maximums = {}) {
 
 export const hasBonusGoal = (tier) => Object.keys(tier.stats).length > 0 || Object.keys(tier.maxStats ?? {}).length > 0;
 
+// A null series or group index is "Any": that half of the pair matches every
+// skill, so a row can accept one skill on its own.
 export function skillGoalMatches(index, pairs) {
-  return (pairs ?? []).some((pair) => index === pair.seriesIndex * 14 + pair.groupIndex);
+  return (pairs ?? []).some((pair) => (pair.seriesIndex === null || pair.seriesIndex === Math.floor(index / 14)) && (pair.groupIndex === null || pair.groupIndex === index % 14));
 }
 
 // Slots each category can fill: no bonus ID repeats more than twice, and
@@ -99,7 +101,8 @@ export function normalizedPlanner(target) {
     const source = value && typeof value === "object" ? value : fallback;
     return Object.fromEntries(Object.entries(source).filter(([key, min]) => availableStats(target).includes(key) && Number.isFinite(min) && min >= 0));
   };
-  const pairs = (value, fallback) => (Array.isArray(value) ? value : fallback).filter((pair) => Number.isInteger(pair?.seriesIndex) && pair.seriesIndex >= 0 && pair.seriesIndex < 21 && Number.isInteger(pair?.groupIndex) && pair.groupIndex >= 0 && pair.groupIndex < 14).map(({ seriesIndex, groupIndex }) => ({ seriesIndex, groupIndex }));
+  const index = (value, count) => value === null || (Number.isInteger(value) && value >= 0 && value < count);
+  const pairs = (value, fallback) => (Array.isArray(value) ? value : fallback).filter((pair) => pair && index(pair.seriesIndex, 21) && index(pair.groupIndex, 14)).map(({ seriesIndex, groupIndex }) => ({ seriesIndex, groupIndex }));
   const preset = target.skillCombinations?.length ? target.skillCombinations : [{ seriesIndex: 11, groupIndex: 13 }];
   const defaultAcceptable = target.weaponType === 11 ? { affinity: 30 } : target.weaponType === 8 ? { attack: 18, affinity: 14 } : { attack: 36 };
   const defaultPreferred = target.weaponType === 11 ? { affinity: 36 } : target.weaponType === 8 ? { attack: 24, affinity: 18 } : { attack: 42 };
