@@ -7,6 +7,7 @@
     <title>Gogma Seed Finder</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="./styles.css?v=__BUILD_ID__" />
+    <link rel="stylesheet" href="./planner.css?v=__BUILD_ID__" />
   </head>
   <body>
     <main class="shell">
@@ -101,6 +102,7 @@
       </section>
 
       <nav class="app-tabs" aria-label="機能を選択">
+        <button type="button" class="tab-button" data-tab="planner" aria-selected="false"><span>✦</span>武器プランナー</button>
         <button type="button" class="tab-button active" data-tab="guide" aria-selected="true"><span>01</span>使い方</button>
         <button type="button" class="tab-button" data-tab="search" aria-selected="false"><span>02</span>seed・復元カウンター検索</button>
         <button type="button" class="tab-button" data-tab="skill-search" aria-selected="false"><span>03</span>スキルカウンター特定</button>
@@ -109,6 +111,10 @@
         <button type="button" class="tab-button" data-tab="artian-search" aria-selected="false"><span>06</span>通常アーティアカウンター特定</button>
         <button type="button" class="tab-button" data-tab="artian-future" aria-selected="false"><span>07</span>通常アーティア未来予測</button>
       </nav>
+
+      <div class="tab-view" data-tab-view="planner" hidden>
+        <section id="weapon-planner" class="planner" aria-label="武器プランナー"></section>
+      </div>
 
       <div class="tab-view active" data-tab-view="guide">
         <section class="panel guide-panel" aria-labelledby="guide-title">
@@ -377,13 +383,21 @@
           </section>
           <section class="comparison-section" aria-labelledby="skill-targets-title">
             <div class="section-heading comparison-heading"><div><p class="step">REGISTERED TARGETS</p><h2 id="skill-targets-title">登録した武器種・属性を一覧比較</h2></div><p id="skill-target-capacity" class="status-pill">0/140件</p></div>
-            <div class="field-grid comparison-settings target-registration-grid">
-              <label><span>表示名（任意）</span><input id="skill-target-label" type="text" maxlength="24" placeholder="例：火太刀" /></label><label><span>武器種</span><select id="skill-target-weapon-type"></select></label><label><span>属性</span><select id="skill-target-attribute-force"></select></label><label><span>表示する回数</span><input id="skill-prediction-count" type="number" min="1" max="10000" value="100" placeholder="1〜10,000" /></label>
+            <p class="prediction-intro">武器ごとに武器種・属性と、狙うシリーズ／グループの組み合わせを設定します。1つの武器に複数の組み合わせを登録すると、いずれかに一致した結果を表示します。</p>
+            <div class="skill-target-builder">
+              <div class="field-grid comparison-settings target-registration-grid skill-target-meta-grid">
+                <label><span>表示名（任意）</span><input id="skill-target-label" type="text" maxlength="24" placeholder="例：火太刀" /></label><label><span>武器種</span><select id="skill-target-weapon-type"></select></label><label><span>属性</span><select id="skill-target-attribute-force"></select></label>
+              </div>
+              <div class="skill-combination-editor">
+                <div class="skill-combination-editor-heading"><div><h3>狙うスキルの組み合わせ</h3><p>シリーズスキルとグループスキルが同じ行で一致したとき、その武器を当たりとして扱います。</p></div><span id="skill-target-preset" class="status-pill">手動設定</span></div>
+                <div id="skill-target-combinations" class="skill-target-combinations"></div>
+                <div class="skill-combination-actions"><button id="add-skill-combination" class="text-button" type="button">＋組み合わせを追加</button></div>
+              </div>
+              <div class="comparison-actions skill-target-actions"><button id="add-skill-target" class="secondary small-button" type="button">この組み合わせを登録</button><button id="cancel-skill-target-edit" class="text-button" type="button" hidden>編集をキャンセル</button><button id="clear-skill-targets" class="text-button" type="button">登録をすべて削除</button></div>
             </div>
-            <div class="comparison-actions"><button id="add-skill-target" class="secondary small-button" type="button">この組み合わせを登録</button><button id="clear-skill-targets" class="text-button" type="button">登録をすべて削除</button></div>
-            <p class="registration-load-note">最大140件まで登録できます。登録数や表示回数が多いほど、計算と表示に時間がかかります。</p>
-            <p class="target-reorder-hint">登録済みのタグまたは結果表の見出しをドラッグすると、表示順を変更できます。</p>
-            <div id="skill-target-list" class="comparison-target-list" aria-live="polite"></div><p id="skill-target-error" class="error" role="alert" hidden></p>
+            <p id="skill-target-error" class="error" role="alert" hidden></p>
+            <div class="skill-forecast-options"><div><h3>予測範囲</h3><p>全登録武器で同じスキルカウンター位置から確認します。</p></div><label><span>表示する回数</span><input id="skill-prediction-count" type="number" min="1" max="10000" value="100" /></label></div>
+            <div id="skill-target-list" class="skill-target-list" aria-live="polite"></div>
           </section>
           <section class="skill-filter-settings" aria-labelledby="skill-filter-title">
             <div class="skill-filter-intro"><h3 id="skill-filter-title">当たり強調・条件一致だけ表示</h3><p>シリーズの複数選択はORで判定します。同じ条件を強調表示と行の絞り込みに使用します。</p></div>
@@ -392,11 +406,12 @@
             <fieldset class="skill-filter-series"><legend>シリーズスキル（複数選択はOR）</legend><div id="skill-filter-series-options" class="skill-filter-series-options"></div></fieldset>
             <div class="skill-filter-actions"><label class="checkbox-label skill-filter-toggle"><input id="skill-highlight-enabled" type="checkbox" checked /><span>条件に合う要素だけ強調表示</span></label><label class="checkbox-label skill-filter-toggle"><input id="skill-filter-enabled" type="checkbox" /><span>条件に合う行だけ表示</span></label></div>
           </section>
+          <label class="checkbox-label skill-targets-only-toggle"><input id="skill-targets-only" type="checkbox" checked /><span>武器ごとの目標に一致した結果だけ表示</span></label>
           <div class="prediction-export-actions">
             <button id="export-skill-csv" class="secondary small-button" type="button" disabled>検索結果をCSV出力</button>
-            <p id="skill-export-status" aria-live="polite">1カウンターを1行にし、登録武器ごとにシリーズ・グループの列を追加します。フィルターがONの場合は、条件に合う行をすべて出力します。</p>
+            <p id="skill-export-status" aria-live="polite">検索範囲内の表示条件に合う行をすべてCSVへ出力します。</p>
           </div>
-          <p class="adoption-note">スキル結果を採用してセーブした場合は、その行を新しい0地点にできます。復元ボーナスカウンターは維持されます。</p>
+          <p class="adoption-note">表示された回数までゲーム内で進め、当たりの武器でスキル結果を確認してからセーブしてください。復元ボーナスカウンターは維持されます。</p>
           <div id="skill-pager" class="table-pager" aria-label="スキル結果のページ" hidden><button id="skill-page-prev" class="secondary small-button" type="button">前の100件</button><span id="skill-page-status" aria-live="polite"></span><button id="skill-page-next" class="secondary small-button" type="button">次の100件</button></div>
           <div id="skill-table-wrap" class="prediction-table-wrap" hidden><table class="prediction-table skill-prediction-table"><thead><tr id="skill-prediction-header-row"></tr></thead><tbody id="skill-prediction-rows"></tbody></table></div>
         </section>

@@ -231,7 +231,7 @@ h1 {
   top: 0;
   z-index: 8;
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 6px;
   margin: 18px 0;
   padding: 7px;
@@ -2394,6 +2394,10 @@ button:disabled {
   max-width: none;
 }
 
+.skill-target-meta-grid {
+  grid-template-columns: 1.2fr repeat(2, minmax(0, 1fr));
+}
+
 .adoption-note {
   margin: 18px 0 0;
   padding: 10px 13px;
@@ -2672,96 +2676,189 @@ button:disabled {
   line-height: 1.55;
 }
 
-.skill-filter-settings {
-  display: grid;
-  grid-template-columns: minmax(230px, 0.9fr) minmax(170px, 0.65fr) minmax(190px, 0.7fr) minmax(360px, 1.4fr) minmax(220px, auto);
-  gap: 14px;
-  align-items: end;
-  margin: 28px 0 32px;
+.skill-target-builder {
+  margin-top: 22px;
   padding: 18px;
   border: 1px solid #454233;
   border-radius: 12px;
   background: #151612;
 }
 
-.skill-filter-settings h3 {
-  margin: 0 0 6px;
+
+.skill-combination-editor {
+  margin-top: 18px;
+  padding: 15px;
+  border: 1px solid #3f4338;
+  border-radius: 10px;
+  background: rgb(12 13 11 / 34%);
+}
+
+.skill-combination-editor-heading,
+.skill-target-card-heading,
+.skill-forecast-options {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.skill-combination-editor-heading h3,
+.skill-forecast-options h3 {
+  margin: 0 0 5px;
   font-family: var(--font-ui);
-  font-size: 1.05rem;
+  font-size: 1rem;
   font-weight: 500;
 }
 
-.skill-filter-settings p {
+.skill-combination-editor-heading p,
+.skill-forecast-options p {
   margin: 0;
   color: var(--muted);
   font-size: 0.72rem;
   line-height: 1.5;
 }
 
-.skill-filter-settings label:not(.checkbox-label) > span {
-  margin-bottom: 7px;
-  color: #d6d3c5;
-  font-size: 0.72rem;
-  font-weight: 800;
-}
-
-.skill-filter-settings select {
-  height: 42px;
-  font-size: 0.76rem;
-}
-
-.skill-filter-series {
-  min-width: 0;
-  margin: 0;
-  padding: 9px 11px 11px;
-  border: 1px solid #484a40;
-  border-radius: 9px;
-}
-
-.skill-filter-series legend {
-  padding: 0 5px;
-  color: #d6d3c5;
-  font-size: 0.72rem;
-  font-weight: 800;
-}
-
-.skill-filter-series-options {
+.skill-target-combinations {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px 12px;
-  max-height: 112px;
-  overflow-y: auto;
-  scrollbar-color: #8d793f #1c1d18;
+  gap: 8px;
+  margin-top: 14px;
 }
 
-.skill-filter-series-options label {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  min-width: 0;
-  color: #e5e0d0;
-  font-size: 0.72rem;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.skill-filter-series-options input[type="checkbox"] {
-  flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
-  accent-color: var(--gold);
-}
-
-.skill-filter-toggle {
-  min-height: 0;
-  padding: 0;
-  white-space: nowrap;
-}
-
-.skill-filter-actions {
+.skill-target-combination-row {
   display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 22px minmax(0, 1fr) auto;
   gap: 10px;
-  align-self: center;
+  align-items: end;
+  padding: 10px;
+  border: 1px solid #3b3e34;
+  border-radius: 9px;
+  background: #191b16;
+}
+
+.skill-combination-number {
+  padding-bottom: 11px;
+  color: var(--gold);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.skill-combination-field {
+  min-width: 0;
+}
+
+.skill-combination-field > span,
+.skill-forecast-options label > span {
+  display: block;
+  margin-bottom: 6px;
+  color: #d6d3c5;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.skill-combination-field select {
+  width: 100%;
+  height: 40px;
+  font-size: 0.75rem;
+}
+
+.skill-target-combination-row > :nth-child(3) {
+  padding-bottom: 10px;
+  color: var(--gold);
+  font-size: 1rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.skill-combination-remove {
+  align-self: end;
+  padding: 9px 5px;
+}
+
+.skill-combination-actions {
+  margin-top: 9px;
+}
+
+.skill-target-actions {
+  flex-wrap: wrap;
+}
+
+.skill-forecast-options {
+  margin-top: 20px;
+  padding: 14px 16px;
+  border: 1px solid #454233;
+  border-radius: 10px;
+  background: #151612;
+}
+
+.skill-forecast-options label {
+  flex: 0 0 190px;
+}
+
+.skill-forecast-options input {
+  width: 100%;
+}
+
+.skill-target-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.skill-target-card {
+  min-width: 0;
+  padding: 12px 13px;
+  border: 1px solid #4b4e43;
+  border-radius: 10px;
+  background: #171814;
+}
+
+.skill-target-card-heading strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #e8e3d4;
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-target-card-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.skill-target-card-actions .text-button {
+  padding: 0;
+  font-size: 0.7rem;
+}
+
+.skill-target-remove {
+  display: grid;
+  width: 21px;
+  height: 21px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #30332b;
+  color: #c9c6b8;
+  cursor: pointer;
+  place-items: center;
+}
+
+.skill-target-remove:hover {
+  background: #4a4330;
+  color: var(--gold-bright);
+}
+
+.skill-target-card-combinations {
+  margin: 8px 0 0;
+  color: #c7c3b4;
+  font-size: 0.7rem;
+  line-height: 1.55;
 }
 
 .prediction-export-actions {
@@ -2781,25 +2878,6 @@ button:disabled {
 .bonus-export-actions {
   margin-top: 14px;
   margin-bottom: 0;
-}
-
-@media (max-width: 1400px) {
-  .skill-filter-settings {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: start;
-  }
-
-  .skill-filter-intro,
-  .skill-filter-series {
-    grid-column: 1 / -1;
-  }
-
-  .skill-filter-actions {
-    display: flex;
-    flex-wrap: wrap;
-    grid-column: 1 / -1;
-    gap: 10px 22px;
-  }
 }
 
 .skill-observation-heading {
@@ -2871,6 +2949,34 @@ button:disabled {
   background: #20221c;
 }
 
+.skill-prediction-table.skill-targets-compact { min-width: 620px; width: 100%; }
+
+.skill-matching-weapons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.skill-matching-weapon {
+  display: inline-grid;
+  gap: 3px;
+  min-width: min(220px, 100%);
+  padding: 7px 9px;
+  border: 1px solid var(--gold);
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgb(214 179 92 / 16%), rgb(240 210 124 / 5%));
+}
+
+.skill-matching-weapon strong {
+  color: #fff2be;
+  font-size: 0.76rem;
+}
+
+.skill-matching-result {
+  color: #d8d2be;
+  font-size: 0.68rem;
+}
+
 .detail-prediction-section .prediction-table {
   --offset-column-width: 78px;
 }
@@ -2891,52 +2997,10 @@ button:disabled {
   background: #20221c;
 }
 
-.skill-result-pair {
-  display: grid;
-  gap: 6px;
-  min-width: 190px;
-}
-
-.skill-result-pair .skill-tag {
-  min-width: 0;
-  width: 100%;
-}
-
 .detail-prediction-section {
   margin-top: 44px;
   padding-top: 38px;
   border-top: 1px solid #57513b;
-}
-
-.skill-tag {
-  display: inline-block;
-  min-width: 170px;
-  padding: 7px 10px;
-  border: 1px solid #494c42;
-  border-radius: 8px;
-  background: #1b1c18;
-  color: #eee9da;
-  font-size: 0.76rem;
-  white-space: nowrap;
-}
-
-.skill-tag.series {
-  border-color: #58687b;
-  background: rgb(77 102 133 / 13%);
-}
-
-.skill-tag.group {
-  border-color: #655a3c;
-  background: rgb(128 105 52 / 11%);
-}
-
-.skill-tag.desired,
-.skill-tag.jackpot {
-  border-color: var(--gold-bright);
-  background: linear-gradient(135deg, rgb(214 179 92 / 28%), rgb(240 210 124 / 8%));
-  box-shadow: 0 0 0 1px rgb(240 210 124 / 18%), 0 0 15px rgb(214 179 92 / 16%);
-  color: #fff2be;
-  font-weight: 900;
 }
 
 .prediction-empty {
@@ -3104,31 +3168,25 @@ button:disabled {
   }
 
   .continuation-controls,
-  .skill-filter-settings,
   .bonus-ex-filter-settings,
   .counter-range-guide {
     grid-template-columns: 1fr;
   }
 
-  .skill-filter-toggle,
+  .skill-combination-editor-heading,
+  .skill-forecast-options {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .skill-forecast-options label {
+    flex-basis: auto;
+    width: 100%;
+  }
+
   .bonus-ex-filter-toggle {
     min-height: 0;
     padding: 6px 0 0;
-  }
-
-  .skill-filter-intro,
-  .skill-filter-series {
-    grid-column: auto;
-  }
-
-  .skill-filter-actions {
-    align-items: flex-start;
-    flex-direction: column;
-    grid-column: auto;
-  }
-
-  .skill-filter-series-options {
-    grid-template-columns: 1fr;
   }
 
   .prediction-export-actions {
@@ -3270,6 +3328,15 @@ button:disabled {
     flex-direction: column;
   }
 
+  .skill-target-combination-row {
+    grid-template-columns: 28px minmax(0, 1fr) 22px minmax(0, 1fr);
+  }
+
+  .skill-combination-remove {
+    grid-column: 2 / -1;
+    justify-self: start;
+  }
+
   .observation-row select {
     padding-right: 20px;
     padding-left: 6px;
@@ -3331,4 +3398,171 @@ button:disabled {
   .skill-observation-row .roll-number {
     grid-column: auto;
   }
+}
+
+/* Keep upstream global skill-filter controls alongside weapon presets. */
+.skill-filter-settings {
+  display: grid;
+  grid-template-columns: minmax(230px, 0.9fr) minmax(170px, 0.65fr) minmax(190px, 0.7fr) minmax(360px, 1.4fr) minmax(220px, auto);
+  gap: 14px;
+  align-items: end;
+  margin: 28px 0 32px;
+  padding: 18px;
+  border: 1px solid #454233;
+  border-radius: 12px;
+  background: #151612;
+}
+
+.skill-filter-settings h3 {
+  margin: 0 0 6px;
+  font-family: var(--font-ui);
+  font-size: 1.05rem;
+  font-weight: 500;
+}
+
+.skill-filter-settings p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.skill-filter-settings label:not(.checkbox-label) > span {
+  margin-bottom: 7px;
+  color: #d6d3c5;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.skill-filter-settings select {
+  height: 42px;
+  font-size: 0.76rem;
+}
+
+.skill-filter-series {
+  min-width: 0;
+  margin: 0;
+  padding: 9px 11px 11px;
+  border: 1px solid #484a40;
+  border-radius: 9px;
+}
+
+.skill-filter-series legend {
+  padding: 0 5px;
+  color: #d6d3c5;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.skill-filter-series-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 12px;
+  max-height: 112px;
+  overflow-y: auto;
+  scrollbar-color: #8d793f #1c1d18;
+}
+
+.skill-filter-series-options label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+  color: #e5e0d0;
+  font-size: 0.72rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.skill-filter-series-options input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--gold);
+}
+
+.skill-filter-toggle {
+  min-height: 0;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.skill-filter-actions {
+  display: grid;
+  gap: 10px;
+  align-self: center;
+}
+
+.skill-targets-only-toggle {
+  margin: 12px 0 28px;
+}
+
+@media (max-width: 1400px) {
+  .skill-filter-settings {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .skill-filter-intro,
+  .skill-filter-series {
+    grid-column: 1 / -1;
+  }
+
+  .skill-filter-actions {
+    display: flex;
+    flex-wrap: wrap;
+    grid-column: 1 / -1;
+    gap: 10px 22px;
+  }
+}
+
+
+@media (max-width: 700px) {
+  .skill-filter-settings { grid-template-columns: minmax(0, 1fr); }
+  .skill-filter-series-options { grid-template-columns: minmax(0, 1fr); }
+}
+
+.skill-result-pair {
+  display: grid;
+  gap: 6px;
+  min-width: 190px;
+}
+
+.skill-result-pair .skill-tag {
+  min-width: 0;
+  width: 100%;
+}
+
+
+
+
+.skill-tag {
+  display: inline-block;
+  min-width: 170px;
+  padding: 7px 10px;
+  border: 1px solid #494c42;
+  border-radius: 8px;
+  background: #1b1c18;
+  color: #eee9da;
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.skill-tag.series {
+  border-color: #58687b;
+  background: rgb(77 102 133 / 13%);
+}
+
+.skill-tag.group {
+  border-color: #655a3c;
+  background: rgb(128 105 52 / 11%);
+}
+
+.skill-tag.desired,
+.skill-tag.jackpot {
+  border-color: var(--gold-bright);
+  background: linear-gradient(135deg, rgb(214 179 92 / 28%), rgb(240 210 124 / 8%));
+  box-shadow: 0 0 0 1px rgb(240 210 124 / 18%), 0 0 15px rgb(214 179 92 / 16%);
+  color: #fff2be;
+  font-weight: 900;
 }

@@ -1,0 +1,17 @@
+{
+  "name": "gogma-seed-finder",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "serve": "serve web --listen tcp://127.0.0.1:4341 --no-port-switching --no-clipboard",
+    "build": "node scripts/build-web.mjs",
+    "test": "node --test web/*.test.mjs",
+    "check": "node --check web/app.js && node --check web/planner-ui.js && node --check web/planner-engine.js && node --check web/planner-model.js && node --check web/planner-text.js && node --check web/planner-worker.js"
+  },
+  "devDependencies": {
+    "serve": "^14.2.5"
+  },
+  "overrides": {
+    "compression": "^1.8.2"
+  }
+}
