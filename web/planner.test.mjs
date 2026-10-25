@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import { initSync, predict_gogma_rolls, predict_gogma_keep_rolls, predict_skill_rolls } from "./pkg/gogma_wasm_search.js";
-import { bonusTotals, layoutOf, matchesTier, normalizedPlanner, resultQuality, routeWeaponsMatch, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { bonusTotals, copiedPlanner, layoutOf, matchesTier, normalizedPlanner, resultQuality, routeWeaponsMatch, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
 import { optimizeStream, planWeapons } from "./planner-engine.js";
 
 initSync({ module: await readFile(new URL("./pkg/gogma_wasm_search_bg.wasm", import.meta.url)) });
@@ -157,6 +157,25 @@ test("stat maximums follow the two-copy and two-slot sharpness/ammo limits", () 
   assert.equal(statMaximum("element", status), null);
   status.planner.elementValues = [30, 50];
   assert.equal(statMaximum("element", status), 160);
+});
+
+test("copied goals keep the new weapon's own rolls and drop element goals whose gains differ", () => {
+  const source = target("source", 3, 1);
+  source.planner = { ...source.planner, acceptable: { stats: { attack: 30, element: 150 }, skills: [{ seriesIndex: 2, groupIndex: 4 }] }, currentBonuses: [15, 15, 12, 12, 8], currentSkill: 17 };
+  const water = copiedPlanner(source, target("water", 3, 2));
+  assert.deepEqual(water.acceptable, source.planner.acceptable);
+  assert.equal(water.currentBonuses, null); assert.equal(water.currentSkill, null);
+  water.acceptable.stats.attack = 42;
+  assert.equal(source.planner.acceptable.stats.attack, 30);
+  assert.deepEqual(copiedPlanner(source, target("poison", 3, 6)).acceptable.stats, { attack: 30 });
+  assert.deepEqual(copiedPlanner(source, target("raw", 3, 0)).acceptable.stats, { attack: 30 });
+  assert.deepEqual(copiedPlanner(source, target("other type", 4, 1)).acceptable.stats, { attack: 30 });
+  const poison = target("poison", 3, 6);
+  poison.planner = { ...poison.planner, acceptable: { stats: { element: 40 }, skills: [] }, elementValues: [10, 20] };
+  const otherPoison = copiedPlanner(poison, target("poison 2", 3, 6));
+  assert.deepEqual(otherPoison.acceptable.stats, { element: 40 });
+  assert.deepEqual(otherPoison.elementValues, [10, 20]);
+  assert.deepEqual(copiedPlanner(poison, target("sleep", 3, 8)).elementValues, [null, null]);
 });
 
 test("all planner copy has Japanese and Traditional Chinese translations", async () => {

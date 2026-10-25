@@ -100,6 +100,19 @@ export function normalizedPlanner(target) {
   };
 }
 
+// Copies goals onto another weapon; its current bonuses, skills, and Keep
+// layout stay its own. Elemental gains depend only on weapon type, but status
+// gains are entered per weapon, so element goals carry over only when the
+// gains are known to match. Stats the weapon cannot roll are dropped.
+export function copiedPlanner(source, target) {
+  const goals = structuredClone(normalizedPlanner(source));
+  const sameAttribute = source.attributeForce === target.attributeForce;
+  const sameGains = source.weaponType === target.weaponType && (sameAttribute || (source.attributeForce < 6 && target.attributeForce < 6));
+  if (!sameGains) for (const tier of [goals.acceptable, goals.preferred]) delete tier.stats.element;
+  const own = normalizedPlanner(target);
+  return normalizedPlanner({ ...target, planner: { ...goals, currentBonuses: own.currentBonuses, currentSkill: own.currentSkill, elementValues: sameAttribute ? goals.elementValues : own.elementValues } });
+}
+
 export function hasGoal(target, stream) {
   const p = target.planner;
   return stream === "bonus" ? p.bonusEnabled : p.skillEnabled;

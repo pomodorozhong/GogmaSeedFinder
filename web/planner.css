@@ -48,10 +48,12 @@
 .pl-preferred { color: var(--gold-bright); background: var(--pl-gold-bg); }
 .pl-acceptable { color: var(--pl-teal); background: var(--pl-teal-bg); }
 .planner .pl-edit { padding: 8px 0 0; color: var(--muted); }
+.pl-weapon-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
 .pl-empty { grid-column: 1 / -1; border: 1px dashed var(--line); border-radius: 8px; text-align: center; color: var(--muted); padding: 30px; }
-.pl-add-form { display: grid; grid-template-columns: 1.2fr 1fr 1fr auto auto; gap: 12px; align-items: end; padding: 16px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 14px; }
+.pl-add-form { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr auto auto; gap: 12px; align-items: end; padding: 16px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 14px; }
 .pl-editor { margin-top: 14px; border: 1px solid #8b7748; border-radius: 9px; padding: 20px; background: #1d201a; }
 .pl-name-field { max-width: 380px; }
+.pl-name-field + .pl-name-field { display: block; margin-top: 12px; }
 .pl-editor-section { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
 .planner .pl-toggle { display: flex; align-items: center; gap: 8px; color: #f0ead9; font-size: 14px; font-weight: 500; margin-bottom: 7px; }
 .pl-goal-table-wrap { max-width: 650px; margin-top: 12px; }

@@ -1,6 +1,6 @@
 import { t, localizedTargetName } from "./i18n.js";
 import { pl } from "./planner-text.js";
-import { availableStats, BONUS_CATEGORY, layoutOf, normalizedPlanner, routePosition, routeWeaponsMatch, samePosition, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { availableStats, BONUS_CATEGORY, copiedPlanner, layoutOf, normalizedPlanner, routePosition, routeWeaponsMatch, samePosition, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
 
 const STORAGE_KEY = "gogma-weapon-planner-v1";
 const esc = (text) => String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -66,7 +66,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     <header class="pl-page-heading"><div><p class="step">WEAPON PLANNER</p><h2>${html("Plan your weapons, roll by roll.")}</h2><p class="pl-muted">${html("Choose your weapons and minimum stat gains. Get a complete bonus and skill route.")}</p></div><span id="pl-storage" class="pl-storage"></span></header>
     <div class="pl-state-strip"><span>${html("Saved position")}</span><code id="pl-position"></code><button class="text-button" type="button" data-pl-action="state">${html("Set current state")}</button></div>
     <section class="pl-section" aria-labelledby="pl-weapons-title"><div class="pl-section-heading"><div><h3 id="pl-weapons-title"><span class="pl-index">01</span> ${html("Your weapons")}</h3><p class="pl-muted">${html("Select up to 8 weapons. Each copy is planned separately.")}</p></div><button class="secondary small-button" type="button" data-pl-action="add">＋ ${html("Add weapon")}</button></div>
-      <form id="pl-add-form" class="pl-add-form" hidden><label>${html("Weapon name")}<input name="label" maxlength="24" placeholder="${html("Optional name")}"></label><label>${html("Weapon type")}<select name="weaponType">${options(weapons, 3)}</select></label><label>${html("Element / status")}<select name="attributeForce">${options(attributes, 1)}</select></label><button class="secondary small-button" type="submit">${html("Add weapon")}</button><button class="text-button" type="button" data-pl-action="cancel-add">${html("Cancel")}</button></form>
+      <form id="pl-add-form" class="pl-add-form" hidden><label>${html("Weapon name")}<input name="label" maxlength="24" placeholder="${html("Optional name")}"></label><label>${html("Weapon type")}<select name="weaponType">${options(weapons, 3)}</select></label><label>${html("Element / status")}<select name="attributeForce">${options(attributes, 1)}</select></label><label>${html("Copy goals from")}<select name="copyFrom"></select></label><button class="secondary small-button" type="submit">${html("Add weapon")}</button><button class="text-button" type="button" data-pl-action="cancel-add">${html("Cancel")}</button></form>
       <div id="pl-weapons" class="pl-weapon-grid"></div><div id="pl-editor"></div>
     </section>
     <form id="pl-limits" class="pl-limits"><div class="pl-limit-copy"><h3><span class="pl-index">02</span> ${html("Search limits")}</h3><p class="pl-muted">${html("Two independent roll windows from your saved position.")}</p></div><label>${html("Bonus rolls")}<input name="bonus" type="number" min="0" max="10000" step="1" value="${esc(cache.limits.bonus)}" required></label><label>${html("Skill rolls")}<input name="skill" type="number" min="0" max="10000" step="1" value="${esc(cache.limits.skill)}" required></label><button id="pl-build" class="primary" type="submit">${html("Build guides")}</button><button id="pl-cancel" class="secondary" type="button" data-pl-action="cancel" hidden>${html("Cancel search")}</button></form>
@@ -94,7 +94,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     q("#pl-weapons").innerHTML = getTargets().length ? getTargets().map((raw) => {
       const target = { ...raw, planner: normalizedPlanner(raw) };
       const checked = cache.selected.includes(target.id);
-      return `<article class="pl-weapon${checked ? " is-selected" : ""}"><div class="pl-weapon-head"><label><input type="checkbox" data-pl-select="${esc(target.id)}"${checked ? " checked" : ""}><span><strong>${esc(nameOf(target))}</strong><small>${esc(localizedTargetName(weapons.find(([id]) => id === target.weaponType)[1], attributes.find(([id]) => id === target.attributeForce)[1]))}</small></span></label><button type="button" class="text-button pl-remove" data-pl-action="remove" data-id="${esc(target.id)}" aria-label="${html("Remove weapon")}: ${esc(nameOf(target))}">×</button></div><div class="pl-goal-mini pl-preferred"><span>★</span><span>${esc(goalSummary(target, "preferred"))}</span></div><div class="pl-goal-mini pl-acceptable"><span>✓</span><span>${esc(goalSummary(target, "acceptable"))}</span></div><button class="text-button pl-edit" type="button" data-pl-action="edit" data-id="${esc(target.id)}">${html("Edit goals")} →</button></article>`;
+      return `<article class="pl-weapon${checked ? " is-selected" : ""}"><div class="pl-weapon-head"><label><input type="checkbox" data-pl-select="${esc(target.id)}"${checked ? " checked" : ""}><span><strong>${esc(nameOf(target))}</strong><small>${esc(localizedTargetName(weapons.find(([id]) => id === target.weaponType)[1], attributes.find(([id]) => id === target.attributeForce)[1]))}</small></span></label><button type="button" class="text-button pl-remove" data-pl-action="remove" data-id="${esc(target.id)}" aria-label="${html("Remove weapon")}: ${esc(nameOf(target))}">×</button></div><div class="pl-goal-mini pl-preferred"><span>★</span><span>${esc(goalSummary(target, "preferred"))}</span></div><div class="pl-goal-mini pl-acceptable"><span>✓</span><span>${esc(goalSummary(target, "acceptable"))}</span></div><div class="pl-weapon-actions"><button class="text-button pl-edit" type="button" data-pl-action="edit" data-id="${esc(target.id)}">${html("Edit goals")} →</button><button class="text-button pl-edit" type="button" data-pl-action="duplicate" data-id="${esc(target.id)}" aria-label="${html("Duplicate")}: ${esc(nameOf(target))}">${html("Duplicate")}</button></div></article>`;
     }).join("") : `<div class="pl-empty">${html("Add your first weapon to start planning.")}</div>`;
   }
   function comboRow(pair = { seriesIndex: 11, groupIndex: 13 }) {
@@ -116,8 +116,9 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const target = { ...raw, planner: normalizedPlanner(raw) };
     const p = target.planner;
     const bonusOptions = bonuses.filter(([id]) => availableStats(target).includes(({ 0: "attack", 1: "affinity", 2: "element", 3: target.weaponType >= 12 ? "ammo" : "sharpness" })[BONUS_CATEGORY[id]])).map(([id]) => [id, bonusName(target.weaponType, id)]);
+    const sources = getTargets().filter((v) => v.id !== id);
     const categories = [...new Set(bonusOptions.map(([id]) => BONUS_CATEGORY[id]))].map((category) => [category, statName(({ 0: "attack", 1: "affinity", 2: "element", 3: target.weaponType >= 12 ? "ammo" : "sharpness" })[category], target)]);
-    q("#pl-editor").innerHTML = `<form id="pl-goal-form" class="pl-editor"><div class="pl-section-heading"><h3>${html("Edit weapon goals")} · ${esc(nameOf(target))}</h3><button class="text-button" type="button" data-pl-action="cancel-edit">${html("Cancel")}</button></div><label class="pl-name-field">${html("Weapon name")}<input name="label" value="${esc(target.label)}" maxlength="24" placeholder="${html("Optional name")}"></label>
+    q("#pl-editor").innerHTML = `<form id="pl-goal-form" class="pl-editor"><div class="pl-section-heading"><h3>${html("Edit weapon goals")} · ${esc(nameOf(target))}</h3><button class="text-button" type="button" data-pl-action="cancel-edit">${html("Cancel")}</button></div><label class="pl-name-field">${html("Weapon name")}<input name="label" value="${esc(target.label)}" maxlength="24" placeholder="${html("Optional name")}"></label>${sources.length ? `<label class="pl-name-field">${html("Copy goals from")}<select data-copy-goals><option value="">${html("Choose a weapon")}</option>${sources.map((v) => `<option value="${esc(v.id)}">${esc(nameOf(v))}</option>`).join("")}</select></label>` : ""}
       <div class="pl-editor-section"><label class="pl-toggle"><input name="bonusEnabled" type="checkbox"${p.bonusEnabled ? " checked" : ""}>${html("Use bonus goals")}</label><p class="pl-fine">${html("Blank stats are ignored. Attack uses unbloated raw; affinity uses percentage points. These are gains from the five slots, not final weapon stats.")}</p><div class="pl-goal-table-wrap"><table class="pl-goal-table"><thead><tr><th>${html("Stat")}</th><th class="pl-teal">✓ ${html("Acceptable")}</th><th class="pl-gold">★ ${html("Top desired")}</th></tr></thead><tbody>${availableStats(target).map((key) => `<tr><th>${esc(statName(key, target))}${key === "affinity" ? " (%)" : ""}${rollHint(key, target)}</th>${["acceptable", "preferred"].map((mode) => `<td><input type="number" min="0" max="${statusStat(key, target) ? 9999 : statMaximum(key, target)}" step="1" data-stat="${key}" data-tier="${mode}" value="${p[mode].stats[key] ?? ""}" aria-label="${esc(`${tierName(mode)} · ${statName(key, target)}`)}"></td>`).join("")}</tr>`).join("")}</tbody></table></div></div>
       <div class="pl-editor-section"><label class="pl-toggle"><input name="skillEnabled" type="checkbox"${p.skillEnabled ? " checked" : ""}>${html("Use skill goals")}</label><p class="pl-fine">${html("A match for any pair in a column meets that goal. Top desired results also count as acceptable.")}</p><div class="pl-skill-goals">${["acceptable", "preferred"].map((mode) => `<section><h4 class="${mode === "preferred" ? "pl-gold" : "pl-teal"}">${mode === "preferred" ? "★" : "✓"} ${esc(tierName(mode))}</h4><div data-pairs="${mode}">${p[mode].skills.map(comboRow).join("")}</div><button type="button" class="text-button" data-pl-action="add-pair" data-tier="${mode}">＋ ${html("Add combination")}</button></section>`).join("")}</div></div>
       <details class="pl-current-details"><summary>${html("Current weapon (optional)")}</summary><p class="pl-fine">${html("Enter all five current bonuses to skip goals already met. An ordered category layout alone allows Keep Bonuses, but cannot prove a goal is already met.")}</p><h4>${html("Current bonuses in game order")}</h4><div class="pl-five-slots">${Array.from({ length: 5 }, (_, index) => `<label>${html("Slot {n}", { n: index + 1 })}<select data-current-bonus="${index}">${options(bonusOptions, p.currentBonuses?.[index], true)}</select></label>`).join("")}</div><h4>${html("Or known categories in game order")}</h4><div class="pl-five-slots">${Array.from({ length: 5 }, (_, index) => `<label>${html("Slot {n}", { n: index + 1 })}<select data-current-category="${index}">${options(categories, target.keepCategories?.[index], true)}</select></label>`).join("")}</div><h4>${html("Current skills")}</h4><div class="pl-current-pair"><select name="currentSeries" aria-label="${html("Series skill")}">${comboOptions(series, p.currentSkill === null ? null : Math.floor(p.currentSkill / 14), true)}</select><span>＋</span><select name="currentGroup" aria-label="${html("Group skill")}">${comboOptions(groups, p.currentSkill === null ? null : p.currentSkill % 14, true)}</select></div></details>
@@ -125,6 +126,35 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     q("#pl-goal-form").addEventListener("submit", submitGoals);
     q("#pl-goal-form input").focus({ preventScroll: true });
     q("#pl-goal-form").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+  // Fills the open form only; nothing is stored until the goals are saved.
+  function copyGoals(sourceId) {
+    const raw = getTargets().find((target) => target.id === sourceId);
+    const current = getTargets().find((target) => target.id === editing);
+    const form = q("#pl-goal-form");
+    if (!raw || !current || !form) return;
+    const p = copiedPlanner(raw, current);
+    form.elements.bonusEnabled.checked = p.bonusEnabled;
+    form.elements.skillEnabled.checked = p.skillEnabled;
+    for (const input of form.querySelectorAll("[data-stat]")) input.value = p[input.dataset.tier].stats[input.dataset.stat] ?? "";
+    for (const mode of ["acceptable", "preferred"]) form.querySelector(`[data-pairs="${mode}"]`).innerHTML = p[mode].skills.map(comboRow).join("");
+    if (form.elements.element0 && raw.attributeForce === current.attributeForce) [0, 1].forEach((i) => { form.elements[`element${i}`].value = p.elementValues[i] ?? ""; });
+  }
+  // Duplicate reuses the add form so the copy's element can differ.
+  function openAddForm(source = null) {
+    const form = q("#pl-add-form");
+    form.elements.copyFrom.innerHTML = `<option value="">${html("None")}</option>${getTargets().map((v) => `<option value="${esc(v.id)}">${esc(nameOf(v))}</option>`).join("")}`;
+    form.elements.copyFrom.value = source?.id ?? "";
+    if (source) { form.elements.weaponType.value = source.weaponType; form.elements.attributeForce.value = source.attributeForce; }
+    form.elements.label.value = "";
+    form.hidden = false;
+    (source ? form.elements.attributeForce : form.elements.label).focus();
+    form.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+  function uniqueLabel(baseName) {
+    let label = baseName; let count = 1;
+    while (getTargets().some((v) => nameOf(v) === label)) label = `${baseName} ${++count}`;
+    return label;
   }
   function submitGoals(event) {
     event.preventDefault();
@@ -313,11 +343,14 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const button = event.target.closest("[data-pl-action]");
     const action = button?.dataset.plAction;
     if (action === "state") openState();
-    else if (action === "add") { q("#pl-add-form").hidden = false; q('#pl-add-form input').focus(); }
+    else if (action === "add") openAddForm();
     else if (action === "cancel-add") q("#pl-add-form").hidden = true;
     else if (action === "edit") renderEditor(button.dataset.id);
     else if (action === "cancel-edit") { editing = null; q("#pl-editor").replaceChildren(); }
-    else if (action === "remove") {
+    else if (action === "duplicate") {
+      const source = getTargets().find((target) => target.id === button.dataset.id);
+      if (source) openAddForm(source);
+    } else if (action === "remove") {
       const id = button.dataset.id; cache.selected = cache.selected.filter((v) => v !== id);
       setTargets(getTargets().filter((target) => target.id !== id));
       if (editing === id) { editing = null; q("#pl-editor").replaceChildren(); }
@@ -343,7 +376,8 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       if (input.checked && cache.selected.length >= 8) { input.checked = false; setError(pl("Select between 1 and 8 weapons.")); return; }
       cache.selected = input.checked ? [...cache.selected, input.dataset.plSelect] : cache.selected.filter((id) => id !== input.dataset.plSelect);
       invalidate(); renderWeapons();
-    } else if (input.matches("[data-pl-done]")) markDone();
+    } else if (input.matches("[data-copy-goals]")) { copyGoals(input.value); input.value = ""; }
+    else if (input.matches("[data-pl-done]")) markDone();
     else if (input.id === "pl-side") { cache.side = input.value; persist(); renderResults(); }
     else if (input.closest("#pl-limits")) { cache.limits[input.name] = Number(input.value); invalidate(); }
   });
@@ -352,12 +386,9 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const form = event.currentTarget;
     const weaponType = Number(form.elements.weaponType.value); const attributeForce = Number(form.elements.attributeForce.value);
     const target = { id: crypto.randomUUID(), label: form.elements.label.value.trim(), weaponType, attributeForce, skillCombinations: defaultSkills(weaponType), keepCategories: [null, null, null, null, null], keepSource: null };
-    if (!target.label) {
-      const baseName = nameOf(target); let label = baseName; let count = 1;
-      while (getTargets().some((v) => nameOf(v) === label)) label = `${baseName} ${++count}`;
-      target.label = label;
-    }
-    target.planner = normalizedPlanner(target);
+    if (!target.label) target.label = uniqueLabel(nameOf(target));
+    const source = getTargets().find((v) => v.id === form.elements.copyFrom.value);
+    target.planner = source ? copiedPlanner(source, target) : normalizedPlanner(target);
     if (cache.selected.length < 8) cache.selected.push(target.id);
     setTargets([...getTargets(), target]); invalidate(); renderWeapons();
     q("#pl-add-form").hidden = true; form.elements.label.value = "";
