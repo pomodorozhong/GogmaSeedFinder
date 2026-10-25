@@ -1,0 +1,416 @@
+{
+  "source": "Weapon planner goals and saved position reported in a live session on 2026-10-26",
+  "issue": "Fastest acceptable stopped Ice Hunting Horn at an acceptable Reset (G26) although Keeping through G27-35 to a top-desired result cost no extra rolls, because Thunder Hunting Horn needs G46 anyway.",
+  "request": {
+    "origin": {
+      "baseSeed": 67723575,
+      "bonusCounter": 87,
+      "skillCounter": 77
+    },
+    "limits": {
+      "bonus": 1000,
+      "skill": 1000
+    },
+    "targets": [
+      {
+        "id": "fsa",
+        "label": "火屬性斬擊斧",
+        "weaponType": 8,
+        "attributeForce": 1,
+        "keepCategories": [
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "planner": {
+          "bonusEnabled": true,
+          "optional": false,
+          "skillEnabled": true,
+          "acceptable": {
+            "stats": {
+              "attack": 30,
+              "sharpness": 50
+            },
+            "maxStats": {
+              "sharpness": 100
+            },
+            "skills": [
+              {
+                "seriesIndex": 11,
+                "groupIndex": 13
+              }
+            ]
+          },
+          "preferred": {
+            "stats": {
+              "attack": 33,
+              "sharpness": 80
+            },
+            "maxStats": {
+              "attack": 42
+            },
+            "skills": [
+              {
+                "seriesIndex": 11,
+                "groupIndex": 13
+              }
+            ]
+          },
+          "currentBonuses": null,
+          "currentSkill": null,
+          "elementValues": [
+            null,
+            null
+          ]
+        }
+      },
+      {
+        "id": "dsa",
+        "label": "龍屬性斬擊斧",
+        "weaponType": 8,
+        "attributeForce": 5,
+        "keepCategories": [
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "planner": {
+          "bonusEnabled": true,
+          "optional": true,
+          "skillEnabled": true,
+          "acceptable": {
+            "stats": {
+              "attack": 30,
+              "sharpness": 50
+            },
+            "maxStats": {
+              "sharpness": 100
+            },
+            "skills": [
+              {
+                "seriesIndex": 11,
+                "groupIndex": null
+              }
+            ]
+          },
+          "preferred": {
+            "stats": {
+              "attack": 33,
+              "sharpness": 80
+            },
+            "maxStats": {
+              "attack": 42
+            },
+            "skills": [
+              {
+                "seriesIndex": 11,
+                "groupIndex": 13
+              }
+            ]
+          },
+          "currentBonuses": null,
+          "currentSkill": null,
+          "elementValues": [
+            null,
+            null
+          ]
+        }
+      },
+      {
+        "id": "dhh",
+        "label": "龍屬性狩獵笛",
+        "weaponType": 5,
+        "attributeForce": 5,
+        "keepCategories": [
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "planner": {
+          "bonusEnabled": true,
+          "optional": false,
+          "skillEnabled": true,
+          "acceptable": {
+            "stats": {
+              "attack": 36
+            },
+            "maxStats": {
+              "affinity": 0
+            },
+            "skills": [
+              {
+                "seriesIndex": 5,
+                "groupIndex": 13
+              },
+              {
+                "seriesIndex": 18,
+                "groupIndex": 13
+              }
+            ]
+          },
+          "preferred": {
+            "stats": {
+              "attack": 42
+            },
+            "maxStats": {
+              "affinity": 0
+            },
+            "skills": [
+              {
+                "seriesIndex": 5,
+                "groupIndex": 13
+              }
+            ]
+          },
+          "currentBonuses": null,
+          "currentSkill": null,
+          "elementValues": [
+            null,
+            null
+          ]
+        }
+      },
+      {
+        "id": "fhh",
+        "label": "火屬性狩獵笛",
+        "weaponType": 5,
+        "attributeForce": 1,
+        "keepCategories": [
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "planner": {
+          "bonusEnabled": true,
+          "optional": false,
+          "skillEnabled": true,
+          "acceptable": {
+            "stats": {
+              "attack": 36
+            },
+            "maxStats": {
+              "affinity": 0
+            },
+            "skills": []
+          },
+          "preferred": {
+            "stats": {
+              "attack": 42
+            },
+            "maxStats": {
+              "affinity": 0
+            },
+            "skills": [
+              {
+                "seriesIndex": 5,
+                "groupIndex": 13
+              }
+            ]
+          },
+          "currentBonuses": null,
+          "currentSkill": null,
+          "elementValues": [
+            null,
+            null
+          ]
+        }
+      },
+      {
+        "id": "whh",
+        "label": "水屬性狩獵笛",
+        "weaponType": 5,
+        "attributeForce": 2,
+        "keepCategories": [
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "planner": {
+          "bonusEnabled": true,
+          "optional": false,
+          "skillEnabled": true,
+          "acceptable": {
+            "stats": {
+              "attack": 36
+            },
+            "maxStats": {
+              "affinity": 0
+            },
+            "skills": [
+              {
+                "seriesIndex": 18,
+                "groupIndex": 13
+              }
+            ]
+          },
+          "preferred": {
+            "stats": {
+              "attack": 42
+            },
+            "maxStats": {
+              "affinity": 0
+            },
+            "skills": [
+              {
+                "seriesIndex": 5,
+                "groupIndex": 13
+              }
+            ]
+          },
+          "currentBonuses": null,
+          "currentSkill": null,
+          "elementValues": [
+            null,
+            null
+          ]
+        }
+      },
+      {
+        "id": "thh",
+        "label": "雷屬性狩獵笛",
+        "weaponType": 5,
+        "attributeForce": 4,
+        "keepCategories": [
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "planner": {
+          "bonusEnabled": true,
+          "optional": false,
+          "skillEnabled": true,
+          "acceptable": {
+            "stats": {
+              "attack": 36
+            },
+            "maxStats": {
+              "affinity": 0
+            },
+            "skills": [
+              {
+                "seriesIndex": 18,
+                "groupIndex": 13
+              }
+            ]
+          },
+          "preferred": {
+            "stats": {
+              "attack": 42
+            },
+            "maxStats": {
+              "affinity": 0
+            },
+            "skills": [
+              {
+                "seriesIndex": 5,
+                "groupIndex": 13
+              }
+            ]
+          },
+          "currentBonuses": null,
+          "currentSkill": null,
+          "elementValues": [
+            null,
+            null
+          ]
+        }
+      },
+      {
+        "id": "ihh",
+        "label": "冰屬性狩獵笛",
+        "weaponType": 5,
+        "attributeForce": 3,
+        "keepCategories": [
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "planner": {
+          "bonusEnabled": true,
+          "optional": false,
+          "skillEnabled": true,
+          "acceptable": {
+            "stats": {
+              "attack": 36
+            },
+            "maxStats": {
+              "affinity": 0
+            },
+            "skills": [
+              {
+                "seriesIndex": 18,
+                "groupIndex": 13
+              }
+            ]
+          },
+          "preferred": {
+            "stats": {
+              "attack": 42
+            },
+            "maxStats": {
+              "affinity": 0
+            },
+            "skills": [
+              {
+                "seriesIndex": 5,
+                "groupIndex": 13
+              }
+            ]
+          },
+          "currentBonuses": null,
+          "currentSkill": null,
+          "elementValues": [
+            null,
+            null
+          ]
+        }
+      }
+    ]
+  },
+  "expected": {
+    "acceptable": {
+      "total": 404,
+      "bonusHorizon": 241,
+      "skillHorizon": 163,
+      "proven": true,
+      "topDesiredFinishes": 11,
+      "finishes": 14
+    },
+    "preferred": {
+      "total": 1422,
+      "bonusHorizon": 798,
+      "skillHorizon": 624,
+      "proven": true
+    },
+    "freeUpgrade": [
+      {
+        "target": "ihh",
+        "action": "keep",
+        "start": 27,
+        "end": 35,
+        "quality": "preferred"
+      },
+      {
+        "target": "thh",
+        "action": "reset",
+        "start": 36,
+        "end": 46,
+        "quality": "preferred"
+      }
+    ]
+  }
+}

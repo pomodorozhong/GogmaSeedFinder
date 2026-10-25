@@ -37,3 +37,10 @@ Light Bowgun and includes elemental/status melee, raw melee, elemental Bow, raw
 Bow, and Bowgun candidate profiles. The probe displayed Bow and Light Bowgun
 names in reverse; the fixture uses the weapon data's corrected type mapping.
 The source session SHA-256 is retained.
+
+`planner_free_upgrade_2026-10-26.json` is a weapon planner regression case: the
+goals of seven weapons (two Switch Axes and five Hunting Horns) at the saved
+position `baseSeed=67723575`, G87, S77, with 1,000-roll limits. Weapon IDs are
+replaced with short names. The acceptable route must stay 404 rolls while Ice
+Hunting Horn Keeps through G27-35 to a top-desired result instead of stopping at
+an acceptable G26 Reset, since Thunder Hunting Horn needs G46 regardless.

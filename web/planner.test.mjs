@@ -384,6 +384,22 @@ test("bonus and skill progress are independent, so skill steps can be saved firs
   assert.deepEqual(normalizedProgress(route, { bonus: 99, skill: -1 }), { bonus: bonus.length, skill: 0 });
 });
 
+test("regression fixture: a reported seven-weapon session keeps its free top-desired upgrade", async () => {
+  const { request: req, expected } = JSON.parse(await readFile(new URL("../tests/fixtures/planner_free_upgrade_2026-10-26.json", import.meta.url), "utf8"));
+  const routes = await planWeapons(req, provider(req));
+  for (const mode of ["acceptable", "preferred"]) {
+    const route = routes[mode];
+    assert.deepEqual([route.total, route.bonus.horizon, route.skill.horizon, route.proven], [expected[mode].total, expected[mode].bonusHorizon, expected[mode].skillHorizon, expected[mode].proven], mode);
+  }
+  const finishes = routes.acceptable.steps.filter((s) => s.intent === "finish");
+  assert.equal(finishes.length, expected.acceptable.finishes);
+  assert.equal(finishes.filter((s) => s.rolls.at(-1).quality === "preferred").length, expected.acceptable.topDesiredFinishes);
+  for (const step of expected.freeUpgrade) {
+    const actual = finishes.find((s) => s.targetId === step.target && s.stream === "bonus");
+    assert.deepEqual({ target: actual.targetId, action: actual.action, start: actual.start, end: actual.end, quality: actual.rolls.at(-1).quality }, step);
+  }
+});
+
 test("all planner copy has Japanese and Traditional Chinese translations", async () => {
   const source = await readFile(new URL("./planner-text.js", import.meta.url), "utf8");
   const dictionary = vm.runInNewContext(source.slice(source.indexOf("export const PLANNER_TEXT =") + 7, source.indexOf("export function pl(")) + "\nPLANNER_TEXT;");
