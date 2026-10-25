@@ -20,6 +20,8 @@ Gogma counter remains internal search metadata. Every predicted row exposes a
 versioned save-state code, so a save made after that row can be reopened as a
 new relative origin and recalculated for a different weapon or attribute.
 
+The new [multi-weapon planner](weapon-planner.md) builds real bonus and skill routes from per-stat min/max ranges and skill pairs, with separate roll limits, optional weapons, and an intermediate-result guide.
+
 The page has eight task tabs and a persistent panel for the base seed, bonus
 counter, and skill counter. All three values can be entered manually; an
 unknown counter may remain blank. The guide uses real bonus and skill names to
