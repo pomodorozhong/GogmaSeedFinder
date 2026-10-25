@@ -118,6 +118,12 @@ step or change saved counters. Future previews have a **Back to current step**
 control; only each table's current row has a checkbox. Saved rows have a
 checkmark.
 
+Upgrading a weapon to Gogma uses exactly one roll of the shared skill counter.
+If every weapon in the route is upgraded during the session, the upgrades take
+S1 through S<N>, where N is the number of weapons the route finishes. When a
+skill target falls in that range, the skill table and guide warn to do it
+before upgrading.
+
 Use the specified weapon and menu action, accept each result, and save in game
 after the block. **Done & saved** explicitly confirms that work and applies the
 predicted G/S snapshot to the shared app state. The saved weapon's known result
