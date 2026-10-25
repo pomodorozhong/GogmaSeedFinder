@@ -1,4 +1,4 @@
-import { bonusTotals, hasGoal, layoutOf, matchesTier, resultQuality, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { bonusTotals, hasGoal, layoutOf, matchesTier, rangeCanMatch, resultQuality, validLayout, validatePlannerRequest } from "./planner-model.js";
 
 const MODES = ["acceptable", "preferred"];
 const pause = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -34,7 +34,11 @@ export async function buildCandidatePools(request, provider, report = () => {}, 
         : target.planner.currentSkill;
       for (const mode of MODES) {
         const lowerBound = stream === "bonus" ? { attack: 0, affinity: 0, element: 0, sharpness: 0, ammo: 0 } : null;
-        if (!hasGoal(target, stream) || ((current ?? lowerBound) !== null && matchesTier(current ?? lowerBound, target, stream, mode))) sets[mode].push({ finish: 0, action: "already" });
+        // The all-zero lower bound proves minimums only; an unknown weapon may
+        // already exceed a maximum.
+        const hasMaximum = [target.planner.acceptable, target.planner.preferred].some((tier) => Object.keys(tier.maxStats).length > 0);
+        const bound = stream === "bonus" && hasMaximum ? null : lowerBound;
+        if (!hasGoal(target, stream) || ((current ?? bound) !== null && matchesTier(current ?? bound, target, stream, mode))) sets[mode].push({ finish: 0, action: "already" });
       }
       const needed = MODES.filter((mode) => sets[mode].length === 0);
       const count = request.limits[stream];
@@ -62,11 +66,12 @@ export async function buildCandidatePools(request, provider, report = () => {}, 
           }
           let li = 0;
           for (const { layout, positions, initial: known } of layouts.values()) {
-            // A loose upper bound is safe for pruning; the real engine still
-            // enforces all tier and category caps for every candidate.
-            const maximumIds = layout.map((category) => [15, 16, 14, 10][category]);
-            const maximum = bonusTotals(maximumIds, target);
-            if (!needed.some((mode) => matchesTier(maximum, target, stream, mode))) continue;
+            // Loose bounds (top and bottom tier in every slot) are safe for
+            // pruning; the real engine still enforces all tier and category
+            // caps for every candidate.
+            const maximum = bonusTotals(layout.map((category) => [15, 16, 14, 10][category]), target);
+            const minimum = bonusTotals(layout.map((category) => [8, 9, 11, 6][category]), target);
+            if (!needed.some((mode) => rangeCanMatch(minimum, maximum, target, mode))) continue;
             const kept = provider.keep(target, 0, count, layout);
             for (let index = known ? 0 : positions[0]; index < count; index += 1) {
               const totals = bonusTotals(kept.subarray(index * 5, index * 5 + 5), target);

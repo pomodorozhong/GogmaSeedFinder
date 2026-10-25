@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import { initSync, predict_gogma_rolls, predict_gogma_keep_rolls, predict_skill_rolls } from "./pkg/gogma_wasm_search.js";
-import { bonusTotals, copiedPlanner, layoutOf, MAX_SELECTED, matchesTier, normalizedPlanner, resultQuality, routeWeaponsMatch, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { bonusTotals, canFillSlots, copiedPlanner, layoutOf, MAX_SELECTED, rangeCanMatch, matchesTier, normalizedPlanner, resultQuality, routeWeaponsMatch, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
 import { optimizeStream, planWeapons, selectTargets } from "./planner-engine.js";
 
 initSync({ module: await readFile(new URL("./pkg/gogma_wasm_search_bg.wasm", import.meta.url)) });
@@ -163,7 +163,7 @@ test("copied goals keep the new weapon's own rolls and drop element goals whose 
   const source = target("source", 3, 1);
   source.planner = { ...source.planner, acceptable: { stats: { attack: 30, element: 150 }, skills: [{ seriesIndex: 2, groupIndex: 4 }] }, currentBonuses: [15, 15, 12, 12, 8], currentSkill: 17 };
   const water = copiedPlanner(source, target("water", 3, 2));
-  assert.deepEqual(water.acceptable, source.planner.acceptable);
+  assert.deepEqual(water.acceptable, { ...source.planner.acceptable, maxStats: {} });
   assert.equal(water.currentBonuses, null); assert.equal(water.currentSkill, null);
   water.acceptable.stats.attack = 42;
   assert.equal(source.planner.acceptable.stats.attack, 30);
@@ -228,6 +228,74 @@ test("competing weapons produce a route for each choice of which one to finish",
   assert.equal(route.alternatives.length, 1);
   assert.deepEqual(route.alternatives[0].dropped.map((v) => v.id), ["first"]);
   assert.ok(route.alternatives[0].steps.every((step) => step.targetId === "second"));
+});
+
+test("stat goals are min/max ranges; blank sides are unbounded and max 0 excludes a stat", () => {
+  const t = target("range");
+  t.planner = normalizedPlanner({ ...t, planner: { acceptable: { stats: { attack: 30 }, maxStats: { sharpness: 30 } }, preferred: { stats: { attack: 36 }, maxStats: { sharpness: 0, ammo: 0 } } } });
+  assert.deepEqual(t.planner.preferred.maxStats, { sharpness: 0 });
+  const oneSharpI = bonusTotals([15, 15, 12, 12, 6], t);
+  const oneSharpEx = bonusTotals([15, 15, 12, 12, 10], t);
+  const noSharp = bonusTotals([15, 15, 12, 12, 9], t);
+  assert.equal(resultQuality(noSharp, t, "bonus"), "preferred");
+  assert.equal(resultQuality(oneSharpI, t, "bonus"), "acceptable");
+  assert.equal(resultQuality(oneSharpEx, t, "bonus"), "none");
+  // A max alone is a goal; an unknown status value proves neither bound.
+  const status = target("status", 3, 6);
+  status.planner = normalizedPlanner({ ...status, planner: { acceptable: { stats: {}, maxStats: { element: 0 } }, preferred: { stats: {} } } });
+  assert.doesNotThrow(() => validatePlannerRequest(request([status])));
+  assert.equal(resultQuality(bonusTotals([15, 15, 12, 12, 11], status), status, "bonus"), "none");
+  assert.equal(resultQuality(bonusTotals([15, 15, 12, 12, 8], status), status, "bonus"), "preferred");
+  status.planner.acceptable.maxStats = { element: 40 };
+  assert.throws(() => validatePlannerRequest(request([status])), /statusValues/);
+});
+
+test("older saves with excluded stats load as max 0 in both tiers", () => {
+  const t = target("legacy");
+  const p = normalizedPlanner({ ...t, planner: { acceptable: { stats: { attack: 30, sharpness: 50 } }, preferred: { stats: { attack: 36 } }, excluded: ["sharpness", "ammo"] } });
+  assert.deepEqual(p.acceptable, { stats: { attack: 30 }, maxStats: { sharpness: 0 }, skills: t.planner.acceptable.skills });
+  assert.deepEqual(p.preferred.maxStats, { sharpness: 0 });
+});
+
+test("range goals are validated: min not above max, and max-0 stats leave slots to fill", () => {
+  const t = target("bad");
+  t.planner.acceptable.stats = { attack: 30 };
+  t.planner.acceptable.maxStats = { attack: 20 };
+  assert.throws(() => validatePlannerRequest(request([t])), /minAboveMax/);
+  const gun = target("gun", 12, 0);
+  assert.ok(canFillSlots(gun, ["affinity"]));
+  assert.ok(!canFillSlots(gun, ["attack", "affinity"]));
+  gun.planner.acceptable.stats = {};
+  gun.planner.acceptable.maxStats = { attack: 0, affinity: 0 };
+  assert.throws(() => validatePlannerRequest(request([gun])), /excluded/);
+});
+
+test("Keep layouts are pruned only when no tier choice could fit the range", () => {
+  const t = target("prune");
+  t.planner.acceptable = { stats: { attack: 24 }, maxStats: { sharpness: 30 }, skills: [] };
+  t.planner.preferred = { stats: {}, maxStats: {}, skills: [] };
+  // One sharpness slot ranges 30–50, so Sharpness I can still meet max 30.
+  const layout = [0, 0, 0, 1, 3];
+  const low = bonusTotals(layout.map((c) => [8, 9, 11, 6][c]), t);
+  const high = bonusTotals(layout.map((c) => [15, 16, 14, 10][c]), t);
+  assert.ok(rangeCanMatch(low, high, t, "acceptable"));
+  const twoSharp = [0, 0, 0, 3, 3];
+  assert.ok(!rangeCanMatch(bonusTotals(twoSharp.map((c) => [8, 9, 11, 6][c]), t), bonusTotals(twoSharp.map((c) => [15, 16, 14, 10][c]), t), t, "acceptable"));
+});
+
+test("routes respect maximums, and an unknown weapon is not assumed to be under one", async () => {
+  const t = target("capped");
+  t.planner.skillEnabled = false;
+  t.planner.acceptable.stats = { attack: 24 };
+  t.planner.acceptable.maxStats = { sharpness: 30 };
+  t.planner.preferred = { stats: {}, maxStats: {}, skills: [] };
+  const req = request([t], 300, 0);
+  const route = (await planWeapons(req, provider(req))).acceptable;
+  assert.ok(route.complete);
+  assert.ok(route.steps.length > 0);
+  const finish = route.steps.at(-1).rolls.at(-1);
+  assert.ok(finish.totals.sharpness <= 30);
+  assert.ok(finish.totals.attack >= 24);
 });
 
 test("all planner copy has Japanese and Traditional Chinese translations", async () => {

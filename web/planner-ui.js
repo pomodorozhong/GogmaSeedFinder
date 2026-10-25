@@ -1,6 +1,6 @@
 import { t, localizedTargetName } from "./i18n.js";
 import { pl } from "./planner-text.js";
-import { availableStats, BONUS_CATEGORY, copiedPlanner, layoutOf, MAX_SELECTED, normalizedPlanner, routePosition, routeWeaponsMatch, samePosition, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { availableStats, BONUS_CATEGORY, copiedPlanner, hasBonusGoal, layoutOf, MAX_SELECTED, normalizedPlanner, routePosition, routeWeaponsMatch, samePosition, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
 
 const STORAGE_KEY = "gogma-weapon-planner-v1";
 const esc = (text) => String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -9,7 +9,7 @@ const actionName = (action) => pl(({ reset: "Reset Bonuses", keep: "Keep Bonuses
 const tierName = (tier) => pl(tier === "preferred" ? "Top desired" : "Acceptable");
 const number = (value) => value === null || value === undefined ? pl("Unknown") : value.toLocaleString();
 const stateCode = (state) => state.baseSeed === null ? pl("Unknown") : `GSF2-B${state.baseSeed}-G${state.bonusCounter ?? "?"}-S${state.skillCounter ?? "?"}`;
-const errorText = (key) => pl(({ targets: "Select between 1 and {max} weapons.", state: "Enter a known base seed and the counters for the streams you want to plan.", limits: "Enter whole-number roll limits from 0 to 10,000.", goals: "Enable at least one goal per weapon and enter a stat minimum or skill pair.", statusValues: "Enter both status boost values before using a status minimum." })[key] ?? "Unable to calculate the guide. {detail}", { detail: key, max: MAX_SELECTED });
+const errorText = (key) => pl(({ targets: "Select between 1 and {max} weapons.", state: "Enter a known base seed and the counters for the streams you want to plan.", limits: "Enter whole-number roll limits from 0 to 10,000.", goals: "Enable at least one goal per weapon and enter a stat minimum or skill pair.", statusValues: "Enter both status boost values before using a status minimum.", excluded: "Excluding these stats leaves too few bonuses to fill five slots.", minAboveMax: "A minimum is higher than its maximum." })[key] ?? "Unable to calculate the guide. {detail}", { detail: key, max: MAX_SELECTED });
 
 export function initPlanner({ root, getState, getTargets, setTargets, saveStep, openState, metadata }) {
   const { weapons, attributes, bonuses, bonusName, series, groups, defaultSkills } = metadata;
@@ -52,13 +52,25 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   const pairText = (pairs) => pairs.map((p) => skillText(p.seriesIndex * 14 + p.groupIndex)).join(" · ");
   const goalFor = (target, mode, stream) => {
     const p = target.planner;
-    const field = stream === "bonus" ? "stats" : "skills";
-    const value = p[mode][field];
-    return (Array.isArray(value) ? value.length : Object.keys(value).length) ? value : p[mode === "preferred" ? "acceptable" : "preferred"][field];
+    const other = p[mode === "preferred" ? "acceptable" : "preferred"];
+    if (stream === "bonus") return hasBonusGoal(p[mode]) ? p[mode] : other;
+    return p[mode].skills.length ? p[mode].skills : other.skills;
   };
+  // "Attack +30", "Attack ≤ +40", "Attack +30–40", or "No Attack" for max 0.
+  // A minimum of 0 is always met, so it reads like no bound.
+  const rangeText = (tier, target) => availableStats(target).map((key) => {
+    const unit = key === "affinity" ? "%" : "";
+    const name = statName(key, target);
+    const min = tier.stats[key] || null;
+    const max = tier.maxStats[key];
+    if (max === 0) return pl("No {stat}", { stat: name });
+    if (max === undefined) return min === null ? "" : `${name} +${min}${unit}`;
+    return min === null ? `${name} ≤ +${max}${unit}` : `${name} +${min}–${max}${unit}`;
+  }).filter(Boolean).join(" · ");
+  const bonusGoalText = (target, mode) => rangeText(goalFor(target, mode, "bonus"), target);
   const goalSummary = (target, mode) => {
     const p = target.planner;
-    return [p.bonusEnabled ? statsText(goalFor(target, mode, "bonus"), target) || pl("Any stats") : pl("Bonus goals off"), p.skillEnabled ? pairText(goalFor(target, mode, "skill")) || pl("Any skills") : pl("Skill goals off")].join(" / ");
+    return [p.bonusEnabled ? bonusGoalText(target, mode) || pl("Any stats") : pl("Bonus goals off"), p.skillEnabled ? pairText(goalFor(target, mode, "skill")) || pl("Any skills") : pl("Skill goals off")].join(" / ");
   };
   const options = (items, selected, unknown = false) => `${unknown ? `<option value="">${html("Unknown")}</option>` : ""}${items.map(([value, label]) => `<option value="${value}"${value === selected ? " selected" : ""}>${esc(t(label))}</option>`).join("")}`;
   const comboOptions = (labels, selected, unknown = false) => options(labels.map((label, index) => [index, label]), selected, unknown);
@@ -120,7 +132,11 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const sources = getTargets().filter((v) => v.id !== id);
     const categories = [...new Set(bonusOptions.map(([id]) => BONUS_CATEGORY[id]))].map((category) => [category, statName(({ 0: "attack", 1: "affinity", 2: "element", 3: target.weaponType >= 12 ? "ammo" : "sharpness" })[category], target)]);
     q("#pl-editor").innerHTML = `<form id="pl-goal-form" class="pl-editor"><div class="pl-section-heading"><h3>${html("Edit weapon goals")} · ${esc(nameOf(target))}</h3><button class="text-button" type="button" data-pl-action="cancel-edit">${html("Cancel")}</button></div><label class="pl-name-field">${html("Weapon name")}<input name="label" value="${esc(target.label)}" maxlength="24" placeholder="${html("Optional name")}"></label>${sources.length ? `<label class="pl-name-field">${html("Copy goals from")}<select data-copy-goals><option value="">${html("Choose a weapon")}</option>${sources.map((v) => `<option value="${esc(v.id)}">${esc(nameOf(v))}</option>`).join("")}</select></label>` : ""}
-      <div class="pl-editor-section"><label class="pl-toggle"><input name="bonusEnabled" type="checkbox"${p.bonusEnabled ? " checked" : ""}>${html("Use bonus goals")}</label><p class="pl-fine">${html("Blank stats are ignored. Attack uses unbloated raw; affinity uses percentage points. These are gains from the five slots, not final weapon stats.")}</p><div class="pl-goal-table-wrap"><table class="pl-goal-table"><thead><tr><th>${html("Stat")}</th><th class="pl-teal">✓ ${html("Acceptable")}</th><th class="pl-gold">★ ${html("Top desired")}</th></tr></thead><tbody>${availableStats(target).map((key) => `<tr><th>${esc(statName(key, target))}${key === "affinity" ? " (%)" : ""}${rollHint(key, target)}</th>${["acceptable", "preferred"].map((mode) => `<td><input type="number" min="0" max="${statusStat(key, target) ? 9999 : statMaximum(key, target)}" step="1" data-stat="${key}" data-tier="${mode}" value="${p[mode].stats[key] ?? ""}" aria-label="${esc(`${tierName(mode)} · ${statName(key, target)}`)}"></td>`).join("")}</tr>`).join("")}</tbody></table></div></div>
+      <div class="pl-editor-section"><label class="pl-toggle"><input name="bonusEnabled" type="checkbox"${p.bonusEnabled ? " checked" : ""}>${html("Use bonus goals")}</label><p class="pl-fine">${html("Blank stats are ignored. Attack uses unbloated raw; affinity uses percentage points. These are gains from the five slots, not final weapon stats.")} ${html("Leave min or max blank for no bound on that side. Max 0 means no slot of that stat.")}</p><div class="pl-goal-table-wrap"><table class="pl-goal-table"><thead><tr><th>${html("Stat")}</th><th class="pl-teal">✓ ${html("Acceptable")} <small>${html("min – max")}</small></th><th class="pl-gold">★ ${html("Top desired")} <small>${html("min – max")}</small></th></tr></thead><tbody>${availableStats(target).map((key) => {
+        const limit = statusStat(key, target) ? 9999 : statMaximum(key, target);
+        const box = (tier, bound) => `<input type="number" min="0" max="${limit}" step="1" data-stat="${key}" data-tier="${tier}" data-bound="${bound}" value="${p[tier][bound === "min" ? "stats" : "maxStats"][key] ?? ""}" placeholder="${html(bound === "min" ? "Min" : "Max")}" aria-label="${esc(`${tierName(tier)} · ${statName(key, target)} · ${pl(bound === "min" ? "Min" : "Max")}`)}">`;
+        return `<tr><th>${esc(statName(key, target))}${key === "affinity" ? " (%)" : ""}${rollHint(key, target)}</th>${["acceptable", "preferred"].map((tier) => `<td><div class="pl-range">${box(tier, "min")}<span aria-hidden="true">–</span>${box(tier, "max")}</div></td>`).join("")}</tr>`;
+      }).join("")}</tbody></table></div></div>
       <div class="pl-editor-section"><label class="pl-toggle"><input name="skillEnabled" type="checkbox"${p.skillEnabled ? " checked" : ""}>${html("Use skill goals")}</label><p class="pl-fine">${html("A match for any pair in a column meets that goal. Top desired results also count as acceptable.")}</p><div class="pl-skill-goals">${["acceptable", "preferred"].map((mode) => `<section><h4 class="${mode === "preferred" ? "pl-gold" : "pl-teal"}">${mode === "preferred" ? "★" : "✓"} ${esc(tierName(mode))}</h4><div data-pairs="${mode}">${p[mode].skills.map(comboRow).join("")}</div><button type="button" class="text-button" data-pl-action="add-pair" data-tier="${mode}">＋ ${html("Add combination")}</button></section>`).join("")}</div></div>
       <details class="pl-current-details"><summary>${html("Current weapon (optional)")}</summary><p class="pl-fine">${html("Enter all five current bonuses to skip goals already met. An ordered category layout alone allows Keep Bonuses, but cannot prove a goal is already met.")}</p><h4>${html("Current bonuses in game order")}</h4><div class="pl-five-slots">${Array.from({ length: 5 }, (_, index) => `<label>${html("Slot {n}", { n: index + 1 })}<select data-current-bonus="${index}">${options(bonusOptions, p.currentBonuses?.[index], true)}</select></label>`).join("")}</div><h4>${html("Or known categories in game order")}</h4><div class="pl-five-slots">${Array.from({ length: 5 }, (_, index) => `<label>${html("Slot {n}", { n: index + 1 })}<select data-current-category="${index}">${options(categories, target.keepCategories?.[index], true)}</select></label>`).join("")}</div><h4>${html("Current skills")}</h4><div class="pl-current-pair"><select name="currentSeries" aria-label="${html("Series skill")}">${comboOptions(series, p.currentSkill === null ? null : Math.floor(p.currentSkill / 14), true)}</select><span>＋</span><select name="currentGroup" aria-label="${html("Group skill")}">${comboOptions(groups, p.currentSkill === null ? null : p.currentSkill % 14, true)}</select></div></details>
       ${target.attributeForce >= 6 && target.weaponType < 12 ? `<div class="pl-status-values"><h4>${html("Status boost values")}</h4><p class="pl-fine">${html("Enter the II and EX gains shown on this weapon to use a status minimum.")}</p>${[0, 1].map((index) => `<label>${index === 0 ? "II" : "EX"}<input name="element${index}" type="number" min="0" max="9999" step="1" value="${p.elementValues[index] ?? ""}"></label>`).join("")}</div>` : ""}<p id="pl-editor-error" class="error" role="alert" hidden></p><div class="pl-editor-footer"><button class="secondary" type="submit">${html("Save goals")}</button><button class="text-button" type="button" data-pl-action="cancel-edit">${html("Cancel")}</button></div></form>`;
@@ -137,7 +153,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const p = copiedPlanner(raw, current);
     form.elements.bonusEnabled.checked = p.bonusEnabled;
     form.elements.skillEnabled.checked = p.skillEnabled;
-    for (const input of form.querySelectorAll("[data-stat]")) input.value = p[input.dataset.tier].stats[input.dataset.stat] ?? "";
+    for (const input of form.querySelectorAll("[data-stat]")) input.value = p[input.dataset.tier][input.dataset.bound === "min" ? "stats" : "maxStats"][input.dataset.stat] ?? "";
     for (const mode of ["acceptable", "preferred"]) form.querySelector(`[data-pairs="${mode}"]`).innerHTML = p[mode].skills.map(comboRow).join("");
     if (form.elements.element0 && raw.attributeForce === current.attributeForce) [0, 1].forEach((i) => { form.elements[`element${i}`].value = p.elementValues[i] ?? ""; });
   }
@@ -169,7 +185,9 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       p.bonusEnabled = form.elements.bonusEnabled.checked;
       p.skillEnabled = form.elements.skillEnabled.checked;
       for (const mode of ["acceptable", "preferred"]) {
-        p[mode].stats = Object.fromEntries([...form.querySelectorAll(`[data-tier="${mode}"][data-stat]`)].filter((input) => input.value !== "").map((input) => [input.dataset.stat, Number(input.value)]));
+        const bound = (which) => Object.fromEntries([...form.querySelectorAll(`[data-tier="${mode}"][data-bound="${which}"]`)].filter((input) => input.value !== "").map((input) => [input.dataset.stat, Number(input.value)]));
+        p[mode].stats = bound("min");
+        p[mode].maxStats = bound("max");
         p[mode].skills = [...form.querySelectorAll(`[data-pairs="${mode}"] .pl-combo`)].map((row) => ({ seriesIndex: Number(row.querySelector('[data-pair="series"]').value), groupIndex: Number(row.querySelector('[data-pair="group"]').value) }));
       }
       const current = [...form.querySelectorAll("[data-current-bonus]")].map((input) => input.value === "" ? null : Number(input.value));
@@ -194,7 +212,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       editing = null; q("#pl-editor").replaceChildren();
       invalidate(); renderWeapons();
     } catch (error) {
-      const message = ["goals", "statusValues", "targets", "limits", "state"].includes(error.message) ? errorText(error.message) : error.message;
+      const message = ["goals", "statusValues", "excluded", "minAboveMax", "targets", "limits", "state"].includes(error.message) ? errorText(error.message) : error.message;
       q("#pl-editor-error").textContent = message; q("#pl-editor-error").hidden = false;
     }
   }
@@ -214,7 +232,8 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   }
   function resultMarkup(result, step, target) {
     if (step.stream === "skill") return `<div class="pl-skill-result"><span>${esc(t(series[Math.floor(result.raw / 14)]))}</span><span>${esc(t(groups[result.raw % 14]))}</span></div>`;
-    const zeroGoal = (key) => ["acceptable", "preferred"].some((mode) => target.planner[mode].stats[key] === 0) && !["acceptable", "preferred"].some((mode) => target.planner[mode].stats[key] > 0);
+    const tiers = [target.planner.acceptable, target.planner.preferred];
+    const zeroGoal = (key) => tiers.some((tier) => tier.stats[key] === 0) && !tiers.some((tier) => tier.stats[key] > 0 || key in tier.maxStats);
     const totals = Object.fromEntries(Object.entries(result.totals).filter(([key]) => !zeroGoal(key)));
     return `<strong class="pl-totals">${esc(statsText(totals, target))}</strong>${chips(result.raw, target)}`;
   }
@@ -296,7 +315,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const prefix = step.stream === "bonus" ? "G" : "S";
     const description = step.intent === "acquire" ? "Acquire this ordered layout for a later Keep Bonuses step." : step.intent === "finish" ? step.stream === "bonus" ? "Reach the stat minimums shown for this weapon." : "Reach one of this weapon’s chosen skill pairs." : "Advance the shared counter on this weapon to reach the next useful result.";
     const goalMode = step.intent === "finish" && step.rolls.at(-1).quality === "preferred" ? "preferred" : r.mode;
-    q("#pl-guide").innerHTML = `<span class="pl-guide-pointer" aria-hidden="true"></span><div class="pl-guide-content"><div class="pl-guide-kicker"><span>${html(saved ? "Saved" : current ? "Current step" : "Preview")}</span><span>${html("Step {n} of {total}", { n: inspected + 1, total: r.steps.length })}</span></div><div class="pl-guide-heading"><div><h3>${esc(nameOf(target))}</h3><p class="pl-menu-action">${esc(actionName(step.action))}</p></div><span class="pl-repeat">× <strong>${step.rolls.length}</strong></span></div><div class="pl-guide-meta"><span>${html("Repeat {n} times", { n: step.rolls.length })}</span><strong>${prefix}${step.start}${step.end === step.start ? "" : `–${step.end}`}</strong></div><p class="pl-guide-purpose">${html(description)}</p><p class="pl-guide-goal">${esc(step.intent === "acquire" ? step.rolls.at(-1).raw.map((id) => statName(({ 0: "attack", 1: "affinity", 2: "element", 3: target.weaponType >= 12 ? "ammo" : "sharpness" })[BONUS_CATEGORY[id]], target)).join(" → ") : step.stream === "bonus" ? statsText(goalFor(target, goalMode, "bonus"), target) : pairText(goalFor(target, goalMode, "skill")))}</p><p class="pl-fine pl-accept-note">${html("Accept each result in this block. Use the exact weapon and menu action shown.")}</p>
+    q("#pl-guide").innerHTML = `<span class="pl-guide-pointer" aria-hidden="true"></span><div class="pl-guide-content"><div class="pl-guide-kicker"><span>${html(saved ? "Saved" : current ? "Current step" : "Preview")}</span><span>${html("Step {n} of {total}", { n: inspected + 1, total: r.steps.length })}</span></div><div class="pl-guide-heading"><div><h3>${esc(nameOf(target))}</h3><p class="pl-menu-action">${esc(actionName(step.action))}</p></div><span class="pl-repeat">× <strong>${step.rolls.length}</strong></span></div><div class="pl-guide-meta"><span>${html("Repeat {n} times", { n: step.rolls.length })}</span><strong>${prefix}${step.start}${step.end === step.start ? "" : `–${step.end}`}</strong></div><p class="pl-guide-purpose">${html(description)}</p><p class="pl-guide-goal">${esc(step.intent === "acquire" ? step.rolls.at(-1).raw.map((id) => statName(({ 0: "attack", 1: "affinity", 2: "element", 3: target.weaponType >= 12 ? "ammo" : "sharpness" })[BONUS_CATEGORY[id]], target)).join(" → ") : step.stream === "bonus" ? bonusGoalText(target, goalMode) : pairText(goalFor(target, goalMode, "skill")))}</p><p class="pl-fine pl-accept-note">${html("Accept each result in this block. Use the exact weapon and menu action shown.")}</p>
       <div class="pl-reference-heading"><h4>${html("Expected rolls")}</h4><span>${prefix}${step.start}${step.start === step.end ? "" : `–${step.end}`}</span></div><p class="pl-fine pl-reference-note">${html("Match your in-game result to find your place. Every draw in this block is shown.")}</p><div class="pl-reference-labels"><span>${html("Draw")}</span><span>${html("Expected result")}</span></div><div class="pl-expected-list">${step.rolls.map((roll, index) => {
         const tag = current && compatible() ? "button" : "div";
         return `<${tag}${tag === "button" ? ` type="button" data-pl-match="${index + 1}" aria-label="${html("Match draw {n}", { n: index + 1 })}" aria-pressed="${matched === index + 1}"` : ""} class="pl-expected-roll${index < matched && current ? " is-passed" : ""}${index + 1 === matched && current ? " is-matched" : ""}"><span class="pl-draw-number"><strong>${index + 1}</strong><small>${prefix}${roll.offset}</small></span><span class="pl-draw-result">${resultMarkup(roll, step, target)}${step.intent !== "advance" && index === step.rolls.length - 1 ? badge(step) : ""}</span>${current && matched === index + 1 ? '<span class="pl-match-check">✓</span>' : ""}</${tag}>`;
