@@ -18,7 +18,6 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   const cache = {
     selected: Array.isArray(stored?.selected) ? stored.selected.filter((v) => typeof v === "string") : getTargets().slice(0, MAX_SELECTED).map((target) => target.id),
     limits: { bonus: stored?.limits?.bonus ?? 250, skill: stored?.limits?.skill ?? 1000 },
-    side: stored?.side === "right" ? "right" : "left",
     routes: stored?.routes && typeof stored.routes === "object" ? stored.routes : {},
     mode: stored?.mode === "preferred" ? "preferred" : "acceptable",
     completed: Number.isInteger(stored?.completed) && stored.completed >= 0 ? stored.completed : 0,
@@ -85,7 +84,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     <form id="pl-limits" class="pl-limits"><div class="pl-limit-copy"><h3><span class="pl-index">02</span> ${html("Search limits")}</h3><p class="pl-muted">${html("Two independent roll windows from your saved position.")}</p></div><label>${html("Bonus rolls")}<input name="bonus" type="number" min="0" max="10000" step="1" value="${esc(cache.limits.bonus)}" required></label><label>${html("Skill rolls")}<input name="skill" type="number" min="0" max="10000" step="1" value="${esc(cache.limits.skill)}" required></label><button id="pl-build" class="primary" type="submit">${html("Build guides")}</button><button id="pl-cancel" class="secondary" type="button" data-pl-action="cancel" hidden>${html("Cancel search")}</button></form>
     <div class="pl-feedback"><p id="pl-status" class="pl-muted" role="status">${html("Ready to plan.")}</p><p id="pl-error" class="error" role="alert" hidden></p><p class="pl-fine">${html("No roll data is changed until you confirm a step as done and saved in game.")}</p></div>
     <section id="pl-results" class="pl-section" hidden><div class="pl-section-heading"><h3><span class="pl-index">03</span> ${html("Choose your route")}</h3><div class="pl-legend"><span class="pl-gold">★ ${html("Top desired")}</span><span class="pl-teal">✓ ${html("Acceptable")}</span></div></div><div id="pl-routes" class="pl-routes"></div><div id="pl-route-note"></div><div id="pl-alternatives" class="pl-alternatives" hidden></div>
-      <div id="pl-detail-heading" class="pl-section-heading pl-detail-heading"><div><h3>${html("Detailed route")}</h3><p id="pl-saved-count" class="pl-muted"></p></div><label class="pl-side-label"><span class="sr-only">${html("Detailed route")}</span><select id="pl-side"><option value="left">${html("Guide on left")}</option><option value="right">${html("Guide on right")}</option></select></label></div><div id="pl-route-complete" class="pl-complete" hidden></div><div id="pl-workspace" class="pl-workspace"><aside id="pl-guide" class="pl-guide" aria-label="${html("Current step")}"></aside><div id="pl-rows" class="pl-table-area"></div></div>
+      <div id="pl-detail-heading" class="pl-section-heading pl-detail-heading"><div><h3>${html("Detailed route")}</h3><p id="pl-saved-count" class="pl-muted"></p></div></div><div id="pl-route-complete" class="pl-complete" hidden></div><div id="pl-workspace" class="pl-workspace"><aside id="pl-guide" class="pl-guide" aria-label="${html("Current step")}"></aside><div id="pl-rows" class="pl-table-area"></div></div>
     </section><p class="pl-fine pl-engine-note">${html("Planning uses the existing game RNG engine. Element deltas vary by weapon; status deltas can be entered in the weapon editor.")}</p>`;
   const q = (selector) => root.querySelector(selector);
   const setError = (message = "") => { q("#pl-error").textContent = message; q("#pl-error").hidden = !message; };
@@ -257,8 +256,6 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       const incomplete = data.bonus.status === "incomplete" || data.skill.status === "incomplete";
       return `<button type="button" class="pl-route" data-pl-route="${mode}" aria-pressed="${cache.mode === mode}"${cache.completed > 0 && cache.mode !== mode ? " disabled" : ""}><div class="pl-route-title"><span class="pl-radio" aria-hidden="true"></span><strong>${html(mode === "preferred" ? "Top desired route" : "Fastest acceptable")}</strong></div><div class="pl-route-total"><strong>${data.total === null ? "—" : data.total}</strong><span>${html(data.complete ? "rolls" : incomplete ? "Search incomplete" : "No complete route")}</span></div><p class="pl-muted">${data.complete ? html("{bonus} bonus + {skill} skill", { bonus: data.bonus.horizon, skill: data.skill.horizon }) : html("Increase the roll limits or relax your goals.")}</p>${data.complete && data.dropped?.length ? `<p class="pl-drop-note">${html("Leaves out {n}: {names}", { n: data.dropped.length, names: shortNames(data) })}</p>` : ""}<div class="pl-route-bottom"><span>${html(data.complete ? data.proven ? "Minimum proven" : "Best found" : incomplete ? "Search incomplete" : "No complete route")}</span><span>${html("Within your roll limits")}</span></div></button>`;
     }).join("");
-    q("#pl-side").value = cache.side;
-    q("#pl-workspace").classList.toggle("guide-right", cache.side === "right");
     if (!r) return;
     const ok = compatible();
     let note = "";
@@ -436,7 +433,6 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       invalidate(); renderWeapons();
     } else if (input.matches("[data-copy-goals]")) { copyGoals(input.value); input.value = ""; }
     else if (input.matches("[data-pl-done]")) markDone();
-    else if (input.id === "pl-side") { cache.side = input.value; persist(); renderResults(); }
     else if (input.closest("#pl-limits")) { cache.limits[input.name] = Number(input.value); invalidate(); }
   });
   q("#pl-add-form").addEventListener("submit", (event) => {

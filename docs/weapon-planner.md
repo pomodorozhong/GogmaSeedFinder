@@ -105,8 +105,8 @@ only offers execution controls for a complete route.
 ## Following the guide
 
 Bonus (G) and skill (S) steps are shown as two tables because they use separate
-counters; step numbers stay in route order. The tables and guide sit side by
-side on desktop. Clicking a route row
+counters; step numbers stay in route order. The guide sits to the left of the
+tables on desktop. Clicking a route row
 previews its full repeat block; the attached chevron points to that row. On narrow
 screens the guide stacks above the horizontally scrollable tables.
 

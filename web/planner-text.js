@@ -97,8 +97,6 @@ export const PLANNER_TEXT = {
   "Skill goals not completed": ["スキル目標は未達成", "技能目標未能全部完成"],
   "Conflicting roll positions": ["抽選位置の重複", "抽選位置衝突"],
   "Detailed route": ["詳しい手順", "詳細步驟"],
-  "Guide on left": ["ガイドを左に表示", "攻略框置左"],
-  "Guide on right": ["ガイドを右に表示", "攻略框置右"],
   "{done} of {total} steps saved": ["{done}/{total}手順をセーブ確認済み", "已確認存檔{done}/{total}個步驟"],
   "Saved": ["保存済み", "已存檔"],
   "Rolls": ["抽選回数", "抽選次數"],
