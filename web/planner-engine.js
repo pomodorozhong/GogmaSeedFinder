@@ -231,17 +231,76 @@ export function replayRoute(request, mode, bonus, skill, provider) {
   };
 }
 
+// Decides which weapons a route finishes. Weapons are tried in priority order,
+// required before optional, and a weapon is kept only if every weapon kept so
+// far still fits within the roll limit. A required weapon with no reachable
+// goal is never dropped, so the route reports it as missing instead.
+// Dropping a weapon removes it from both streams: half a weapon is not a goal.
+export async function selectTargets(request, pool, order, options = {}) {
+  const optional = new Set(request.targets.filter((t) => t.planner.optional).map((t) => t.id));
+  let kept = [...order.filter((id) => !optional.has(id)), ...order.filter((id) => optional.has(id))];
+  const dropped = new Map();
+  let exhausted = false;
+  for (const stream of ["bonus", "skill"]) {
+    const byId = new Map(pool[stream].map((target) => [target.id, target]));
+    const limit = request.limits[stream];
+    for (const id of kept) if (!byId.get(id).choices.length && optional.has(id)) dropped.set(id, "unreachable");
+    kept = kept.filter((id) => !dropped.has(id));
+    if (kept.some((id) => !byId.get(id).choices.length)) continue;
+    const budget = { nodes: 0, max: options.maxNodes ?? 200_000, work: 0, maxWork: options.maxWork ?? 300_000_000 };
+    const all = eventSchedule(kept.map((id) => byId.get(id)), limit, budget);
+    if (all.choices) continue;
+    const fit = [];
+    for (let i = 0; i < kept.length; i += 1) {
+      const trial = eventSchedule([...fit, byId.get(kept[i])], limit, budget);
+      if (trial.exhausted) {
+        // Out of budget: keep the remaining required weapons for the final
+        // search to judge, and drop the remaining optional ones unchecked —
+        // they may well have fit.
+        exhausted = true;
+        for (const id of kept.slice(i)) if (optional.has(id)) dropped.set(id, "unchecked"); else fit.push(byId.get(id));
+        break;
+      }
+      if (trial.choices) fit.push(byId.get(kept[i]));
+      else dropped.set(kept[i], "conflict");
+      await pause();
+    }
+    kept = kept.filter((id) => !dropped.has(id));
+  }
+  return { kept: new Set(kept), dropped: [...dropped].map(([id, reason]) => ({ id, reason, optional: optional.has(id) })), exhausted };
+}
+
+async function planRoute(request, pool, mode, order, provider, options) {
+  const selection = await selectTargets(request, pool, order, options);
+  const only = (stream) => pool[stream].filter((target) => selection.kept.has(target.id));
+  const bonus = await optimizeStream(only("bonus"), request.limits.bonus, pool.complete, options);
+  const skill = await optimizeStream(only("skill"), request.limits.skill, true, options);
+  const route = replayRoute(request, mode, bonus, skill, provider);
+  route.dropped = selection.dropped;
+  if (selection.exhausted) route.proven = false;
+  return route;
+}
+
 export async function planWeapons(request, provider, report = () => {}, options = {}) {
   validatePlannerRequest(request);
   const pools = await buildCandidatePools(request, provider, report, options);
   const routes = {};
+  const ids = request.targets.map((t) => t.id);
   for (const mode of MODES) {
     report({ phase: "optimize", mode });
     const pool = pools[mode];
-    const bonus = await optimizeStream(pool.bonus, request.limits.bonus, pool.complete, options);
-    const skill = await optimizeStream(pool.skill, request.limits.skill, true, options);
-    routes[mode] = replayRoute(request, mode, bonus, skill, provider);
-    report({ phase: "route", mode, route: routes[mode] });
+    const primary = await planRoute(request, pool, mode, ids, provider, options);
+    // When weapons compete for the same rolls, offer the routes that give
+    // each displaced weapon priority so the player can choose.
+    const alternatives = [];
+    for (const { id } of primary.dropped.filter((v) => v.reason === "conflict").slice(0, 4)) {
+      const route = await planRoute(request, pool, mode, [id, ...ids.filter((v) => v !== id)], provider, options);
+      const key = (r) => r.dropped.map((v) => v.id).sort().join();
+      if (route.complete && key(route) !== key(primary) && !alternatives.some((r) => key(r) === key(route))) alternatives.push(route);
+    }
+    primary.alternatives = alternatives;
+    routes[mode] = primary;
+    report({ phase: "route", mode, route: primary });
     await pause();
   }
   return routes;

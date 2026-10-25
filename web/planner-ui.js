@@ -42,7 +42,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   let pointerFrame = null;
   const nameOf = (target) => target.label || localizedTargetName(weapons.find(([id]) => id === target.weaponType)?.[1] ?? "", attributes.find(([id]) => id === target.attributeForce)?.[1] ?? "");
   const prepared = () => getTargets().filter((target) => cache.selected.includes(target.id)).map((target) => ({ ...target, planner: normalizedPlanner(target) }));
-  const signature = () => JSON.stringify(prepared().map((target) => ({ id: target.id, label: target.label, weaponType: target.weaponType, attributeForce: target.attributeForce, planner: { bonusEnabled: target.planner.bonusEnabled, skillEnabled: target.planner.skillEnabled, acceptable: target.planner.acceptable, preferred: target.planner.preferred, elementValues: target.planner.elementValues } })));
+  const signature = () => JSON.stringify(prepared().map((target) => ({ id: target.id, label: target.label, weaponType: target.weaponType, attributeForce: target.attributeForce, planner: { optional: target.planner.optional, bonusEnabled: target.planner.bonusEnabled, skillEnabled: target.planner.skillEnabled, acceptable: target.planner.acceptable, preferred: target.planner.preferred, elementValues: target.planner.elementValues } })));
   const route = () => cache.routes[cache.mode];
   const compatible = () => Boolean(route()) && !stale && cache.signature === signature() && samePosition(getState(), routePosition(route(), cache.completed)) && routeWeaponsMatch(route(), cache.completed, getTargets());
   const statName = (key, target) => pl(key === "element" && target.attributeForce >= 6 ? "Status" : ({ attack: "Attack", affinity: "Affinity", element: "Element", sharpness: "Sharpness", ammo: "Ammo" })[key]);
@@ -72,7 +72,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     </section>
     <form id="pl-limits" class="pl-limits"><div class="pl-limit-copy"><h3><span class="pl-index">02</span> ${html("Search limits")}</h3><p class="pl-muted">${html("Two independent roll windows from your saved position.")}</p></div><label>${html("Bonus rolls")}<input name="bonus" type="number" min="0" max="10000" step="1" value="${esc(cache.limits.bonus)}" required></label><label>${html("Skill rolls")}<input name="skill" type="number" min="0" max="10000" step="1" value="${esc(cache.limits.skill)}" required></label><button id="pl-build" class="primary" type="submit">${html("Build guides")}</button><button id="pl-cancel" class="secondary" type="button" data-pl-action="cancel" hidden>${html("Cancel search")}</button></form>
     <div class="pl-feedback"><p id="pl-status" class="pl-muted" role="status">${html("Ready to plan.")}</p><p id="pl-error" class="error" role="alert" hidden></p><p class="pl-fine">${html("No roll data is changed until you confirm a step as done and saved in game.")}</p></div>
-    <section id="pl-results" class="pl-section" hidden><div class="pl-section-heading"><h3><span class="pl-index">03</span> ${html("Choose your route")}</h3><div class="pl-legend"><span class="pl-gold">★ ${html("Top desired")}</span><span class="pl-teal">✓ ${html("Acceptable")}</span></div></div><div id="pl-routes" class="pl-routes"></div><div id="pl-route-note"></div>
+    <section id="pl-results" class="pl-section" hidden><div class="pl-section-heading"><h3><span class="pl-index">03</span> ${html("Choose your route")}</h3><div class="pl-legend"><span class="pl-gold">★ ${html("Top desired")}</span><span class="pl-teal">✓ ${html("Acceptable")}</span></div></div><div id="pl-routes" class="pl-routes"></div><div id="pl-route-note"></div><div id="pl-alternatives" class="pl-alternatives" hidden></div>
       <div id="pl-detail-heading" class="pl-section-heading pl-detail-heading"><div><h3>${html("Detailed route")}</h3><p id="pl-saved-count" class="pl-muted"></p></div><label class="pl-side-label"><span class="sr-only">${html("Detailed route")}</span><select id="pl-side"><option value="left">${html("Guide on left")}</option><option value="right">${html("Guide on right")}</option></select></label></div><div id="pl-route-complete" class="pl-complete" hidden></div><div id="pl-workspace" class="pl-workspace"><aside id="pl-guide" class="pl-guide" aria-label="${html("Current step")}"></aside><div id="pl-rows" class="pl-table-area"></div></div>
     </section><p class="pl-fine pl-engine-note">${html("Planning uses the existing game RNG engine. Element deltas vary by weapon; status deltas can be entered in the weapon editor.")}</p>`;
   const q = (selector) => root.querySelector(selector);
@@ -95,7 +95,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     q("#pl-weapons").innerHTML = getTargets().length ? getTargets().map((raw) => {
       const target = { ...raw, planner: normalizedPlanner(raw) };
       const checked = cache.selected.includes(target.id);
-      return `<article class="pl-weapon${checked ? " is-selected" : ""}"><div class="pl-weapon-head"><label><input type="checkbox" data-pl-select="${esc(target.id)}"${checked ? " checked" : ""}><span><strong>${esc(nameOf(target))}</strong><small>${esc(localizedTargetName(weapons.find(([id]) => id === target.weaponType)[1], attributes.find(([id]) => id === target.attributeForce)[1]))}</small></span></label><button type="button" class="text-button pl-remove" data-pl-action="remove" data-id="${esc(target.id)}" aria-label="${html("Remove weapon")}: ${esc(nameOf(target))}">×</button></div><div class="pl-goal-mini pl-preferred"><span>★</span><span>${esc(goalSummary(target, "preferred"))}</span></div><div class="pl-goal-mini pl-acceptable"><span>✓</span><span>${esc(goalSummary(target, "acceptable"))}</span></div><div class="pl-weapon-actions"><button class="text-button pl-edit" type="button" data-pl-action="edit" data-id="${esc(target.id)}">${html("Edit goals")} →</button><button class="text-button pl-edit" type="button" data-pl-action="duplicate" data-id="${esc(target.id)}" aria-label="${html("Duplicate")}: ${esc(nameOf(target))}">${html("Duplicate")}</button></div></article>`;
+      return `<article class="pl-weapon${checked ? " is-selected" : ""}"><div class="pl-weapon-head"><label><input type="checkbox" data-pl-select="${esc(target.id)}"${checked ? " checked" : ""}><span><strong>${esc(nameOf(target))}</strong><small>${esc(localizedTargetName(weapons.find(([id]) => id === target.weaponType)[1], attributes.find(([id]) => id === target.attributeForce)[1]))}</small></span></label><button type="button" class="text-button pl-remove" data-pl-action="remove" data-id="${esc(target.id)}" aria-label="${html("Remove weapon")}: ${esc(nameOf(target))}">×</button></div><div class="pl-goal-mini pl-preferred"><span>★</span><span>${esc(goalSummary(target, "preferred"))}</span></div><div class="pl-goal-mini pl-acceptable"><span>✓</span><span>${esc(goalSummary(target, "acceptable"))}</span></div><label class="pl-optional"><input type="checkbox" data-pl-optional="${esc(target.id)}"${target.planner.optional ? " checked" : ""}>${html("Optional: leave out if it cannot fit")}</label><div class="pl-weapon-actions"><button class="text-button pl-edit" type="button" data-pl-action="edit" data-id="${esc(target.id)}">${html("Edit goals")} →</button><button class="text-button pl-edit" type="button" data-pl-action="duplicate" data-id="${esc(target.id)}" aria-label="${html("Duplicate")}: ${esc(nameOf(target))}">${html("Duplicate")}</button></div></article>`;
     }).join("") : `<div class="pl-empty">${html("Add your first weapon to start planning.")}</div>`;
   }
   function comboRow(pair = { seriesIndex: 11, groupIndex: 13 }) {
@@ -218,6 +218,8 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const totals = Object.fromEntries(Object.entries(result.totals).filter(([key]) => !zeroGoal(key)));
     return `<strong class="pl-totals">${esc(statsText(totals, target))}</strong>${chips(result.raw, target)}`;
   }
+  const droppedNames = (route) => (route.dropped ?? []).map(({ id, reason, optional }) => `${nameOf(route.targets.find((v) => v.id === id))} (${pl(({ unreachable: "no match within the roll limits", unchecked: "not checked: search limit reached" })[reason] ?? "needs the same rolls as another weapon")}${optional ? ` · ${pl("optional")}` : ""})`).join(", ");
+  const shortNames = (route, reason = null) => (route.dropped ?? []).filter((v) => !reason || v.reason === reason).map(({ id }) => nameOf(route.targets.find((v) => v.id === id))).join(", ");
   function renderResults() {
     const modes = ["acceptable", "preferred"];
     const hasRoutes = modes.some((mode) => cache.routes[mode]);
@@ -228,7 +230,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       const data = cache.routes[mode];
       if (!data) return `<div class="pl-route is-pending"><strong>${html(mode === "preferred" ? "Top desired route" : "Fastest acceptable")}</strong><p class="pl-muted">…</p></div>`;
       const incomplete = data.bonus.status === "incomplete" || data.skill.status === "incomplete";
-      return `<button type="button" class="pl-route" data-pl-route="${mode}" aria-pressed="${cache.mode === mode}"${cache.completed > 0 && cache.mode !== mode ? " disabled" : ""}><div class="pl-route-title"><span class="pl-radio" aria-hidden="true"></span><strong>${html(mode === "preferred" ? "Top desired route" : "Fastest acceptable")}</strong></div><div class="pl-route-total"><strong>${data.total === null ? "—" : data.total}</strong><span>${html(data.complete ? "rolls" : incomplete ? "Search incomplete" : "No complete route")}</span></div><p class="pl-muted">${data.complete ? html("{bonus} bonus + {skill} skill", { bonus: data.bonus.horizon, skill: data.skill.horizon }) : html("Increase the roll limits or relax your goals.")}</p><div class="pl-route-bottom"><span>${html(data.complete ? data.proven ? "Minimum proven" : "Best found" : incomplete ? "Search incomplete" : "No complete route")}</span><span>${html("Within your roll limits")}</span></div></button>`;
+      return `<button type="button" class="pl-route" data-pl-route="${mode}" aria-pressed="${cache.mode === mode}"${cache.completed > 0 && cache.mode !== mode ? " disabled" : ""}><div class="pl-route-title"><span class="pl-radio" aria-hidden="true"></span><strong>${html(mode === "preferred" ? "Top desired route" : "Fastest acceptable")}</strong></div><div class="pl-route-total"><strong>${data.total === null ? "—" : data.total}</strong><span>${html(data.complete ? "rolls" : incomplete ? "Search incomplete" : "No complete route")}</span></div><p class="pl-muted">${data.complete ? html("{bonus} bonus + {skill} skill", { bonus: data.bonus.horizon, skill: data.skill.horizon }) : html("Increase the roll limits or relax your goals.")}</p>${data.complete && data.dropped?.length ? `<p class="pl-drop-note">${html("Leaves out {n}: {names}", { n: data.dropped.length, names: shortNames(data) })}</p>` : ""}<div class="pl-route-bottom"><span>${html(data.complete ? data.proven ? "Minimum proven" : "Best found" : incomplete ? "Search incomplete" : "No complete route")}</span><span>${html("Within your roll limits")}</span></div></button>`;
     }).join("");
     q("#pl-side").value = cache.side;
     q("#pl-workspace").classList.toggle("guide-right", cache.side === "right");
@@ -243,14 +245,18 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       note = streamErrors.join(" · ");
       if (!r.proven) note += ` ${pl("The search reached its complexity budget. A shorter route may exist within these roll limits.")}`;
     }
+    if (r.complete && r.dropped?.length) note = [pl("Left out of this route: {names}", { names: droppedNames(r) }), note].filter(Boolean).join(" · ");
     q("#pl-route-note").textContent = note;
-    q("#pl-route-note").className = note ? `pl-route-note${!ok || !r.complete ? " is-warning" : ""}` : "";
+    const choices = r.complete && r.alternatives?.length && cache.completed === 0 && ok ? [r, ...r.alternatives] : [];
+    q("#pl-alternatives").hidden = !choices.length;
+    q("#pl-alternatives").innerHTML = choices.length ? `<p>${html("Some weapons need the same rolls. Choose which route to follow:")}</p>${choices.map((choice, index) => `<button type="button" class="pl-alternative" data-pl-alt="${index}" aria-pressed="${index === 0}"><span class="pl-radio" aria-hidden="true"></span><span><strong>${html("{rolls} rolls", { rolls: choice.total })}</strong> · ${esc(shortNames(choice, "conflict") ? pl("leaves out {names}", { names: shortNames(choice, "conflict") }) : pl("finishes every weapon"))}</span></button>`).join("")}` : "";
+    q("#pl-route-note").className = note ? `pl-route-note${!ok || !r.complete || r.dropped?.length ? " is-warning" : ""}` : "";
     q("#pl-workspace").hidden = !r.complete || r.steps.length === 0;
     q("#pl-detail-heading").hidden = !r.complete || r.steps.length === 0;
     q("#pl-saved-count").textContent = pl("{done} of {total} steps saved", { done: cache.completed, total: r.steps.length });
     const done = r.complete && (r.steps.length === 0 || cache.completed === r.steps.length);
     q("#pl-route-complete").hidden = !done;
-    q("#pl-route-complete").textContent = done ? `✓ ${pl(r.steps.length ? "Route complete. All chosen goals are met." : "Your current weapons already meet this route’s goals.")}` : "";
+    q("#pl-route-complete").textContent = done ? `✓ ${r.dropped?.length ? pl("Route complete. Weapons left out: {names}", { names: shortNames(r) }) : pl(r.steps.length ? "Route complete. All chosen goals are met." : "Your current weapons already meet this route’s goals.")}` : "";
     if (!r.complete || !r.steps.length) return;
     inspected = Math.max(0, Math.min(inspected, r.steps.length - 1));
     const row = (step, index) => {
@@ -285,7 +291,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
         const tag = current && compatible() ? "button" : "div";
         return `<${tag}${tag === "button" ? ` type="button" data-pl-match="${index + 1}" aria-label="${html("Match draw {n}", { n: index + 1 })}" aria-pressed="${matched === index + 1}"` : ""} class="pl-expected-roll${index < matched && current ? " is-passed" : ""}${index + 1 === matched && current ? " is-matched" : ""}"><span class="pl-draw-number"><strong>${index + 1}</strong><small>${prefix}${roll.offset}</small></span><span class="pl-draw-result">${resultMarkup(roll, step, target)}${step.intent !== "advance" && index === step.rolls.length - 1 ? badge(step) : ""}</span>${current && matched === index + 1 ? '<span class="pl-match-check">✓</span>' : ""}</${tag}>`;
       }).join("")}</div>
-      <footer class="pl-guide-footer">${current ? `<div><strong>${html("{matched}/{total} matched · {remaining} remaining", { matched, total: step.rolls.length, remaining: step.rolls.length - matched })}</strong><button type="button" class="primary" data-pl-action="done"${!compatible() || worker ? " disabled" : ""}>${html("Done & saved")} →</button></div><p class="pl-fine">${html("Finish this block and save in game, then confirm here.")}</p><p class="pl-fine">${html("Matching a result only marks your place; it does not save a step or advance the counters.")}</p>` : cache.completed < r.steps.length ? `<button type="button" class="secondary" data-pl-action="current">← ${html("Back to current step")}</button>` : `<span class="pl-teal">✓ ${html("Route complete. All chosen goals are met.")}</span>`}</footer><details class="pl-state-details"><summary>${html("Saved state details")}</summary><p>${html("Before")} <code>${esc(stateCode(step.before))}</code></p><p>${html("After")} <code>${esc(stateCode(step.after))}</code></p></details></div>`;
+      <footer class="pl-guide-footer">${current ? `<div><strong>${html("{matched}/{total} matched · {remaining} remaining", { matched, total: step.rolls.length, remaining: step.rolls.length - matched })}</strong><button type="button" class="primary" data-pl-action="done"${!compatible() || worker ? " disabled" : ""}>${html("Done & saved")} →</button></div><p class="pl-fine">${html("Finish this block and save in game, then confirm here.")}</p><p class="pl-fine">${html("Matching a result only marks your place; it does not save a step or advance the counters.")}</p>` : cache.completed < r.steps.length ? `<button type="button" class="secondary" data-pl-action="current">← ${html("Back to current step")}</button>` : `<span class="pl-teal">✓ ${r.dropped?.length ? html("Route complete. Weapons left out: {names}", { names: shortNames(r) }) : html("Route complete. All chosen goals are met.")}</span>`}</footer><details class="pl-state-details"><summary>${html("Saved state details")}</summary><p>${html("Before")} <code>${esc(stateCode(step.before))}</code></p><p>${html("After")} <code>${esc(stateCode(step.after))}</code></p></details></div>`;
     schedulePointer();
   }
   function schedulePointer() {
@@ -370,6 +376,14 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     else if (action === "cancel") { stopWorker(); persist(); renderResults(); setStatus(pl("Search cancelled. Any completed route remains available.")); }
     else if (action === "done") markDone();
     else if (action === "current") { inspected = cache.completed; renderResults(); q(`#pl-rows [data-pl-step="${inspected}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
+    const alternative = event.target.closest("[data-pl-alt]");
+    const r = route();
+    if (alternative && r?.alternatives && cache.completed === 0 && Number(alternative.dataset.plAlt) > 0) {
+      const index = Number(alternative.dataset.plAlt) - 1;
+      const { alternatives, ...current } = r;
+      cache.routes[cache.mode] = { ...alternatives[index], alternatives: [current, ...alternatives.filter((_, i) => i !== index)] };
+      cache.matches = {}; inspected = 0; persist(); renderResults();
+    }
     const routeButton = event.target.closest("[data-pl-route]");
     if (routeButton && !routeButton.disabled && (cache.completed === 0 || cache.mode === routeButton.dataset.plRoute)) { cache.mode = routeButton.dataset.plRoute; cache.matches = {}; inspected = 0; persist(); renderResults(); }
     const match = event.target.closest("[data-pl-match]");
@@ -385,6 +399,9 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     if (input.matches("[data-pl-select]")) {
       if (input.checked && cache.selected.length >= MAX_SELECTED) { input.checked = false; setError(errorText("targets")); return; }
       cache.selected = input.checked ? [...cache.selected, input.dataset.plSelect] : cache.selected.filter((id) => id !== input.dataset.plSelect);
+      invalidate(); renderWeapons();
+    } else if (input.matches("[data-pl-optional]")) {
+      setTargets(getTargets().map((v) => v.id === input.dataset.plOptional ? { ...v, planner: { ...normalizedPlanner(v), optional: input.checked } } : v));
       invalidate(); renderWeapons();
     } else if (input.matches("[data-copy-goals]")) { copyGoals(input.value); input.value = ""; }
     else if (input.matches("[data-pl-done]")) markDone();

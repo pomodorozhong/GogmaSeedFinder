@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import { initSync, predict_gogma_rolls, predict_gogma_keep_rolls, predict_skill_rolls } from "./pkg/gogma_wasm_search.js";
 import { bonusTotals, copiedPlanner, layoutOf, MAX_SELECTED, matchesTier, normalizedPlanner, resultQuality, routeWeaponsMatch, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
-import { optimizeStream, planWeapons } from "./planner-engine.js";
+import { optimizeStream, planWeapons, selectTargets } from "./planner-engine.js";
 
 initSync({ module: await readFile(new URL("./pkg/gogma_wasm_search_bg.wasm", import.meta.url)) });
 const target = (id, weaponType = 3, attributeForce = 1) => {
@@ -183,6 +183,51 @@ test("up to MAX_SELECTED weapons can be planned together", () => {
   const many = Array.from({ length: MAX_SELECTED + 1 }, (_, i) => target(`w${i}`));
   assert.doesNotThrow(() => validatePlannerRequest(request(many.slice(0, MAX_SELECTED))));
   assert.throws(() => validatePlannerRequest(request(many)), /targets/);
+});
+
+test("weapons that cannot fit are left out, required before optional, earlier before later", async () => {
+  const req = (optional = []) => ({ targets: ["a", "b", "c"].map((id) => ({ id, planner: { optional: optional.includes(id) } })), limits: { bonus: 10, skill: 10 } });
+  const pool = (bonus, skill) => ({ bonus: Object.entries(bonus).map(([id, finishes]) => ({ id, choices: finishes.map((finish) => ({ finish, action: "reset" })) })), skill: Object.entries(skill).map(([id, finishes]) => ({ id, choices: finishes.map((finish) => ({ finish, action: "skill" })) })) });
+  const ids = (selection) => [[...selection.kept].sort(), selection.dropped.map((v) => `${v.id}:${v.reason}`)];
+  const clash = pool({ a: [1], b: [1], c: [2] }, { a: [1], b: [2], c: [3] });
+  assert.deepEqual(ids(await selectTargets(req(), clash, ["a", "b", "c"])), [["a", "c"], ["b:conflict"]]);
+  assert.deepEqual(ids(await selectTargets(req(), clash, ["b", "a", "c"])), [["b", "c"], ["a:conflict"]]);
+  assert.deepEqual(ids(await selectTargets(req(["a"]), clash, ["a", "b", "c"])), [["b", "c"], ["a:conflict"]]);
+  // A skill conflict also removes the weapon's bonus steps.
+  assert.deepEqual(ids(await selectTargets(req(), pool({ a: [1], b: [2], c: [3] }, { a: [1], b: [1], c: [2] }), ["a", "b", "c"])), [["a", "c"], ["b:conflict"]]);
+  const unreachable = pool({ a: [1], b: [], c: [] }, { a: [1], b: [2], c: [3] });
+  assert.deepEqual(ids(await selectTargets(req(["b"]), unreachable, ["a", "b", "c"])), [["a", "c"], ["b:unreachable"]]);
+});
+
+test("optional weapons left out because the search budget ran out are marked unchecked, not conflicting", async () => {
+  const req = { targets: ["a", "b", "c"].map((id) => ({ id, planner: { optional: id !== "a" } })), limits: { bonus: 10, skill: 10 } };
+  // Keep finishes with acquisitions force the budgeted search.
+  const keep = (finish, acquire) => ({ finish, action: "keep", layout: [0, 0, 0, 0, 0], acquisitions: [acquire] });
+  const pool = { bonus: [{ id: "a", choices: [keep(2, 1)] }, { id: "b", choices: [keep(4, 3)] }, { id: "c", choices: [keep(6, 5)] }], skill: ["a", "b", "c"].map((id) => ({ id, choices: [{ finish: 0, action: "already" }] })) };
+  const selection = await selectTargets(req, pool, ["a", "b", "c"], { maxNodes: 0 });
+  assert.ok(selection.exhausted);
+  assert.deepEqual([...selection.kept], ["a"]);
+  assert.deepEqual(selection.dropped.map((v) => `${v.id}:${v.reason}`), ["b:unchecked", "c:unchecked"]);
+});
+
+test("competing weapons produce a route for each choice of which one to finish", async () => {
+  const origin = { baseSeed: 86_315_169, bonusCounter: 480, skillCounter: 188 };
+  const rolls = predict_skill_rolls(origin.baseSeed, 3, 1, origin.skillCounter, 54, 40);
+  const once = [...rolls].find((v) => rolls.filter((w) => w === v).length === 1);
+  const weapons = ["first", "second"].map((id) => {
+    const t = target(id);
+    t.planner.bonusEnabled = false;
+    t.planner.acceptable.skills = [{ seriesIndex: Math.floor(once / 14), groupIndex: once % 14 }];
+    t.planner.preferred.skills = [];
+    return t;
+  });
+  const req = { origin, targets: weapons, limits: { bonus: 0, skill: 40 } };
+  const route = (await planWeapons(req, provider(req))).acceptable;
+  assert.ok(route.complete);
+  assert.deepEqual(route.dropped.map((v) => v.id), ["second"]);
+  assert.equal(route.alternatives.length, 1);
+  assert.deepEqual(route.alternatives[0].dropped.map((v) => v.id), ["first"]);
+  assert.ok(route.alternatives[0].steps.every((step) => step.targetId === "second"));
 });
 
 test("all planner copy has Japanese and Traditional Chinese translations", async () => {

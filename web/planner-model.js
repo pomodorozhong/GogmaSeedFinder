@@ -94,6 +94,7 @@ export function normalizedPlanner(target) {
   const values = Array.isArray(saved.elementValues) && saved.elementValues.length === 2 ? saved.elementValues.map((v) => Number.isFinite(v) && v >= 0 ? v : null) : [null, null];
   return {
     bonusEnabled: saved.bonusEnabled !== false,
+    optional: saved.optional === true,
     skillEnabled: saved.skillEnabled !== false,
     acceptable: { stats: stats(saved.acceptable?.stats, defaultAcceptable), skills: pairs(saved.acceptable?.skills, preset) },
     preferred: { stats: stats(saved.preferred?.stats, defaultPreferred), skills: pairs(saved.preferred?.skills, preferredSkills) },
