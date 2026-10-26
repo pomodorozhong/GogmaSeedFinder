@@ -71,10 +71,11 @@ export function validBonuses(bonuses, target) {
     && [...new Set(bonuses)].every((id) => bonuses.filter((v) => v === id).length <= 2);
 }
 
-// An unknown status value (null) proves neither bound, so it fails both.
+// A zero minimum imposes no bound. An unknown status value (null) cannot
+// prove a positive minimum or any maximum.
 export function statGoalMatches(totals, minimums, maximums = {}) {
   return Object.entries(minimums ?? {}).every(([stat, min]) => STAT_KEYS.includes(stat)
-    && Number.isFinite(min) && min >= 0 && Number.isFinite(totals[stat]) && totals[stat] >= min)
+    && Number.isFinite(min) && min >= 0 && (min === 0 || (Number.isFinite(totals[stat]) && totals[stat] >= min)))
     && Object.entries(maximums ?? {}).every(([stat, max]) => STAT_KEYS.includes(stat)
     && Number.isFinite(max) && max >= 0 && Number.isFinite(totals[stat]) && totals[stat] <= max);
 }
@@ -237,7 +238,7 @@ export function validatePlannerRequest(request) {
     if (p.bonusEnabled && [p.acceptable, p.preferred].some((tier) => Object.entries(tier.maxStats).some(([key, max]) => tier.stats[key] > max))) throw new Error("minAboveMax");
     if (p.bonusEnabled && [p.acceptable, p.preferred].some((tier) => hasBonusGoal(tier) && !canFillSlots(target, Object.keys(tier.maxStats).filter((key) => tier.maxStats[key] === 0)))) throw new Error("excluded");
     if (p.skillEnabled && !p.acceptable.skills.length && !p.preferred.skills.length) throw new Error("goals");
-    if (p.bonusEnabled && target.attributeForce >= 6 && [p.acceptable, p.preferred].some((tier) => "element" in tier.stats || tier.maxStats.element > 0) && elementValues(target).some((v) => !Number.isFinite(v))) throw new Error("statusValues");
+    if (p.bonusEnabled && target.attributeForce >= 6 && [p.acceptable, p.preferred].some((tier) => tier.stats.element > 0 || tier.maxStats.element > 0) && elementValues(target).some((v) => !Number.isFinite(v))) throw new Error("statusValues");
   }
 }
 

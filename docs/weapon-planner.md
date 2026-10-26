@@ -21,8 +21,9 @@ and bowgun capacity use separate fields and units. EX counts do not rank results
 Each stat goal is a range per tier: a minimum and a maximum, where a blank side
 is unbounded and a minimum of 0 reads as no bound. A maximum of 0 excludes the
 stat, leaving the five slots to the others. A tier may hold only maximums. An
-unknown status value proves neither bound, so a status maximum above 0 needs
-the II/EX values; max 0 does not. Max-0 stats must leave enough categories to
+unknown status value proves neither a positive minimum nor a maximum, so a
+positive status bound needs the II/EX values; minimum 0 and maximum 0 do not.
+Max-0 stats must leave enough categories to
 fill five slots, and a minimum may not exceed its maximum. Unknown current
 bonuses need no roll only when every valid result meets the goal. This includes
 maximums at the physical stat limits, ranges guaranteed by known categories,

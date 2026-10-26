@@ -162,6 +162,63 @@ test("status values and counter overflow are validated before searching", () => 
   assert.throws(() => validatePlannerRequest(req), /state/);
 });
 
+test("zero status minimums impose no bound but positive bounds still need known gains", () => {
+  assert.ok(statGoalMatches({ attack: 24, element: null }, { attack: 24, element: 0 }));
+  assert.ok(!statGoalMatches({ element: null }, { element: 1 }));
+  assert.ok(!statGoalMatches({ element: null }, { element: 0 }, { element: 0 }));
+  const t = target("status", 3, 6);
+  t.planner.skillEnabled = false;
+  t.planner.acceptable = { stats: { element: 0 }, maxStats: {}, skills: [] };
+  t.planner.preferred = { stats: {}, maxStats: {}, skills: [] };
+  assert.doesNotThrow(() => validatePlannerRequest(request([t])));
+  t.planner.acceptable.stats.element = 1;
+  assert.throws(() => validatePlannerRequest(request([t])), /statusValues/);
+  t.planner.acceptable.stats.element = 0;
+  t.planner.acceptable.maxStats.element = 1;
+  assert.throws(() => validatePlannerRequest(request([t])), /statusValues/);
+  t.planner.acceptable.maxStats.element = 0;
+  assert.doesNotThrow(() => validatePlannerRequest(request([t])));
+});
+
+test("zero status minimums preserve zero-roll proofs without status boost values", async () => {
+  for (const [layout, stats] of [
+    [[0, 0, 0, 0, 3], { attack: 24, element: 0 }],
+    [[2, 2, 0, 3, 3], { attack: 6, element: 0 }],
+    [[null, null, null, null, null], { element: 0 }],
+  ]) {
+    const t = target("status", 3, 6); t.planner.skillEnabled = false;
+    t.keepCategories = layout;
+    t.planner.acceptable = { stats, maxStats: {}, skills: [] };
+    t.planner.preferred = { stats: {}, maxStats: {}, skills: [] };
+    const req = request([t], 0, 0);
+    for (const route of Object.values(await planWeapons(req, provider(req)))) {
+      assert.ok(route.complete && route.proven);
+      assert.equal(route.total, 0);
+      assert.deepEqual(route.steps, []);
+    }
+  }
+});
+
+test("zero status minimums retain a better Keep path with unknown status gains", async () => {
+  const t = target("status", 3, 6); t.planner.skillEnabled = false;
+  t.keepCategories = [0, 0, 0, 2, 2];
+  t.planner.acceptable = { stats: { attack: 24 }, maxStats: {}, skills: [] };
+  t.planner.preferred = { stats: {}, maxStats: {}, skills: [] };
+  const req = request([t], 1, 0);
+  // G1 Reset gives Attack +12; the known layout's Keep gives +27, with
+  // unknown status gains. Adding minimum 0 must preserve this one-roll path.
+  for (const withZero of [false, true]) {
+    if (withZero) t.planner.acceptable.stats.element = 0;
+    for (const route of Object.values(await planWeapons(req, provider(req)))) {
+      assert.ok(route.complete && route.proven);
+      assert.equal(route.total, 1);
+      assert.equal(route.steps[0].action, "keep");
+      assert.equal(route.steps[0].rolls.at(-1).totals.element, null);
+      assert.equal(route.steps[0].rolls.at(-1).totals.attack, 27);
+    }
+  }
+});
+
 test("stat maximums follow the two-copy and two-slot sharpness/ammo limits", () => {
   const blade = target("blade");
   assert.deepEqual(statRollValues("attack", blade), [["II", 6], ["III", 9], ["EX", 12]]);
