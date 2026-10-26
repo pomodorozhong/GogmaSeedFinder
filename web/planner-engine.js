@@ -30,7 +30,7 @@ export async function buildCandidatePools(request, provider, report = () => {}, 
     const target = request.targets[ti];
     const key = `${target.weaponType}:${target.attributeForce}`;
     report({ phase: "predictions", target: ti + 1, total: request.targets.length });
-    for (const stream of ["bonus", "skill"]) {
+    for (const stream of options.streams ?? ["bonus", "skill"]) {
       const sets = Object.fromEntries(MODES.map((mode) => [mode, []]));
       const current = stream === "bonus"
         ? (target.planner.currentBonuses ? bonusTotals(target.planner.currentBonuses, target) : null)
@@ -233,6 +233,87 @@ export async function optimizeStream(targets, limit, complete = true, options = 
     }
   }
   return { status: "complete", horizon, choices: best.map(({ acquisitions, ...choice }) => choice), proven: complete && !exhausted, nodes: budget.nodes };
+}
+
+const choiceKey = (choice) => `${choice.action}:${choice.finish}:${choice.layout ? layoutKey(choice.layout) : ""}`;
+
+// The weapons scheduled in a stream, limited to finishes within its horizon.
+// A weapon keeps the finish the player pinned, and a weapon finishing top
+// desired stays top desired, so choosing one weapon's finish never costs
+// another weapon its own.
+function lockedTargets(pool, solution, pins = {}) {
+  const chosen = new Map(solution.choices.map((choice) => [choice.id, choice]));
+  return pool.filter((target) => chosen.has(target.id)).map((target) => ({
+    ...target,
+    choices: target.choices.filter((choice) => choice.finish <= solution.horizon
+      && (pins[target.id] ? choiceKey(choice) === pins[target.id] : !chosen.get(target.id).top || choice.top)),
+  }));
+}
+
+// Every finish for one weapon that keeps the stream's roll count, each with
+// the full schedule that makes room for it. Other weapons keep their own
+// finishes when possible; `moves` names any that must change. Only the earliest copy of an
+// identical result is listed, apart from the current finish. The search is per
+// finish, so a budget-limited finish is reported as unchecked, not impossible.
+export async function finishOptions(route, stream, targetId, provider, options = {}) {
+  const request = { origin: route.origin, targets: route.targets, limits: route.limits };
+  const solution = route[stream];
+  const pool = (await buildCandidatePools(request, provider, () => {}, { ...options, streams: [stream] }))[route.mode][stream];
+  const locked = lockedTargets(pool, solution, route.pins?.[stream]);
+  const index = locked.findIndex((target) => target.id === targetId);
+  const target = route.targets.find((v) => v.id === targetId);
+  const keys = new Map(solution.choices.map((choice) => [choice.id, choiceKey(choice)]));
+  const currentKey = keys.get(targetId);
+  const unchanged = locked.map((v) => ({ ...v, choices: v.choices.filter((choice) => choiceKey(choice) === keys.get(v.id)) }));
+  const own = pool.find((v) => v.id === targetId).choices.filter((choice) => choice.finish <= solution.horizon);
+  const found = [];
+  const results = new Set();
+  let unchecked = 0;
+  for (let i = 0; i < own.length; i += 1) {
+    const choice = own[i];
+    const raw = choice.finish === 0 ? null
+      : stream === "skill" ? provider.skills(target, choice.finish - 1, 1)[0]
+        : Array.from(choice.action === "keep" ? provider.keep(target, choice.finish - 1, 1, choice.layout) : provider.reset(target, choice.finish - 1, 1));
+    const current = choiceKey(choice) === currentKey;
+    if (!current && results.has(JSON.stringify(raw))) continue;
+    const attempt = (targets) => eventSchedule(targets.map((v, j) => j === index ? { ...v, choices: [choice] } : v), solution.horizon, schedulingBudget(options));
+    let trial = attempt(unchanged);
+    if (!trial.choices && !trial.exhausted) trial = attempt(locked);
+    if (trial.exhausted) unchecked += 1;
+    if (!trial.choices) continue;
+    results.add(JSON.stringify(raw));
+    found.push({
+      key: choiceKey(choice),
+      finish: choice.finish,
+      action: choice.action,
+      acquire: trial.choices.find((v) => v.id === targetId).acquire ?? null,
+      top: Boolean(choice.top),
+      current,
+      raw,
+      totals: stream === "bonus" && raw ? bonusTotals(raw, target) : null,
+      moves: trial.choices.filter((v) => v.id !== targetId && choiceKey(v) !== keys.get(v.id)).map((v) => v.id),
+      choices: trial.choices.map(({ acquisitions, ...v }) => v),
+    });
+    if (i % 20 === 19) await pause();
+  }
+  found.sort((a, b) => Number(b.top) - Number(a.top) || a.finish - b.finish);
+  return { options: found, unchecked };
+}
+
+// Rebuilds the route with one weapon's finish chosen from finishOptions. The
+// other stream, the roll count and the minimum proof are unchanged.
+export function pinFinish(route, stream, targetId, option, provider) {
+  const request = { origin: route.origin, targets: route.targets, limits: route.limits };
+  const solution = { ...route[stream], choices: option.choices };
+  const next = replayRoute(request, route.mode, stream === "bonus" ? solution : route.bonus, stream === "skill" ? solution : route.skill, provider);
+  return {
+    ...next,
+    proven: route.proven,
+    dropped: route.dropped,
+    alternatives: route.alternatives,
+    alternativesComplete: route.alternativesComplete,
+    pins: { ...route.pins, [stream]: { ...route.pins?.[stream], [targetId]: option.key } },
+  };
 }
 
 export function replayRoute(request, mode, bonus, skill, provider) {

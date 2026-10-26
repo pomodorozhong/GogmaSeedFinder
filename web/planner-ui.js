@@ -56,6 +56,8 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   let storageAvailable = true;
   let lastExternal = "";
   let pointerFrame = null;
+  // Other finishes for one weapon, tied to the route object they were found for.
+  let finishList = null;
   const nameOf = (target) => target.label || localizedTargetName(weapons.find(([id]) => id === target.weaponType)?.[1] ?? "", attributes.find(([id]) => id === target.attributeForce)?.[1] ?? "");
   const prepared = () => getTargets().filter((target) => cache.selected.includes(target.id)).map((target) => ({ ...target, planner: normalizedPlanner(target) }));
   const signature = () => JSON.stringify(prepared().map((target) => ({ id: target.id, label: target.label, weaponType: target.weaponType, attributeForce: target.attributeForce, planner: { optional: target.planner.optional, bonusEnabled: target.planner.bonusEnabled, skillEnabled: target.planner.skillEnabled, acceptable: target.planner.acceptable, preferred: target.planner.preferred, elementValues: target.planner.elementValues } })));
@@ -345,13 +347,67 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const prefix = step.stream === "bonus" ? "G" : "S";
     const description = step.intent === "acquire" ? "Acquire this ordered layout for a later Keep Bonuses step." : step.intent === "finish" ? step.stream === "bonus" ? "Reach the stat minimums shown for this weapon." : "Reach one of this weapon’s chosen skill pairs." : "Advance the shared counter on this weapon to reach the next useful result.";
     const goalMode = step.intent === "finish" && step.rolls.at(-1).quality === "preferred" ? "preferred" : r.mode;
-    q("#pl-guide").innerHTML = `<span class="pl-guide-pointer" aria-hidden="true"></span><div class="pl-guide-content"><div class="pl-guide-kicker"><span>${html(saved ? "Saved" : current ? "Current step" : "Preview")}</span><span>${html("Step {n} of {total}", { n: inspected + 1, total: r.steps.length })}</span></div><div class="pl-guide-heading"><div><h3>${esc(nameOf(target))}</h3><p class="pl-menu-action">${esc(actionName(step.action))}</p></div><span class="pl-repeat">× <strong>${step.rolls.length}</strong></span></div><div class="pl-guide-meta"><span>${html("Repeat {n} times", { n: step.rolls.length })}</span><strong>${prefix}${step.start}${step.end === step.start ? "" : `–${step.end}`}</strong></div><p class="pl-guide-purpose">${html(description)}</p>${step.stream === "skill" ? upgradeWarning(r, [step]) : ""}<p class="pl-guide-goal">${esc(step.intent === "acquire" ? step.rolls.at(-1).raw.map((id) => statName(({ 0: "attack", 1: "affinity", 2: "element", 3: target.weaponType >= 12 ? "ammo" : "sharpness" })[BONUS_CATEGORY[id]], target)).join(" → ") : step.stream === "bonus" ? bonusGoalText(target, goalMode) : pairText(goalFor(target, goalMode, "skill")))}</p><p class="pl-fine pl-accept-note">${html("Accept each result in this block. Use the exact weapon and menu action shown.")}</p>
+    q("#pl-guide").innerHTML = `<span class="pl-guide-pointer" aria-hidden="true"></span><div class="pl-guide-content"><div class="pl-guide-kicker"><span>${html(saved ? "Saved" : current ? "Current step" : "Preview")}</span><span>${html("Step {n} of {total}", { n: inspected + 1, total: r.steps.length })}</span></div><div class="pl-guide-heading"><div><h3>${esc(nameOf(target))}</h3><p class="pl-menu-action">${esc(actionName(step.action))}</p></div><span class="pl-repeat">× <strong>${step.rolls.length}</strong></span></div><div class="pl-guide-meta"><span>${html("Repeat {n} times", { n: step.rolls.length })}</span><strong>${prefix}${step.start}${step.end === step.start ? "" : `–${step.end}`}</strong></div><p class="pl-guide-purpose">${html(description)}</p>${step.stream === "skill" ? upgradeWarning(r, [step]) : ""}<p class="pl-guide-goal">${esc(step.intent === "acquire" ? step.rolls.at(-1).raw.map((id) => statName(({ 0: "attack", 1: "affinity", 2: "element", 3: target.weaponType >= 12 ? "ammo" : "sharpness" })[BONUS_CATEGORY[id]], target)).join(" → ") : step.stream === "bonus" ? bonusGoalText(target, goalMode) : pairText(goalFor(target, goalMode, "skill")))}</p>${finishMarkup(r, step, target)}<p class="pl-fine pl-accept-note">${html("Accept each result in this block. Use the exact weapon and menu action shown.")}</p>
       <div class="pl-reference-heading"><h4>${html("Expected rolls")}</h4><span>${prefix}${step.start}${step.start === step.end ? "" : `–${step.end}`}</span></div><p class="pl-fine pl-reference-note">${html("Match your in-game result to find your place. Every draw in this block is shown.")}</p><div class="pl-reference-labels"><span>${html("Draw")}</span><span>${html("Expected result")}</span></div><div class="pl-expected-list">${step.rolls.map((roll, index) => {
         const tag = current && compatible() ? "button" : "div";
         return `<${tag}${tag === "button" ? ` type="button" data-pl-match="${index + 1}" aria-label="${html("Match draw {n}", { n: index + 1 })}" aria-pressed="${matched === index + 1}"` : ""} class="pl-expected-roll${index < matched && current ? " is-passed" : ""}${index + 1 === matched && current ? " is-matched" : ""}"><span class="pl-draw-number"><strong>${index + 1}</strong><small>${prefix}${roll.offset}</small></span><span class="pl-draw-result">${resultMarkup(roll, step, target)}${step.intent !== "advance" && index === step.rolls.length - 1 ? badge(step) : ""}</span>${current && matched === index + 1 ? '<span class="pl-match-check">✓</span>' : ""}</${tag}>`;
       }).join("")}</div>
       <footer class="pl-guide-footer">${current ? `<div><strong>${html("{matched}/{total} matched · {remaining} remaining", { matched, total: step.rolls.length, remaining: step.rolls.length - matched })}</strong><button type="button" class="primary" data-pl-action="done"${!compatible() || worker ? " disabled" : ""}>${html("Done & saved")} →</button></div><p class="pl-fine">${html("Finish this block and save in game, then confirm here.")}</p><p class="pl-fine">${html("Matching a result only marks your place; it does not save a step or advance the counters.")}</p>` : totalDone() < r.steps.length ? `<button type="button" class="secondary" data-pl-action="current">← ${html("Back to current step")}</button>` : `<span class="pl-teal">✓ ${r.dropped?.length ? html("Route complete. Weapons left out: {names}", { names: shortNames(r) }) : html("Route complete. All chosen goals are met.")}</span>`}</footer><details class="pl-state-details"><summary>${html("Saved state details")}</summary><p>${html("Before")} <code>${esc(stateCode(stepState(r, step, "before")))}</code></p><p>${html("After")} <code>${esc(stateCode(stepState(r, step, "after")))}</code></p></details></div>`;
     schedulePointer();
+  }
+  // A weapon's finish can be swapped for any other that keeps the stream's
+  // roll count, until a step in that stream is saved.
+  const canChooseFinish = (r, step) => step.intent === "finish" && r.complete && !worker && compatible() && cache.completed[step.stream] === 0;
+  function finishMarkup(r, step, target) {
+    const list = finishList?.route === r && finishList.stream === step.stream && finishList.targetId === step.targetId ? finishList : null;
+    if (!list) return canChooseFinish(r, step) ? `<button type="button" class="text-button pl-finish-toggle" data-pl-action="finishes">${html("Other finishes (no extra rolls)")}</button>` : "";
+    if (list.loading) return `<p class="pl-fine">${html("Checking other finishes for {name}…", { name: nameOf(target) })}</p>`;
+    const prefix = step.stream === "bonus" ? "G" : "S";
+    const items = list.options.map((option, index) => {
+      const where = option.finish === 0 ? pl("Already met (no rolls)") : `${prefix}${option.finish} · ${actionName(option.action)}${option.acquire ? ` · ${pl("Reset at {at} first", { at: `${prefix}${option.acquire}` })}` : ""}`;
+      const result = option.raw === null ? "" : resultMarkup(option, step, target);
+      return `<button type="button" class="pl-finish-option${option.current ? " is-current" : ""}" data-pl-pin="${index}"${option.current || !canChooseFinish(r, step) ? " disabled" : ""}><span class="pl-finish-where">${option.top ? `<span class="pl-gold">★</span> ` : ""}${esc(where)}${option.current ? ` <span class="pl-badge pl-neutral">${html("Current")}</span>` : ""}</span><span class="pl-finish-result">${result}</span>${option.moves.length ? `<span class="pl-fine">${html("Also changes: {names}", { names: option.moves.map((id) => nameOf(r.targets.find((v) => v.id === id))).join(", ") })}</span>` : ""}</button>`;
+    }).join("");
+    const others = list.options.filter((option) => !option.current).length;
+    const summary = others ? pl("{n} other finishes keep the route at {rolls} rolls.", { n: others, rolls: r[step.stream].horizon }) : pl("No other finish fits without extra rolls.");
+    return `<section class="pl-finishes"><div class="pl-finishes-heading"><h4>${html("Other finishes (no extra rolls)")}</h4><button type="button" class="text-button" data-pl-action="close-finishes">${html("Close")}</button></div><p class="pl-fine">${esc(summary)}${list.unchecked ? ` ${esc(pl("{n} finishes were not checked: search limit reached.", { n: list.unchecked }))}` : ""}</p><div class="pl-finish-list">${items}</div></section>`;
+  }
+  function helperWorker(message, onResult) {
+    stopWorker();
+    worker = new Worker(new URL("./planner-worker.js", import.meta.url), { type: "module" });
+    const helper = worker;
+    q("#pl-cancel").hidden = false;
+    worker.onmessage = ({ data }) => {
+      if (worker !== helper) return;
+      stopWorker();
+      if (data.type === "error") { finishList = null; setError(pl("Unable to calculate the guide. {detail}", { detail: data.message })); renderResults(); }
+      else onResult(data);
+    };
+    worker.onerror = (error) => { if (worker !== helper) return; stopWorker(); finishList = null; setError(pl("Unable to calculate the guide. {detail}", { detail: error.message })); renderResults(); };
+    worker.postMessage(message);
+  }
+  function showFinishes() {
+    const r = route(); const step = r?.steps[inspected];
+    if (!step || !canChooseFinish(r, step)) return;
+    setError();
+    helperWorker({ kind: "finishes", route: r, stream: step.stream, targetId: step.targetId }, (data) => {
+      finishList = { route: r, stream: step.stream, targetId: step.targetId, options: data.options, unchecked: data.unchecked };
+      renderResults();
+    });
+    finishList = { route: r, stream: step.stream, targetId: step.targetId, loading: true };
+    renderResults();
+  }
+  function pinFinish(index) {
+    const r = route(); const list = finishList; const option = list?.options?.[index];
+    if (!option || option.current || list.route !== r || worker || !compatible() || cache.completed[list.stream] !== 0) return;
+    helperWorker({ kind: "pin", route: r, stream: list.stream, targetId: list.targetId, option }, (data) => {
+      cache.routes[cache.mode] = data.route; cache.matches = {}; finishList = null;
+      const finish = data.route.steps.findIndex((step) => step.targetId === list.targetId && step.stream === list.stream && step.intent === "finish");
+      inspected = finish >= 0 ? finish : nextCurrent(data.route, list.stream);
+      persist(); renderResults();
+      setStatus(pl("Finish changed. The route still takes {n} rolls.", { n: data.route.total }));
+    });
+    renderResults();
   }
   function schedulePointer() {
     if (pointerFrame !== null) cancelAnimationFrame(pointerFrame);
@@ -450,6 +506,8 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const action = button?.dataset.plAction;
     if (action === "state") openState();
     else if (action === "export") exportPlan();
+    else if (action === "finishes") showFinishes();
+    else if (action === "close-finishes") { finishList = null; renderGuide(); }
     else if (action === "import") q("#pl-import-file").click();
     else if (action === "add") openAddForm();
     else if (action === "cancel-add") q("#pl-add-form").hidden = true;
@@ -465,9 +523,11 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       invalidate(); renderWeapons();
     } else if (action === "add-pair") q(`[data-pairs="${button.dataset.tier}"]`).insertAdjacentHTML("beforeend", comboRow());
     else if (action === "remove-pair") button.closest(".pl-combo").remove();
-    else if (action === "cancel") { stopWorker(); persist(); renderResults(); setStatus(pl("Search cancelled. Any completed route remains available.")); }
+    else if (action === "cancel") { stopWorker(); if (finishList?.loading) finishList = null; persist(); renderResults(); setStatus(pl("Search cancelled. Any completed route remains available.")); }
     else if (action === "done") markDone();
     else if (action === "current") { inspected = nextCurrent(route(), route().steps[inspected]?.stream); renderResults(); q(`#pl-rows [data-pl-step="${inspected}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
+    const pin = event.target.closest("[data-pl-pin]");
+    if (pin && !pin.disabled) pinFinish(Number(pin.dataset.plPin));
     const alternative = event.target.closest("[data-pl-alt]");
     const r = route();
     if (alternative && r?.alternatives && totalDone() === 0 && Number(alternative.dataset.plAlt) > 0) {

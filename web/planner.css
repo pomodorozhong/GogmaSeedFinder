@@ -32,6 +32,16 @@
 .pl-state-strip code { color: #ebe4ce; font-size: 12px; overflow-wrap: anywhere; }
 .pl-state-strip button { margin-left: auto; }
 .pl-transfer { display: flex; gap: 14px; }
+.pl-finish-toggle { display: block; margin: 0 0 10px; }
+.pl-finishes { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 7px; background: rgba(255, 255, 255, 0.02); }
+.pl-finishes-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pl-finishes-heading h4 { margin: 0; font-size: 13px; }
+.pl-finish-list { display: grid; gap: 6px; max-height: 320px; overflow-y: auto; margin-top: 8px; }
+.pl-finish-option { display: grid; gap: 4px; width: 100%; padding: 8px 10px; text-align: left; color: inherit; background: #22241e; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; font: inherit; font-size: 12px; }
+.pl-finish-option:hover:not(:disabled) { border-color: var(--gold); }
+.pl-finish-option:disabled { cursor: default; }
+.pl-finish-option.is-current { border-color: var(--pl-teal); }
+.pl-finish-where { color: #ebe4ce; }
 .pl-state-strip .pl-transfer button { margin-left: 0; }
 .pl-section { margin-top: 28px; }
 .pl-section-heading { margin-bottom: 12px; }

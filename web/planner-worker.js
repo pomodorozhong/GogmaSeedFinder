@@ -1,17 +1,25 @@
 import initWasm, { predict_gogma_rolls, predict_gogma_keep_rolls, predict_skill_rolls } from "./pkg/gogma_wasm_search.js";
-import { planWeapons } from "./planner-engine.js";
+import { finishOptions, pinFinish, planWeapons } from "./planner-engine.js";
+
+const providerFor = (origin) => ({
+  reset: (target, offset, count) => predict_gogma_rolls(origin.baseSeed, target.weaponType, target.attributeForce, origin.bonusCounter + offset, 35, count),
+  keep: (target, offset, count, layout) => predict_gogma_keep_rolls(origin.baseSeed, target.weaponType, target.attributeForce, origin.bonusCounter + offset, 35, count, Uint8Array.from(layout)),
+  skills: (target, offset, count) => predict_skill_rolls(origin.baseSeed, target.weaponType, target.attributeForce, origin.skillCounter + offset, 54, count),
+});
 
 self.onmessage = async ({ data }) => {
   try {
     await initWasm();
-    const request = data.request;
-    const provider = {
-      reset: (target, offset, count) => predict_gogma_rolls(request.origin.baseSeed, target.weaponType, target.attributeForce, request.origin.bonusCounter + offset, 35, count),
-      keep: (target, offset, count, layout) => predict_gogma_keep_rolls(request.origin.baseSeed, target.weaponType, target.attributeForce, request.origin.bonusCounter + offset, 35, count, Uint8Array.from(layout)),
-      skills: (target, offset, count) => predict_skill_rolls(request.origin.baseSeed, target.weaponType, target.attributeForce, request.origin.skillCounter + offset, 54, count),
-    };
-    const routes = await planWeapons(request, provider, (progress) => self.postMessage({ type: "progress", ...progress }));
-    self.postMessage({ type: "done", routes });
+    if (data.kind === "finishes") {
+      const result = await finishOptions(data.route, data.stream, data.targetId, providerFor(data.route.origin));
+      self.postMessage({ type: "finishes", ...result });
+    } else if (data.kind === "pin") {
+      self.postMessage({ type: "pinned", route: pinFinish(data.route, data.stream, data.targetId, data.option, providerFor(data.route.origin)) });
+    } else {
+      const request = data.request;
+      const routes = await planWeapons(request, providerFor(request.origin), (progress) => self.postMessage({ type: "progress", ...progress }));
+      self.postMessage({ type: "done", routes });
+    }
   } catch (error) {
     self.postMessage({ type: "error", message: error instanceof Error ? error.message : String(error) });
   }

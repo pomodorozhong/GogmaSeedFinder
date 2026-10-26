@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import { initSync, predict_gogma_rolls, predict_gogma_keep_rolls, predict_skill_rolls } from "./pkg/gogma_wasm_search.js";
 import { availableStats, BONUS_CATEGORY, bonusGoalAlwaysMet, bonusTotals, canFillSlots, copiedPlanner, layoutOf, MAX_SELECTED, rangeCanMatch, matchesTier, normalizedPlanner, normalizedProgress, parsePlannerExport, plannerExport, routePosition, streamSteps, resultQuality, routeWeaponsMatch, skillGoalMatches, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
-import { optimizeStream, planWeapons, selectTargets } from "./planner-engine.js";
+import { finishOptions, optimizeStream, pinFinish, planWeapons, selectTargets } from "./planner-engine.js";
 
 initSync({ module: await readFile(new URL("./pkg/gogma_wasm_search_bg.wasm", import.meta.url)) });
 const target = (id, weaponType = 3, attributeForce = 1) => {
@@ -900,6 +900,37 @@ test("regression fixture: a reported seven-weapon session keeps its free top-des
     const actual = finishes.find((s) => s.targetId === step.target && s.stream === "bonus");
     assert.deepEqual({ target: actual.targetId, action: actual.action, start: actual.start, end: actual.end, quality: actual.rolls.at(-1).quality }, step);
   }
+});
+
+test("other finishes keep the roll count, and a chosen finish survives choosing another weapon's", async () => {
+  const weapons = [target("a"), target("b", 3, 2), target("c", 0, 5)];
+  for (const weapon of weapons) weapon.planner.skillEnabled = false;
+  const req = request(weapons, 120, 0);
+  const api = provider(req);
+  const route = (await planWeapons(req, api)).acceptable;
+  assert.ok(route.complete);
+  const finishOf = (r, id) => r.bonus.choices.find((c) => c.id === id);
+  const listed = await finishOptions(route, "bonus", "b", api);
+  assert.equal(listed.options.filter((o) => o.current).length, 1);
+  assert.ok(listed.options.every((o) => o.choices.every((c) => c.finish <= route.bonus.horizon)));
+  assert.equal(new Set(listed.options.map((o) => JSON.stringify(o.raw))).size, listed.options.length);
+  const option = listed.options.find((o) => !o.current && o.action === "reset");
+  assert.ok(option, "a different Reset finish fits within the horizon");
+  const pinned = pinFinish(route, "bonus", "b", option, api);
+  assert.equal(pinned.total, route.total);
+  assert.equal(finishOf(pinned, "b").finish, option.finish);
+  assert.deepEqual(pinned.steps.filter((s) => s.targetId === "b" && s.intent === "finish").at(-1).rolls.at(-1).raw, option.raw);
+  // Other weapons keep their own finishes unless the option says otherwise.
+  for (const id of ["a", "c"]) if (!option.moves.includes(id)) assert.equal(finishOf(pinned, id).finish, finishOf(route, id).finish);
+  // Weapons finishing top desired stay top desired.
+  for (const id of ["a", "c"]) if (finishOf(route, id).top) assert.ok(finishOf(pinned, id).top);
+  const forC = await finishOptions(pinned, "bonus", "c", api);
+  const other = forC.options.find((o) => !o.current);
+  const again = pinFinish(pinned, "bonus", "c", other, api);
+  assert.equal(again.total, route.total);
+  assert.equal(finishOf(again, "b").finish, option.finish);
+  assert.equal(finishOf(again, "c").finish, other.finish);
+  assert.deepEqual(Object.keys(again.pins.bonus).sort(), ["b", "c"]);
 });
 
 test("a planner export round-trips the position, weapons and progress, and other files are rejected", async () => {

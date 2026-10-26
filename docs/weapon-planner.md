@@ -161,6 +161,22 @@ after a build, the old route is hidden behind a warning, even after a reload,
 so it cannot be mistaken for a current result. Build new guides from the current saved
 state to change a route already in progress. State-code formats are unchanged.
 
+## Choosing another finish
+
+Every result that meets a tier counts the same, so the route takes the earliest
+workable finish and ignores stats outside the goal. A weapon's finish step in
+the guide offers **Other finishes (no extra rolls)**: every result for that
+weapon that still meets the route's goal and keeps that stream's roll count,
+top-desired results first, with only the earliest copy of an identical result.
+Choosing one rebuilds the route with that finish locked. Other weapons keep
+their finishes when possible; otherwise the option names the weapons whose
+finish changes. A weapon finishing top desired stays top desired, and a finish
+already chosen for another weapon is kept. The other stream, the
+total and the minimum proof do not change. Finishes can be changed only before
+any step in that stream is saved; building new guides discards the choices.
+Each option is searched separately, and options cut off by the search budget
+are reported as not checked.
+
 ## Moving a plan to another computer
 
 **Export plan** in the saved-position strip downloads a JSON file
