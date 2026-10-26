@@ -1,5 +1,5 @@
 import initWasm, { predict_gogma_rolls, predict_gogma_keep_rolls, predict_skill_rolls } from "./pkg/gogma_wasm_search.js";
-import { finishOptions, pinFinish, planWeapons } from "./planner-engine.js";
+import { finishOptions, pinFinish, planWeapons, recalcWithFinish } from "./planner-engine.js";
 
 const providerFor = (origin) => ({
   reset: (target, offset, count) => predict_gogma_rolls(origin.baseSeed, target.weaponType, target.attributeForce, origin.bonusCounter + offset, 35, count),
@@ -13,6 +13,8 @@ self.onmessage = async ({ data }) => {
     if (data.kind === "finishes") {
       const result = await finishOptions(data.route, data.stream, data.targetId, providerFor(data.route.origin));
       self.postMessage({ type: "finishes", ...result });
+    } else if (data.kind === "recalc") {
+      self.postMessage({ type: "recalculated", route: await recalcWithFinish(data.route, data.stream, data.targetId, data.option, providerFor(data.route.origin)) });
     } else if (data.kind === "pin") {
       self.postMessage({ type: "pinned", route: pinFinish(data.route, data.stream, data.targetId, data.option, providerFor(data.route.origin)) });
     } else {

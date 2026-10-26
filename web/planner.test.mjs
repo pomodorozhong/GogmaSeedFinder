@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import { initSync, predict_gogma_rolls, predict_gogma_keep_rolls, predict_skill_rolls } from "./pkg/gogma_wasm_search.js";
 import { availableStats, BONUS_CATEGORY, DEFAULT_FINISH_SORT, goalFinishSort, sortFinishOptions, bonusGoalAlwaysMet, bonusTotals, canFillSlots, copiedPlanner, layoutOf, MAX_SELECTED, rangeCanMatch, matchesTier, normalizedFinishSort, normalizedPlanner, normalizedProgress, parsePlannerExport, plannerExport, routePosition, streamSteps, resultQuality, routeWeaponsMatch, skillGoalMatches, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
-import { finishOptions, optimizeStream, pinFinish, planWeapons, selectTargets } from "./planner-engine.js";
+import { finishOptions, optimizeStream, pinFinish, planWeapons, recalcWithFinish, selectTargets } from "./planner-engine.js";
 
 initSync({ module: await readFile(new URL("./pkg/gogma_wasm_search_bg.wasm", import.meta.url)) });
 const target = (id, weaponType = 3, attributeForce = 1) => {
@@ -912,9 +912,9 @@ test("other finishes keep the roll count, and a chosen finish survives choosing 
   const finishOf = (r, id) => r.bonus.choices.find((c) => c.id === id);
   const listed = await finishOptions(route, "bonus", "b", api);
   assert.equal(listed.options.filter((o) => o.current).length, 1);
-  assert.ok(listed.options.every((o) => o.choices.every((c) => c.finish <= route.bonus.horizon)));
+  assert.ok(listed.options.filter((o) => o.fits).every((o) => o.choices.every((c) => c.finish <= route.bonus.horizon)));
   assert.equal(new Set(listed.options.map((o) => JSON.stringify(o.raw))).size, listed.options.length);
-  const option = listed.options.find((o) => !o.current && o.action === "reset");
+  const option = listed.options.find((o) => o.fits && !o.current && o.action === "reset");
   assert.ok(option, "a different Reset finish fits within the horizon");
   const pinned = pinFinish(route, "bonus", "b", option, api);
   assert.equal(pinned.total, route.total);
@@ -925,12 +925,37 @@ test("other finishes keep the roll count, and a chosen finish survives choosing 
   // Weapons finishing top desired stay top desired.
   for (const id of ["a", "c"]) if (finishOf(route, id).top) assert.ok(finishOf(pinned, id).top);
   const forC = await finishOptions(pinned, "bonus", "c", api);
-  const other = forC.options.find((o) => !o.current);
+  const other = forC.options.find((o) => o.fits && !o.current);
   const again = pinFinish(pinned, "bonus", "c", other, api);
   assert.equal(again.total, route.total);
   assert.equal(finishOf(again, "b").finish, option.finish);
   assert.equal(finishOf(again, "c").finish, other.finish);
   assert.deepEqual(Object.keys(again.pins.bonus).sort(), ["b", "c"]);
+});
+
+test("a finish that collides is listed, and choosing it recalculates the stream around it", async () => {
+  const weapons = [target("a"), target("b", 3, 2), target("c", 0, 5)];
+  for (const weapon of weapons) weapon.planner.skillEnabled = false;
+  const req = request(weapons, 120, 0);
+  const api = provider(req);
+  const route = (await planWeapons(req, api)).acceptable;
+  const finishOf = (r, id) => r.bonus.choices.find((c) => c.id === id);
+  // Lock c first, then force b onto the roll a finishes on.
+  const forC = await finishOptions(route, "bonus", "c", api);
+  const pinned = pinFinish(route, "bonus", "c", forC.options.find((o) => o.fits && !o.current), api);
+  const listed = await finishOptions(pinned, "bonus", "b", api);
+  const clash = listed.options.find((o) => !o.fits && o.collides.includes("a"));
+  assert.ok(clash, "a finish on a's roll is listed as a collision");
+  assert.equal(clash.choices, null);
+  const recalculated = await recalcWithFinish(pinned, "bonus", "b", clash, api);
+  assert.equal(finishOf(recalculated, "b").finish, clash.finish);
+  assert.notEqual(finishOf(recalculated, "a").finish, clash.finish);
+  assert.ok(recalculated.total >= route.total);
+  assert.equal(recalculated.proven, recalculated.bonus.horizon === route.bonus.horizon && route.proven);
+  assert.equal(recalculated.pins.bonus.b, clash.key);
+  // c's earlier choice is kept when it still fits, and reported if released.
+  if (recalculated.released.includes("c")) assert.equal(recalculated.pins.bonus.c, undefined);
+  else assert.equal(finishOf(recalculated, "c").finish, finishOf(pinned, "c").finish);
 });
 
 test("other finishes sort by several levels in order, falling back to the earliest roll", () => {

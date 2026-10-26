@@ -42,6 +42,11 @@
 .pl-finish-option:disabled { cursor: default; }
 .pl-finish-option.is-current { border-color: var(--pl-teal); }
 .pl-finish-where { color: #ebe4ce; }
+.pl-finish-option.is-moves { border-color: #c98a2e; border-left-width: 3px; }
+.pl-finish-option.is-collision { border-color: #c2524a; border-style: dashed; border-left: 3px solid #c2524a; }
+.pl-collision-note { font-size: 11px; line-height: 1.4; }
+.pl-finish-option.is-moves .pl-collision-note { color: #e3a94f; }
+.pl-finish-option.is-collision .pl-collision-note { color: #ec7b72; }
 .pl-sort { position: relative; margin-top: 8px; }
 .pl-sort-row { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
 .pl-sort-chip { display: inline-flex; flex: none; align-items: center; height: 26px; border: 1px solid var(--gold); border-radius: 999px; background: rgba(240, 210, 124, 0.08); }

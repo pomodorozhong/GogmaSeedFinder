@@ -250,11 +250,15 @@ function lockedTargets(pool, solution, pins = {}) {
   }));
 }
 
-// Every finish for one weapon that keeps the stream's roll count, each with
-// the full schedule that makes room for it. Other weapons keep their own
-// finishes when possible; `moves` names any that must change. Only the earliest copy of an
-// identical result is listed, apart from the current finish. The search is per
-// finish, so a budget-limited finish is reported as unchecked, not impossible.
+// Every finish for one weapon within the stream's roll count. A finish that
+// fits carries the full schedule that makes room for it: other weapons keep
+// their own finishes when possible, and `moves` names any that must change.
+// A finish that does not fit the current route (it overlaps another weapon's
+// finish, a chosen finish, or a top-desired finish) is still listed with
+// `fits: false`; `collides` names weapons using its roll, and choosing it
+// recalculates the whole stream (see recalcWithFinish). Identical results are
+// listed once, preferring a copy that fits. The search is per finish, so a
+// budget-limited finish is reported as unchecked, not impossible.
 export async function finishOptions(route, stream, targetId, provider, options = {}) {
   const request = { origin: route.origin, targets: route.targets, limits: route.limits };
   const solution = route[stream];
@@ -265,9 +269,14 @@ export async function finishOptions(route, stream, targetId, provider, options =
   const keys = new Map(solution.choices.map((choice) => [choice.id, choiceKey(choice)]));
   const currentKey = keys.get(targetId);
   const unchanged = locked.map((v) => ({ ...v, choices: v.choices.filter((choice) => choiceKey(choice) === keys.get(v.id)) }));
+  const users = new Map();
+  for (const choice of solution.choices) {
+    if (choice.id === targetId) continue;
+    for (const position of [choice.finish, choice.acquire]) if (position) users.set(position, choice.id);
+  }
   const own = pool.find((v) => v.id === targetId).choices.filter((choice) => choice.finish <= solution.horizon);
   const found = [];
-  const results = new Set();
+  const byResult = new Map();
   let unchecked = 0;
   for (let i = 0; i < own.length; i += 1) {
     const choice = own[i];
@@ -275,29 +284,70 @@ export async function finishOptions(route, stream, targetId, provider, options =
       : stream === "skill" ? provider.skills(target, choice.finish - 1, 1)[0]
         : Array.from(choice.action === "keep" ? provider.keep(target, choice.finish - 1, 1, choice.layout) : provider.reset(target, choice.finish - 1, 1));
     const current = choiceKey(choice) === currentKey;
-    if (!current && results.has(JSON.stringify(raw))) continue;
+    const result = JSON.stringify(raw);
+    const earlier = current ? undefined : byResult.get(result);
+    if (earlier !== undefined && found[earlier].fits) continue;
     const attempt = (targets) => eventSchedule(targets.map((v, j) => j === index ? { ...v, choices: [choice] } : v), solution.horizon, schedulingBudget(options));
     let trial = attempt(unchanged);
     if (!trial.choices && !trial.exhausted) trial = attempt(locked);
-    if (trial.exhausted) unchecked += 1;
-    if (!trial.choices) continue;
-    results.add(JSON.stringify(raw));
-    found.push({
+    if (!trial.choices && trial.exhausted) { unchecked += 1; continue; }
+    const fits = Boolean(trial.choices);
+    if (earlier !== undefined && !fits) continue;
+    const entry = {
       key: choiceKey(choice),
       finish: choice.finish,
       action: choice.action,
-      acquire: trial.choices.find((v) => v.id === targetId).acquire ?? null,
+      acquire: fits ? trial.choices.find((v) => v.id === targetId).acquire ?? null : null,
       top: Boolean(choice.top),
       current,
       raw,
       totals: stream === "bonus" && raw ? bonusTotals(raw, target) : null,
-      moves: trial.choices.filter((v) => v.id !== targetId && choiceKey(v) !== keys.get(v.id)).map((v) => v.id),
-      choices: trial.choices.map(({ acquisitions, ...v }) => v),
-    });
+      fits,
+      moves: fits ? trial.choices.filter((v) => v.id !== targetId && choiceKey(v) !== keys.get(v.id)).map((v) => v.id) : [],
+      collides: fits || !users.has(choice.finish) ? [] : [users.get(choice.finish)],
+      choices: fits ? trial.choices.map(({ acquisitions, ...v }) => v) : null,
+    };
+    if (earlier !== undefined) found[earlier] = entry;
+    else { if (!current) byResult.set(result, found.length); found.push(entry); }
     if (i % 20 === 19) await pause();
   }
-  found.sort((a, b) => Number(b.top) - Number(a.top) || a.finish - b.finish);
-  return { options: found, unchecked };
+  // The current finish stands for its result; drop other copies of it.
+  const currentResult = JSON.stringify(found.find((entry) => entry.current)?.raw);
+  const listed = found.filter((entry) => entry.current || JSON.stringify(entry.raw) !== currentResult);
+  listed.sort((a, b) => Number(b.top) - Number(a.top) || a.finish - b.finish);
+  return { options: listed, unchecked };
+}
+
+// Re-plans one stream with a weapon's finish forced to a choice that does not
+// fit the current route. Earlier chosen finishes are kept when they still fit
+// together and released otherwise. The stream may take more rolls, so the
+// minimum is proven only if its roll count is unchanged.
+export async function recalcWithFinish(route, stream, targetId, option, provider, options = {}) {
+  const request = { origin: route.origin, targets: route.targets, limits: route.limits };
+  const pools = (await buildCandidatePools(request, provider, () => {}, { ...options, streams: [stream] }))[route.mode];
+  const scheduled = new Set(route[stream].choices.map((choice) => choice.id));
+  const forced = pools[stream].filter((target) => scheduled.has(target.id)).map((target) => target.id === targetId ? { ...target, choices: target.choices.filter((choice) => choiceKey(choice) === option.key) } : target);
+  const pins = Object.fromEntries(Object.entries(route.pins?.[stream] ?? {}).filter(([id]) => id !== targetId && scheduled.has(id)));
+  const pinned = forced.map((target) => pins[target.id] ? { ...target, choices: target.choices.filter((choice) => choiceKey(choice) === pins[target.id]) } : target);
+  const complete = stream === "bonus" ? pools.complete : true;
+  let solution = await optimizeStream(pinned, request.limits[stream], complete, options);
+  let released = [];
+  if (solution.status !== "complete" && Object.keys(pins).length) {
+    solution = await optimizeStream(forced, request.limits[stream], complete, options);
+    released = Object.keys(pins);
+  }
+  if (solution.status !== "complete") throw new Error("noRecalc");
+  const kept = Object.fromEntries(Object.entries(pins).filter(([id]) => !released.includes(id)));
+  const next = replayRoute(request, route.mode, stream === "bonus" ? solution : route.bonus, stream === "skill" ? solution : route.skill, provider);
+  return {
+    ...next,
+    proven: route.proven && solution.proven && solution.horizon === route[stream].horizon,
+    dropped: route.dropped,
+    alternatives: route.alternatives,
+    alternativesComplete: route.alternativesComplete,
+    pins: { ...route.pins, [stream]: { ...kept, [targetId]: option.key } },
+    released,
+  };
 }
 
 // Rebuilds the route with one weapon's finish chosen from finishOptions. The

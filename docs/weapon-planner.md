@@ -165,26 +165,37 @@ state to change a route already in progress. State-code formats are unchanged.
 
 Every result that meets a tier counts the same, so the route takes the earliest
 workable finish and ignores stats outside the goal. A weapon's finish step in
-the guide offers **Other finishes (no extra rolls)**: every result for that
-weapon that still meets the route's goal and keeps that stream's roll count,
-with only the earliest copy of an identical result. The list's default sort
-follows the weapon's bonus goal: top desired first, then each stat with a
-minimum from high to low (top-desired tier first), then each stat with a
-maximum above 0 from low to high, then roll position. A stat either goal
-excludes (max 0) is left out; skill lists sort by top desired,
+the guide offers **Other finishes**: every result for that weapon within the
+stream's current roll count that still meets the route's goal, with each
+identical result listed once. Each option is marked by how it fits:
+
+- **No marker** — it fits the route as is; no other weapon changes.
+- **Amber (⚠ collides with …)** — it fits at the same roll count, but the named
+  weapons move to other finishes that still meet their goals. Choosing it asks
+  for confirmation.
+- **Red, dashed (⛔ collides with …)** — it does not fit the current route: it
+  needs a roll another weapon finishes on, a finish already chosen for another
+  weapon, or a weapon's top-desired finish. Choosing it warns, then
+  recalculates the whole stream around it. The stream may take more rolls
+  (the route is then labelled best found rather than minimum proven), other
+  weapons may finish differently or lose top-desired results, and earlier
+  chosen finishes are kept if they still fit together and released otherwise.
+
+A fitting choice keeps the roll count, the minimum proof, and every
+top-desired and earlier chosen finish. The other stream never changes.
+Finishes can be changed only before any step in that stream is saved;
+building new guides discards the choices. Each option is searched separately,
+and options cut off by the search budget are reported as not checked.
+
+The list's default sort follows the weapon's bonus goal: top desired first,
+then each stat with a minimum from high to low (top-desired tier first), then
+each stat with a maximum above 0 from low to high, then roll position. A stat
+either goal excludes (max 0) is left out; skill lists sort by top desired,
 then roll position. Sort levels show as chips in one row: **＋ Sort** opens a
 menu of the unused fields (any stat, top desired, "No Reset needed", roll
 position) and adds a chip (before a trailing roll-position chip, which would
 otherwise leave it no effect), clicking a chip reverses its order, and ×
 removes it. A changed sort is remembered for that weapon in this browser.
-Choosing one rebuilds the route with that finish locked. Other weapons keep
-their finishes when possible; otherwise the option names the weapons whose
-finish changes. A weapon finishing top desired stays top desired, and a finish
-already chosen for another weapon is kept. The other stream, the
-total and the minimum proof do not change. Finishes can be changed only before
-any step in that stream is saved; building new guides discards the choices.
-Each option is searched separately, and options cut off by the search budget
-are reported as not checked.
 
 ## Moving a plan to another computer
 

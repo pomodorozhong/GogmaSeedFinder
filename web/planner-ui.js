@@ -364,7 +364,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   const canChooseFinish = (r, step) => step.intent === "finish" && r.complete && !worker && compatible() && cache.completed[step.stream] === 0;
   function finishMarkup(r, step, target) {
     const list = finishList?.route === r && finishList.stream === step.stream && finishList.targetId === step.targetId ? finishList : null;
-    if (!list) return canChooseFinish(r, step) ? `<button type="button" class="text-button pl-finish-toggle" data-pl-action="finishes">${html("Other finishes (no extra rolls)")}</button>` : "";
+    if (!list) return canChooseFinish(r, step) ? `<button type="button" class="text-button pl-finish-toggle" data-pl-action="finishes">${html("Other finishes")}</button>` : "";
     if (list.loading) return `<p class="pl-fine">${html("Checking other finishes for {name}…", { name: nameOf(target) })}</p>`;
     const prefix = step.stream === "bonus" ? "G" : "S";
     const keys = sortKeys(step.stream, target);
@@ -381,11 +381,18 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const items = sortFinishOptions(list.options, levels).map(({ option, index }) => {
       const where = option.finish === 0 ? pl("Already met (no rolls)") : `${prefix}${option.finish} · ${actionName(option.action)}${option.acquire ? ` · ${pl("Reset at {at} first", { at: `${prefix}${option.acquire}` })}` : ""}`;
       const result = option.raw === null ? "" : resultMarkup(option, step, target);
-      return `<button type="button" class="pl-finish-option${option.current ? " is-current" : ""}" data-pl-pin="${index}"${option.current || !canChooseFinish(r, step) ? " disabled" : ""}><span class="pl-finish-where">${option.top ? `<span class="pl-gold">★</span> ` : ""}${esc(where)}${option.current ? ` <span class="pl-badge pl-neutral">${html("Current")}</span>` : ""}</span><span class="pl-finish-result">${result}</span>${option.moves.length ? `<span class="pl-fine">${html("Also changes: {names}", { names: option.moves.map((id) => nameOf(r.targets.find((v) => v.id === id))).join(", ") })}</span>` : ""}</button>`;
+      // Amber: fits, but other weapons move. Red: does not fit the route,
+      // so choosing it recalculates the whole stream.
+      const names = (ids) => ids.map((id) => nameOf(r.targets.find((v) => v.id === id))).join(", ");
+      const state = !option.fits ? " is-collision" : option.moves.length ? " is-moves" : "";
+      const note = !option.fits ? `<span class="pl-collision-note">⛔ ${esc(option.collides.length ? pl("Collides with {names}. Choosing it recalculates the whole route.", { names: names(option.collides) }) : pl("Does not fit the current route. Choosing it recalculates the whole route."))}</span>`
+        : option.moves.length ? `<span class="pl-collision-note">⚠ ${html("Collides with {names}; they move to other finishes.", { names: names(option.moves) })}</span>` : "";
+      return `<button type="button" class="pl-finish-option${option.current ? " is-current" : ""}${state}" data-pl-pin="${index}"${option.current || !canChooseFinish(r, step) ? " disabled" : ""}><span class="pl-finish-where">${option.top ? `<span class="pl-gold">★</span> ` : ""}${esc(where)}${option.current ? ` <span class="pl-badge pl-neutral">${html("Current")}</span>` : ""}</span><span class="pl-finish-result">${result}</span>${note}</button>`;
     }).join("");
-    const others = list.options.filter((option) => !option.current).length;
-    const summary = others ? pl("{n} other finishes keep the route at {rolls} rolls.", { n: others, rolls: r[step.stream].horizon }) : pl("No other finish fits without extra rolls.");
-    return `<section class="pl-finishes"><div class="pl-finishes-heading"><h4>${html("Other finishes (no extra rolls)")}</h4><button type="button" class="text-button" data-pl-action="close-finishes">${html("Close")}</button></div><p class="pl-fine">${esc(summary)}${list.unchecked ? ` ${esc(pl("{n} finishes were not checked: search limit reached.", { n: list.unchecked }))}` : ""}</p>${sorter}<div class="pl-finish-list">${items}</div></section>`;
+    const others = list.options.filter((option) => option.fits && !option.current).length;
+    const collisions = list.options.filter((option) => !option.fits).length;
+    const summary = [others ? pl("{n} other finishes keep the route at {rolls} rolls.", { n: others, rolls: r[step.stream].horizon }) : pl("No other finish fits without extra rolls."), collisions ? pl("{n} more collide with the current route and need a full recalculation.", { n: collisions }) : ""].filter(Boolean).join(" ");
+    return `<section class="pl-finishes"><div class="pl-finishes-heading"><h4>${html("Other finishes")}</h4><button type="button" class="text-button" data-pl-action="close-finishes">${html("Close")}</button></div><p class="pl-fine">${esc(summary)}${list.unchecked ? ` ${esc(pl("{n} finishes were not checked: search limit reached.", { n: list.unchecked }))}` : ""}</p>${sorter}<div class="pl-finish-list">${items}</div></section>`;
   }
   const finishSortFor = (stream, target) => cache.finishSort[`${stream}:${target.id}`] ?? goalFinishSort(target, stream);
   const sortKeys = (stream, target) => stream === "bonus" ? FINISH_SORT_KEYS.filter((key) => !["top", "direct", "finish"].includes(key) ? availableStats(target).includes(key) : true) : ["top", "finish"];
@@ -445,13 +452,25 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   function pinFinish(index) {
     const r = route(); const list = finishList; const option = list?.options?.[index];
     if (!option || option.current || list.route !== r || worker || !compatible() || cache.completed[list.stream] !== 0) return;
-    helperWorker({ kind: "pin", route: r, stream: list.stream, targetId: list.targetId, option }, (data) => {
+    const names = (ids) => ids.map((id) => nameOf(r.targets.find((v) => v.id === id))).join(", ");
+    const streamName = pl(list.stream === "bonus" ? "Bonus rolls" : "Skill rolls");
+    if (!option.fits && !window.confirm(pl("This finish collides with the current route. The whole {stream} route will be recalculated around it: it may take more rolls, other weapons may finish differently or lose top-desired results, and earlier chosen finishes that no longer fit will be released. Continue?", { stream: streamName }))) return;
+    if (option.fits && option.moves.length && !window.confirm(pl("This finish collides with {names}. They will move to other finishes that still meet their goals, and the route keeps {rolls} rolls. Continue?", { names: names(option.moves), rolls: r.total }))) return;
+    const done = (data) => {
       cache.routes[cache.mode] = data.route; cache.matches = {}; finishList = null;
       const finish = data.route.steps.findIndex((step) => step.targetId === list.targetId && step.stream === list.stream && step.intent === "finish");
       inspected = finish >= 0 ? finish : nextCurrent(data.route, list.stream);
       persist(); renderResults();
-      setStatus(pl("Finish changed. The route still takes {n} rolls.", { n: data.route.total }));
-    });
+    };
+    if (option.fits) helperWorker({ kind: "pin", route: r, stream: list.stream, targetId: list.targetId, option }, (data) => { done(data); setStatus(pl("Finish changed. The route still takes {n} rolls.", { n: data.route.total })); });
+    else {
+      helperWorker({ kind: "recalc", route: r, stream: list.stream, targetId: list.targetId, option }, (data) => {
+        done(data);
+        const released = data.route.released ?? [];
+        setStatus([pl("Route recalculated around the chosen finish: {n} rolls (was {was}).", { n: data.route.total, was: r.total }), released.length ? pl("Released earlier choices: {names}", { names: names(released) }) : ""].filter(Boolean).join(" "));
+      });
+      setStatus(pl("Recalculating the {stream} route…", { stream: streamName }));
+    }
     renderResults();
   }
   function schedulePointer() {
