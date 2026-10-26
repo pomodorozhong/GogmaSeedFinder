@@ -377,9 +377,9 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       return `<span class="pl-sort-chip"><button type="button" data-pl-action="sort-flip" data-index="${index}" title="${esc(direction)}" aria-label="${html("Sort level {n}: {name}, {direction}. Click to reverse.", { n: index + 1, name: sortName(level.key), direction })}">${esc(sortName(level.key))} ${level.dir === "desc" ? "↓" : "↑"}</button><button type="button" class="pl-sort-remove" data-pl-action="sort-remove" data-index="${index}" aria-label="${html("Remove sort level {n}", { n: index + 1 })}">×</button></span>`;
     };
     const menu = sortMenuOpen && unused.length ? `<div class="pl-sort-menu" role="menu">${unused.map((key) => `<button type="button" role="menuitem" data-pl-action="sort-pick" data-key="${key}">${esc(sortName(key))}</button>`).join("")}</div>` : "";
-    const sorter = `<div class="pl-sort"><div class="pl-sort-row">${levels.map(chip).join("")}${unused.length ? `<button type="button" class="pl-sort-add" data-pl-action="sort-menu" aria-haspopup="menu" aria-expanded="${sortMenuOpen}">＋ ${html("Sort")}</button>` : ""}</div>${menu}</div>`;
+    const sorter = `<div class="pl-sort"><span class="pl-sort-label">${html("Sort")}</span><div class="pl-sort-row">${levels.map(chip).join("")}${unused.length ? `<button type="button" class="pl-sort-add" data-pl-action="sort-menu" aria-haspopup="menu" aria-expanded="${sortMenuOpen}">＋ ${html("Sort")}</button>` : ""}</div>${menu}</div>`;
     const items = sortFinishOptions(list.options, levels).map(({ option, index }) => {
-      const where = option.finish === 0 ? pl("Already met (no rolls)") : `${prefix}${option.finish} · ${actionName(option.action)}${option.acquire ? ` · ${pl("Reset at {at} first", { at: `${prefix}${option.acquire}` })}` : ""}`;
+      const where = option.finish === 0 ? `<strong>${esc(pl("Already met (no rolls)"))}</strong>` : `<strong class="pl-finish-roll">${prefix}${option.finish}</strong><span class="pl-finish-how">${esc(actionName(option.action))}${option.acquire ? ` · ${esc(pl("Reset at {at} first", { at: `${prefix}${option.acquire}` }))}` : ""}</span>`;
       const result = option.raw === null ? "" : resultMarkup(option, step, target);
       // Amber: fits, but other weapons move. Red: does not fit the route,
       // so choosing it recalculates the whole stream.
@@ -387,7 +387,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       const state = !option.fits ? " is-collision" : option.moves.length ? " is-moves" : "";
       const note = !option.fits ? `<span class="pl-collision-note">⛔ ${esc(option.collides.length ? pl("Collides with {names}. Choosing it recalculates the whole route.", { names: names(option.collides) }) : pl("Does not fit the current route. Choosing it recalculates the whole route."))}</span>`
         : option.moves.length ? `<span class="pl-collision-note">⚠ ${html("Collides with {names}; they move to other finishes.", { names: names(option.moves) })}</span>` : "";
-      return `<button type="button" class="pl-finish-option${option.current ? " is-current" : ""}${state}" data-pl-pin="${index}"${option.current || !canChooseFinish(r, step) ? " disabled" : ""}><span class="pl-finish-where">${option.top ? `<span class="pl-gold">★</span> ` : ""}${esc(where)}${option.current ? ` <span class="pl-badge pl-neutral">${html("Current")}</span>` : ""}</span><span class="pl-finish-result">${result}</span>${note}</button>`;
+      return `<button type="button" class="pl-finish-option${option.current ? " is-current" : ""}${state}" data-pl-pin="${index}"${option.current || !canChooseFinish(r, step) ? " disabled" : ""}><span class="pl-finish-where">${option.top ? `<span class="pl-gold">★</span>` : ""}${where}${option.current ? ` <span class="pl-badge pl-neutral">${html("Current")}</span>` : ""}</span><span class="pl-finish-result">${result}</span>${note}</button>`;
     }).join("");
     const others = list.options.filter((option) => option.fits && !option.current).length;
     const collisions = list.options.filter((option) => !option.fits).length;
