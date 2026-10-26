@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import { initSync, predict_gogma_rolls, predict_gogma_keep_rolls, predict_skill_rolls } from "./pkg/gogma_wasm_search.js";
-import { bonusTotals, canFillSlots, copiedPlanner, layoutOf, MAX_SELECTED, rangeCanMatch, matchesTier, normalizedPlanner, normalizedProgress, routePosition, streamSteps, resultQuality, routeWeaponsMatch, skillGoalMatches, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { availableStats, BONUS_CATEGORY, bonusGoalAlwaysMet, bonusTotals, canFillSlots, copiedPlanner, layoutOf, MAX_SELECTED, rangeCanMatch, matchesTier, normalizedPlanner, normalizedProgress, routePosition, streamSteps, resultQuality, routeWeaponsMatch, skillGoalMatches, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
 import { optimizeStream, planWeapons, selectTargets } from "./planner-engine.js";
 
 initSync({ module: await readFile(new URL("./pkg/gogma_wasm_search_bg.wasm", import.meta.url)) });
@@ -273,6 +273,45 @@ test("an Any skill pair finishes no later than the exact pair it contains", asyn
   assert.equal(any.steps.at(-1).rolls.at(-1).raw % 14, 13);
 });
 
+test("unrestricted skill goals need zero rolls even when current skills are unknown", async () => {
+  const goals = [
+    [{ seriesIndex: null, groupIndex: null }],
+    Array.from({ length: 14 }, (_, groupIndex) => ({ seriesIndex: null, groupIndex })),
+    Array.from({ length: 21 }, (_, seriesIndex) => ({ seriesIndex, groupIndex: null })),
+  ];
+  for (const skills of goals) for (const limit of [0, 5]) {
+    const t = target("any"); t.planner.bonusEnabled = false;
+    t.planner.acceptable.skills = skills; t.planner.preferred.skills = [];
+    const req = request([t], 0, limit);
+    for (const route of Object.values(await planWeapons(req, provider(req)))) {
+      assert.ok(route.complete && route.proven);
+      assert.equal(route.total, 0);
+      assert.deepEqual(route.steps, []);
+      assert.deepEqual(route.final, req.origin);
+    }
+  }
+});
+
+test("an already-guaranteed skill goal still takes a free top-desired upgrade", async () => {
+  const a = target("any"); const b = target("later");
+  const req = request([a, b], 0, 2);
+  const rolls = provider(req).skills(a, 0, 2);
+  assert.notEqual(rolls[0], rolls[1]);
+  const pair = (value) => ({ seriesIndex: Math.floor(value / 14), groupIndex: value % 14 });
+  for (const t of [a, b]) t.planner.bonusEnabled = false;
+  a.planner.acceptable.skills = [{ seriesIndex: null, groupIndex: null }];
+  a.planner.preferred.skills = [pair(rolls[0])];
+  b.planner.acceptable.skills = [pair(rolls[1])]; b.planner.preferred.skills = [];
+  const alone = request([a], 0, 0);
+  const zero = (await planWeapons(alone, provider(alone))).acceptable;
+  assert.ok(zero.complete && zero.proven);
+  assert.equal(zero.total, 0);
+  const route = (await planWeapons(req, provider(req))).acceptable;
+  assert.equal(route.total, 2);
+  assert.ok(route.skill.choices.every((choice) => choice.top));
+  assert.deepEqual(route.skill.choices.map(({ id, finish }) => [id, finish]).sort(), [["any", 1], ["later", 2]]);
+});
+
 test("stat goals are min/max ranges; blank sides are unbounded and max 0 excludes a stat", () => {
   const t = target("range");
   t.planner = normalizedPlanner({ ...t, planner: { acceptable: { stats: { attack: 30 }, maxStats: { sharpness: 30 } }, preferred: { stats: { attack: 36 }, maxStats: { sharpness: 0, ammo: 0 } } } });
@@ -506,10 +545,97 @@ test("a top-desired maximum does not hide the acceptable tier's zero-roll finish
   }
 });
 
+test("physical maximums need zero rolls even when current bonuses are unknown", async () => {
+  for (const [weaponType, attributeForce] of [[3, 1], [11, 4], [12, 0], [3, 6]]) for (const limit of [0, 5]) {
+    const t = target("maximums", weaponType, attributeForce); t.planner.skillEnabled = false;
+    t.planner.elementValues = [20, 35];
+    t.planner.acceptable = { stats: {}, maxStats: Object.fromEntries(availableStats(t).map((key) => [key, statMaximum(key, t)])), skills: [] };
+    t.planner.preferred = { stats: {}, maxStats: {}, skills: [] };
+    const req = request([t], limit, 0);
+    for (const route of Object.values(await planWeapons(req, provider(req)))) {
+      assert.ok(route.complete && route.proven);
+      assert.equal(route.total, 0);
+      assert.deepEqual(route.steps, []);
+      assert.deepEqual(route.final, req.origin);
+    }
+  }
+});
+
+test("known categories prove already-met ranges without inventing their current tiers", async () => {
+  const cases = [
+    { weaponType: 3, attributeForce: 1, layout: [0, 0, 0, 0, 3], stats: { attack: 24 }, maxStats: { affinity: 0 } },
+    { weaponType: 3, attributeForce: 1, layout: [0, 0, 0, 0, 3], stats: { attack: 30 }, maxStats: { attack: 42, affinity: 0 } },
+    { weaponType: 3, attributeForce: 6, layout: [0, 0, 0, 0, 3], stats: { attack: 24 }, maxStats: { element: 0 } },
+    { weaponType: 3, attributeForce: 6, layout: [2, 2, 0, 3, 3], stats: { attack: 6, sharpness: 60 }, maxStats: { affinity: 0, sharpness: 100 } },
+    { weaponType: 12, attributeForce: 0, layout: [3, 0, 3, 1, 1], stats: { ammo: 2, affinity: 12 }, maxStats: { ammo: 4, affinity: 20 } },
+    { weaponType: 3, attributeForce: 1, layout: [2, 2, 2, 2, 0], stats: { element: 300 }, maxStats: { element: 300 } },
+  ];
+  for (const c of cases) for (const limit of [0, 5]) {
+    const t = target("categories", c.weaponType, c.attributeForce); t.planner.skillEnabled = false;
+    t.keepCategories = c.layout;
+    t.planner.acceptable = { stats: c.stats, maxStats: c.maxStats, skills: [] };
+    t.planner.preferred = { stats: {}, maxStats: {}, skills: [] };
+    const req = request([t], limit, 0);
+    for (const route of Object.values(await planWeapons(req, provider(req)))) {
+      assert.ok(route.complete && route.proven, JSON.stringify(c));
+      assert.equal(route.total, 0);
+      assert.deepEqual(route.steps, []);
+      assert.deepEqual(route.final, req.origin);
+      assert.equal(route.targets[0].planner.currentBonuses, null);
+    }
+  }
+});
+
+test("zero-roll proofs cover alternative bonus tiers and reject any attainable gap", async () => {
+  const t = target("alternatives"); t.planner.skillEnabled = false;
+  t.planner.acceptable = { stats: { attack: 27 }, maxStats: {}, skills: [] };
+  t.planner.preferred = { stats: {}, maxStats: { attack: 24 }, skills: [] };
+  assert.ok(bonusGoalAlwaysMet(t, "acceptable"));
+  assert.ok(!bonusGoalAlwaysMet(t, "preferred"));
+  const req = request([t], 0, 0);
+  const route = (await planWeapons(req, provider(req))).acceptable;
+  assert.ok(route.complete && route.proven);
+  assert.equal(route.total, 0);
+  t.planner.preferred.maxStats.attack = 21;
+  assert.ok(!bonusGoalAlwaysMet(t, "acceptable"), "Attack +24 is possible and matches neither tier");
+});
+
+test("uncertain bonus ranges still require a draw", async () => {
+  for (const [layout, stats, maxStats] of [
+    [[null, null, null, null, null], {}, { attack: 47 }],
+    [[0, 0, 0, 0, 3], { attack: 31 }, {}],
+    [[0, 0, 0, 0, 3], {}, { attack: 41 }],
+    [[2, 2, 0, 3, 3], {}, { element: 0 }],
+  ]) {
+    const t = target("uncertain"); t.planner.skillEnabled = false;
+    t.keepCategories = layout;
+    t.planner.acceptable = { stats, maxStats, skills: [] };
+    t.planner.preferred = { stats: {}, maxStats: {}, skills: [] };
+    const req = request([t], 0, 0);
+    const route = (await planWeapons(req, provider(req))).acceptable;
+    assert.equal(route.complete, false);
+    assert.equal(route.bonus.status, "missing");
+  }
+});
+
 // Independent exhaustive action simulation checks the event reduction and
 // minimum proof against every Reset/Keep/weapon choice in short real streams.
+// Test unknown initial tiers separately by trying every ordered five-slot
+// result and applying the existing validity rules, not the planner's proof.
+function currentBonusGoalGuaranteed(t, mode) {
+  if (t.planner.currentBonuses) return matchesTier(bonusTotals(t.planner.currentBonuses, t), t, "bonus", mode);
+  const known = validLayout(t.keepCategories, t);
+  const ids = Object.keys(BONUS_CATEGORY).map(Number);
+  const choices = Array.from({ length: 5 }, (_, i) => ids.filter((id) => !known || BONUS_CATEGORY[id] === t.keepCategories[i]));
+  function allMatch(draw) {
+    if (draw.length === 5) return !validBonuses(draw, t) || matchesTier(bonusTotals(draw, t), t, "bonus", mode);
+    return choices[draw.length].every((id) => allMatch([...draw, id]));
+  }
+  return allMatch([]);
+}
+
 function bruteForceHorizon(req, api, mode) {
-  let states = [{ layouts: req.targets.map((t) => validLayout(t.keepCategories, t) ? t.keepCategories : null), done: req.targets.map((t) => t.planner.currentBonuses ? matchesTier(bonusTotals(t.planner.currentBonuses, t), t, "bonus", mode) : false) }];
+  let states = [{ layouts: req.targets.map((t) => t.planner.currentBonuses ? layoutOf(t.planner.currentBonuses) : validLayout(t.keepCategories, t) ? t.keepCategories : null), done: req.targets.map((t) => currentBonusGoalGuaranteed(t, mode)) }];
   for (let offset = 0; offset <= req.limits.bonus; offset += 1) {
     if (states.some((state) => state.done.every(Boolean))) return offset;
     if (offset === req.limits.bonus) break;

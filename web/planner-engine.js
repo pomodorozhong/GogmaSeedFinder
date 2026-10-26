@@ -1,4 +1,4 @@
-import { bonusGoalAlwaysMet, bonusTotals, hasGoal, layoutOf, matchesTier, rangeCanMatch, resultQuality, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { bonusGoalAlwaysMet, bonusTotals, hasGoal, layoutOf, matchesTier, rangeCanMatch, resultQuality, skillGoalAlwaysMet, validLayout, validatePlannerRequest } from "./planner-model.js";
 
 const MODES = ["acceptable", "preferred"];
 const pause = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -34,11 +34,11 @@ export async function buildCandidatePools(request, provider, report = () => {}, 
       const current = stream === "bonus"
         ? (target.planner.currentBonuses ? bonusTotals(target.planner.currentBonuses, target) : null)
         : target.planner.currentSkill;
-      // Without known current bonuses, a bonus goal is met at zero rolls only
-      // when every weapon would meet it (see bonusGoalAlwaysMet).
+      // An unknown current result still needs no roll when every possible
+      // result meets the goal, including any known bonus categories.
       const met = (mode) => !hasGoal(target, stream) || (current !== null
         ? matchesTier(current, target, stream, mode)
-        : stream === "bonus" && bonusGoalAlwaysMet(target, mode));
+        : stream === "bonus" ? bonusGoalAlwaysMet(target, mode) : skillGoalAlwaysMet(target, mode));
       for (const mode of MODES) {
         if (met(mode)) sets[mode].push({ finish: 0, action: "already", top: mode === "acceptable" && hasGoal(target, stream) && met("preferred") });
       }

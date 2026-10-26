@@ -164,15 +164,44 @@ export function matchesTier(result, target, stream, mode) {
     : skillGoalMatches(result, tier.skills));
 }
 
-// Whether any weapon, whatever its current bonuses, already meets the mode's
-// goal. Only a tier without maximums can be proven this way: an unknown weapon
-// may already exceed a maximum. Each tier is judged on its own, so another
-// tier's maximum cannot hide a zero-roll finish.
+// Prove a zero-roll finish only if every possible current result meets the
+// goal. Goals depend on totals, so enumerate bonus multisets rather than slot
+// orders. Respect exact-ID/category caps and any known category counts; this
+// also handles alternative tiers whose union covers every possible result.
 export function bonusGoalAlwaysMet(target, mode) {
   if (!hasGoal(target, "bonus")) return true;
-  const zero = Object.fromEntries(STAT_KEYS.map((stat) => [stat, 0]));
-  return tiersFor(target, "bonus", mode).some((tier) => hasBonusGoal(tier)
-    && !Object.keys(tier.maxStats ?? {}).length && statGoalMatches(zero, tier.stats));
+  const stats = availableStats(target);
+  const categoryStats = ["attack", "affinity", "element", target.weaponType >= 12 ? "ammo" : "sharpness"];
+  const ids = Object.keys(BONUS_CATEGORY).map(Number).filter((id) => stats.includes(categoryStats[BONUS_CATEGORY[id]]));
+  const limits = validLayout(target.keepCategories, target)
+    ? categoryStats.map((_, category) => target.keepCategories.filter((v) => v === category).length)
+    : categoryStats.map((stat) => CATEGORY_SLOTS[stat]);
+  const used = new Uint8Array(ids.length);
+  const counts = new Uint8Array(categoryStats.length);
+  const bonuses = [];
+  function allMatch(first) {
+    if (bonuses.length === 5) return matchesTier(bonusTotals(bonuses, target), target, "bonus", mode);
+    for (let i = first; i < ids.length; i += 1) {
+      const category = BONUS_CATEGORY[ids[i]];
+      if (used[i] === 2 || counts[category] === limits[category]) continue;
+      used[i] += 1; counts[category] += 1; bonuses.push(ids[i]);
+      const met = allMatch(i);
+      bonuses.pop(); counts[category] -= 1; used[i] -= 1;
+      if (!met) return false;
+    }
+    return true;
+  }
+  return allMatch(0);
+}
+
+// Unknown current skills need no reroll when the goal accepts every pair,
+// whether through Any/Any or several alternatives covering all pairs.
+export function skillGoalAlwaysMet(target, mode) {
+  if (!hasGoal(target, "skill")) return true;
+  for (let index = 0; index < 21 * 14; index += 1) {
+    if (!matchesTier(index, target, "skill", mode)) return false;
+  }
+  return true;
 }
 
 // Whether some result whose totals lie between low and high could meet the

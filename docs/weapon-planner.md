@@ -23,10 +23,10 @@ is unbounded and a minimum of 0 reads as no bound. A maximum of 0 excludes the
 stat, leaving the five slots to the others. A tier may hold only maximums. An
 unknown status value proves neither bound, so a status maximum above 0 needs
 the II/EX values; max 0 does not. Max-0 stats must leave enough categories to
-fill five slots, and a minimum may not exceed its maximum. Without known current
-bonuses, a weapon is never assumed to be under a maximum already; each tier is
-judged on its own, so one tier's maximum does not stop another tier without
-maximums from being met at zero rolls. Keep layouts
+fill five slots, and a minimum may not exceed its maximum. Unknown current
+bonuses need no roll only when every valid result meets the goal. This includes
+maximums at the physical stat limits, ranges guaranteed by known categories,
+and alternative tiers that together accept every possible result. Keep layouts
 are pruned only when no tier choice within the fixed categories could fit the
 range. Saves from an earlier draft that excluded stats load as max 0 in both
 tiers. Each stat row lists the gain of every roll tier and the most five slots
@@ -37,13 +37,16 @@ Each weapon has acceptable and top-desired stat ranges and alternative skill
 pairs. Every specified stat in a tier must lie within its range; any skill pair in a
 tier can match. Each reroll gives one series and one group skill, and a pair
 matches only when both match; either side can be **Any** to accept one skill on
-its own. A top-desired result also satisfies the acceptable route. An
+its own. An **Any series / Any group** goal needs no skill roll, even when the
+current skills are unknown; alternatives covering every pair work the same way.
+A top-desired result also satisfies the acceptable route. An
 empty top-desired tier falls back to the acceptable tier. Disable bonuses or
 skills when that part of a weapon does not need more work.
 
 Known current bonuses can prove a goal is already met. An ordered category
-layout alone can seed Keep Bonuses predictions, but cannot prove current stat
-gains. Unknown layouts require a Reset before Keep. Adopting a row in the
+layout can seed Keep Bonuses predictions and prove ranges that hold for every
+valid choice of tiers, without supplying exact current gains. Unknown layouts
+require a Reset before Keep. Adopting a row in the
 forecast tabs or editing the counters by hand does not change a weapon's current
 bonuses, skill or layout, so update them in the goal editor after rolling outside
 the planner. Status II/EX values must be

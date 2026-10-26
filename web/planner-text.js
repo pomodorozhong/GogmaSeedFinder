@@ -60,7 +60,7 @@ export const PLANNER_TEXT = {
   "Add combination": ["組み合わせを追加", "新增組合"],
   "Remove combination": ["組み合わせを削除", "移除組合"],
   "Current weapon (optional)": ["現在の武器（任意）", "目前武器狀態（選填）"],
-  "Enter all five current bonuses to skip goals already met. An ordered category layout alone allows Keep Bonuses, but cannot prove a goal is already met.": ["現在の5枠をすべて入力すると達成済みの目標を省略できます。種類のみの入力でも同じ構成で再復元できますが、達成済みとは判定しません。", "輸入目前完整的5格加成，可略過已達成的目標。只輸入依序排列的種類也能使用保留加成，但無法判定目標已達成。"],
+  "Enter your current bonuses to check goals already met. Known categories also allow Keep Bonuses and can prove goals met by every possible tier combination.": ["現在のボーナスを入力すると、達成済みの目標を確認できます。種類のみでも同じ構成で再復元でき、どの強化段階の組み合わせでも目標を満たす場合は達成済みと判定できます。", "輸入目前加成可確認已達成的目標。已知種類也可用於保留加成；若所有可能的等級組合都符合目標，即可判定已達成。"],
   "Current bonuses in game order": ["現在のボーナス（ゲーム内の順番）", "目前加成（依遊戲順序）"],
   "Or known categories in game order": ["または現在の種類（ゲーム内の順番）", "或目前已知種類（依遊戲順序）"],
   "Current skills": ["現在のスキル", "目前技能"],
