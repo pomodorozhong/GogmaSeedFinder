@@ -2488,16 +2488,6 @@ async function adoptBonusPosition(completedRolls) {
   if (saveState.baseSeed === null || saveState.bonusCounter === null) return;
   const nextCounter = saveState.bonusCounter + completedRolls;
   if (!isValidCounter(nextCounter)) return;
-  // A comparison-row counter does not identify which physical weapon was
-  // rerolled. Do not retain an unverified "already met" planner result.
-  for (const target of comparisonTargets) {
-    if (target.planner) target.planner.currentBonuses = null;
-    if (bonusPrediction.mode !== "keep") {
-      target.keepCategories = [null, null, null, null, null];
-      target.keepSource = null;
-    }
-  }
-  renderComparisonTargets();
   setStateFromBonus(saveState.baseSeed, nextCounter, "予測結果");
   lastSearchConfig = {
     weaponType: Number(predictionWeaponSelect.value),
@@ -2521,7 +2511,6 @@ async function adoptSkillPosition(completedRolls) {
   if (saveState.baseSeed === null || saveState.skillCounter === null) return;
   const nextCounter = saveState.skillCounter + completedRolls;
   if (!isValidCounter(nextCounter)) return;
-  for (const target of comparisonTargets) if (target.planner) target.planner.currentSkill = null;
   setStateFromSkill(saveState.baseSeed, nextCounter, "予測結果");
   currentSkillObservations = [];
   skillObservedCount = 0;

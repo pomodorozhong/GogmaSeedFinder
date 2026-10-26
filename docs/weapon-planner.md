@@ -43,7 +43,10 @@ skills when that part of a weapon does not need more work.
 
 Known current bonuses can prove a goal is already met. An ordered category
 layout alone can seed Keep Bonuses predictions, but cannot prove current stat
-gains. Unknown layouts require a Reset before Keep. Status II/EX values must be
+gains. Unknown layouts require a Reset before Keep. Adopting a row in the
+forecast tabs or editing the counters by hand does not change a weapon's current
+bonuses, skill or layout, so update them in the goal editor after rolling outside
+the planner. Status II/EX values must be
 entered from the actual weapon before using a status minimum or a status maximum
 above 0; elemental deltas
 are not silently applied to status weapons.
