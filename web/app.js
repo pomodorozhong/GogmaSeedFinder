@@ -465,7 +465,7 @@ syncRuntimeFromSaveState();
 renderSaveState();
 syncArtianAttributeControl();
 renderArtianWeaponVerification();
-setActiveTab(location.hash.slice(1) || "planner", false);
+setActiveTab(location.hash.slice(1) || "guide", false);
 if (selectedCandidate) {
   void Promise.all([refreshPredictions(), refreshComparisonPredictions()]);
 }

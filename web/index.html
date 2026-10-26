@@ -102,7 +102,6 @@
       </section>
 
       <nav class="app-tabs" aria-label="機能を選択">
-        <button type="button" class="tab-button" data-tab="planner" aria-selected="false"><span>✦</span>武器プランナー</button>
         <button type="button" class="tab-button active" data-tab="guide" aria-selected="true"><span>01</span>使い方</button>
         <button type="button" class="tab-button" data-tab="search" aria-selected="false"><span>02</span>seed・復元カウンター検索</button>
         <button type="button" class="tab-button" data-tab="skill-search" aria-selected="false"><span>03</span>スキルカウンター特定</button>
@@ -110,11 +109,8 @@
         <button type="button" class="tab-button" data-tab="skill-future" aria-selected="false"><span>05</span>スキル未来予測</button>
         <button type="button" class="tab-button" data-tab="artian-search" aria-selected="false"><span>06</span>通常アーティアカウンター特定</button>
         <button type="button" class="tab-button" data-tab="artian-future" aria-selected="false"><span>07</span>通常アーティア未来予測</button>
+        <button type="button" class="tab-button" data-tab="planner" aria-selected="false"><span>08</span>武器プランナー</button>
       </nav>
-
-      <div class="tab-view" data-tab-view="planner" hidden>
-        <section id="weapon-planner" class="planner" aria-label="武器プランナー"></section>
-      </div>
 
       <div class="tab-view active" data-tab-view="guide">
         <section class="panel guide-panel" aria-labelledby="guide-title">
@@ -505,6 +501,10 @@
           </section>
 
         </section>
+      </div>
+
+      <div class="tab-view" data-tab-view="planner" hidden>
+        <section id="weapon-planner" class="planner" aria-label="武器プランナー"></section>
       </div>
       <footer class="site-footer">
         <p>不具合や分かりにくい点があれば、<a href="https://github.com/apeshinzo78/GogmaSeedFinder/issues" target="_blank" rel="noreferrer">GitHub Issues</a> でお知らせください。</p>
