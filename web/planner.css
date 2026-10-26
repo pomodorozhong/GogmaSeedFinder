@@ -44,11 +44,11 @@
 .pl-finish-where { color: #ebe4ce; }
 .pl-sort { position: relative; margin-top: 8px; }
 .pl-sort-row { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
-.pl-sort-chip { display: inline-flex; flex: none; align-items: center; border: 1px solid var(--gold); border-radius: 999px; background: rgba(240, 210, 124, 0.08); }
-.pl-sort-chip button { min-height: 0; padding: 3px 4px 3px 10px; color: var(--gold-bright); background: none; border: 0; font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; }
-.pl-sort-chip .pl-sort-remove { padding: 3px 9px 3px 4px; color: var(--muted); }
+.pl-sort-chip { display: inline-flex; flex: none; align-items: center; height: 26px; border: 1px solid var(--gold); border-radius: 999px; background: rgba(240, 210, 124, 0.08); }
+.pl-sort-chip button { height: 100%; min-height: 0; padding: 0 4px 0 10px; line-height: 1; color: var(--gold-bright); background: none; border: 0; font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.pl-sort-chip .pl-sort-remove { padding: 0 9px 0 4px; color: var(--muted); }
 .pl-sort-chip .pl-sort-remove:hover { color: var(--gold-bright); }
-.pl-sort-add { flex: none; min-height: 0; padding: 3px 10px; color: var(--gold-bright); background: none; border: 1px dashed var(--gold); border-radius: 999px; font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.pl-sort .pl-sort-add { display: inline-flex; flex: none; align-items: center; height: 26px; min-height: 0; padding: 0 10px; line-height: 1; color: var(--gold-bright); background: none; border: 1px dashed var(--gold); border-radius: 999px; font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; }
 .pl-sort-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 5; display: grid; min-width: 140px; max-height: 240px; overflow-y: auto; padding: 4px; background: #1c1d18; border: 1px solid var(--line); border-radius: 7px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); }
 .pl-sort-menu button { min-height: 0; padding: 6px 10px; text-align: left; color: #ebe4ce; background: none; border: 0; border-radius: 5px; font: inherit; font-size: 12px; cursor: pointer; }
 .pl-sort-menu button:hover, .pl-sort-menu button:focus-visible { background: rgba(240, 210, 124, 0.12); }
