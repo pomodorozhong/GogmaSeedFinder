@@ -167,11 +167,15 @@ Every result that meets a tier counts the same, so the route takes the earliest
 workable finish and ignores stats outside the goal. A weapon's finish step in
 the guide offers **Other finishes (no extra rolls)**: every result for that
 weapon that still meets the route's goal and keeps that stream's roll count,
-with only the earliest copy of an identical result. The list sorts by
-top-desired first, then roll position. Sort levels show as chips in one row:
-**＋ Sort** opens a menu of the unused fields (any stat, top desired, "No Reset
-needed", roll position) and adds a chip, clicking a chip reverses its order,
-and × removes it. The levels are remembered per stream in this browser.
+with only the earliest copy of an identical result. The list's default sort
+follows the weapon's bonus goal: top desired first, then each stat with a
+minimum from high to low (top-desired tier first), then each stat with a
+maximum from low to high, then roll position; skill lists sort by top desired,
+then roll position. Sort levels show as chips in one row: **＋ Sort** opens a
+menu of the unused fields (any stat, top desired, "No Reset needed", roll
+position) and adds a chip (before a trailing roll-position chip, which would
+otherwise leave it no effect), clicking a chip reverses its order, and ×
+removes it. A changed sort is remembered for that weapon in this browser.
 Choosing one rebuilds the route with that finish locked. Other weapons keep
 their finishes when possible; otherwise the option names the weapons whose
 finish changes. A weapon finishing top desired stays top desired, and a finish

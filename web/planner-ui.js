@@ -1,6 +1,6 @@
 import { t, localizedTargetName } from "./i18n.js";
 import { pl } from "./planner-text.js";
-import { availableStats, BONUS_CATEGORY, FINISH_SORT_KEYS, sortFinishOptions, copiedPlanner, hasBonusGoal, layoutOf, MAX_SELECTED, normalizedFinishSort, normalizedPlanner, normalizedProgress, parsePlannerExport, plannerExport, routePosition, routeWeaponsMatch, samePosition, statMaximum, statRollValues, streamSteps, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { availableStats, BONUS_CATEGORY, FINISH_SORT_KEYS, goalFinishSort, sortFinishOptions, copiedPlanner, hasBonusGoal, layoutOf, MAX_SELECTED, normalizedFinishSort, normalizedPlanner, normalizedProgress, parsePlannerExport, plannerExport, routePosition, routeWeaponsMatch, samePosition, statMaximum, statRollValues, streamSteps, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
 
 const STORAGE_KEY = "gogma-weapon-planner-v1";
 const esc = (text) => String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -21,7 +21,9 @@ function restoredCache(stored, targets) {
     completed: stored?.completed,
     matches: stored?.matches && typeof stored.matches === "object" ? stored.matches : {},
     signature: typeof stored?.signature === "string" ? stored.signature : "",
-    finishSort: { bonus: normalizedFinishSort(stored?.finishSort?.bonus), skill: normalizedFinishSort(stored?.finishSort?.skill) },
+    // Custom finish sorts by "stream:weapon id"; others follow the weapon's goal.
+    finishSort: Object.fromEntries(Object.entries(stored?.finishSort && typeof stored.finishSort === "object" ? stored.finishSort : {})
+      .filter(([key, levels]) => /^(bonus|skill):/.test(key) && Array.isArray(levels)).map(([key, levels]) => [key, normalizedFinishSort(levels)])),
   };
   // Saved data is optional. Ignore an incompatible/corrupt stored route.
   for (const mode of ["acceptable", "preferred"]) {
@@ -366,7 +368,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     if (list.loading) return `<p class="pl-fine">${html("Checking other finishes for {name}…", { name: nameOf(target) })}</p>`;
     const prefix = step.stream === "bonus" ? "G" : "S";
     const keys = sortKeys(step.stream, target);
-    const levels = cache.finishSort[step.stream].filter((level) => keys.includes(level.key));
+    const levels = finishSortFor(step.stream, target).filter((level) => keys.includes(level.key));
     const sortName = (key) => key === "top" ? pl("Top desired") : key === "direct" ? pl("No Reset needed") : key === "finish" ? pl("Roll position") : statName(key, target);
     // One row of sort chips; "+ Sort" opens a menu of the unused fields.
     const unused = keys.filter((key) => !levels.some((level) => level.key === key));
@@ -385,15 +387,22 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const summary = others ? pl("{n} other finishes keep the route at {rolls} rolls.", { n: others, rolls: r[step.stream].horizon }) : pl("No other finish fits without extra rolls.");
     return `<section class="pl-finishes"><div class="pl-finishes-heading"><h4>${html("Other finishes (no extra rolls)")}</h4><button type="button" class="text-button" data-pl-action="close-finishes">${html("Close")}</button></div><p class="pl-fine">${esc(summary)}${list.unchecked ? ` ${esc(pl("{n} finishes were not checked: search limit reached.", { n: list.unchecked }))}` : ""}</p>${sorter}<div class="pl-finish-list">${items}</div></section>`;
   }
+  const finishSortFor = (stream, target) => cache.finishSort[`${stream}:${target.id}`] ?? goalFinishSort(target, stream);
   const sortKeys = (stream, target) => stream === "bonus" ? FINISH_SORT_KEYS.filter((key) => !["top", "direct", "finish"].includes(key) ? availableStats(target).includes(key) : true) : ["top", "finish"];
   // Re-renders the guide without losing the list's scroll position.
   function updateFinishSort(change, toEnd = false) {
     const r = route(); const step = r?.steps[inspected];
     if (!step || !finishList) return;
-    const keys = sortKeys(step.stream, r.targets.find((v) => v.id === step.targetId));
-    const levels = cache.finishSort[step.stream].filter((level) => keys.includes(level.key));
+    const target = r.targets.find((v) => v.id === step.targetId);
+    const keys = sortKeys(step.stream, target);
+    const before = JSON.stringify(finishSortFor(step.stream, target).filter((level) => keys.includes(level.key)));
+    const levels = JSON.parse(before);
     change(levels, keys);
-    cache.finishSort[step.stream] = levels;
+    // A sort matching the goal's default is not stored, so the weapon keeps
+    // following its goal.
+    const key = `${step.stream}:${target.id}`;
+    if (JSON.stringify(levels) === JSON.stringify(goalFinishSort(target, step.stream))) delete cache.finishSort[key];
+    else if (JSON.stringify(levels) !== before) cache.finishSort[key] = levels;
     const scrollTop = q(".pl-finish-list")?.scrollTop ?? 0;
     const scrollLeft = q(".pl-sort-row")?.scrollLeft ?? 0;
     persist(); renderGuide();
@@ -545,7 +554,18 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     else if (action === "finishes") showFinishes();
     else if (action === "close-finishes") { finishList = null; renderGuide(); }
     else if (action === "sort-menu") { sortMenuOpen = !sortMenuOpen; updateFinishSort(() => {}); q(".pl-sort-menu button")?.focus(); }
-    else if (action === "sort-pick") { sortMenuOpen = false; updateFinishSort((levels, keys) => { if (keys.includes(button.dataset.key)) levels.push({ key: button.dataset.key, dir: button.dataset.key === "finish" ? "asc" : "desc" }); }, true); q(".pl-sort-add")?.focus(); }
+    else if (action === "sort-pick") {
+      sortMenuOpen = false;
+      // Roll positions rarely tie, so a level after a trailing roll-position
+      // chip would do nothing; insert it before that chip instead.
+      updateFinishSort((levels, keys) => {
+        const key = button.dataset.key;
+        if (!keys.includes(key)) return;
+        const at = key !== "finish" && levels.at(-1)?.key === "finish" ? levels.length - 1 : levels.length;
+        levels.splice(at, 0, { key, dir: key === "finish" ? "asc" : "desc" });
+      }, true);
+      q(".pl-sort-add")?.focus();
+    }
     else if (action === "sort-flip") updateFinishSort((levels) => { const level = levels[Number(button.dataset.index)]; level.dir = level.dir === "desc" ? "asc" : "desc"; });
     else if (action === "sort-remove") updateFinishSort((levels) => levels.splice(Number(button.dataset.index), 1));
     else if (sortMenuOpen && !event.target.closest(".pl-sort-menu")) { sortMenuOpen = false; updateFinishSort(() => {}); }

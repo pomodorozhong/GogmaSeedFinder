@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import { initSync, predict_gogma_rolls, predict_gogma_keep_rolls, predict_skill_rolls } from "./pkg/gogma_wasm_search.js";
-import { availableStats, BONUS_CATEGORY, DEFAULT_FINISH_SORT, sortFinishOptions, bonusGoalAlwaysMet, bonusTotals, canFillSlots, copiedPlanner, layoutOf, MAX_SELECTED, rangeCanMatch, matchesTier, normalizedFinishSort, normalizedPlanner, normalizedProgress, parsePlannerExport, plannerExport, routePosition, streamSteps, resultQuality, routeWeaponsMatch, skillGoalMatches, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { availableStats, BONUS_CATEGORY, DEFAULT_FINISH_SORT, goalFinishSort, sortFinishOptions, bonusGoalAlwaysMet, bonusTotals, canFillSlots, copiedPlanner, layoutOf, MAX_SELECTED, rangeCanMatch, matchesTier, normalizedFinishSort, normalizedPlanner, normalizedProgress, parsePlannerExport, plannerExport, routePosition, streamSteps, resultQuality, routeWeaponsMatch, skillGoalMatches, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
 import { finishOptions, optimizeStream, pinFinish, planWeapons, selectTargets } from "./planner-engine.js";
 
 initSync({ module: await readFile(new URL("./pkg/gogma_wasm_search_bg.wasm", import.meta.url)) });
@@ -944,6 +944,20 @@ test("other finishes sort by several levels in order, falling back to the earlie
   assert.deepEqual(order([]), [1, 3, 0, 2]);
   assert.deepEqual(normalizedFinishSort([{ key: "attack", dir: "desc" }, { key: "attack", dir: "asc" }, { key: "bogus", dir: "asc" }, { key: "finish", dir: "up" }]), [{ key: "attack", dir: "desc" }]);
   assert.deepEqual(normalizedFinishSort(undefined), DEFAULT_FINISH_SORT);
+});
+
+test("a weapon's default finish sort follows its bonus goal", () => {
+  const sword = target("sword", 0, 5);
+  sword.planner.acceptable = { ...sword.planner.acceptable, stats: { attack: 30, sharpness: 50 }, maxStats: {} };
+  sword.planner.preferred = { ...sword.planner.preferred, stats: { attack: 42, sharpness: 50 }, maxStats: { element: 0 } };
+  assert.deepEqual(goalFinishSort(sword, "bonus"), [{ key: "top", dir: "desc" }, { key: "attack", dir: "desc" }, { key: "sharpness", dir: "desc" }, { key: "element", dir: "asc" }, { key: "finish", dir: "asc" }]);
+  // The top-desired tier's stats come first; a zero minimum is no goal.
+  sword.planner.preferred.stats = { affinity: 20 };
+  sword.planner.acceptable.stats = { attack: 30, element: 0 };
+  assert.deepEqual(goalFinishSort(sword, "bonus").map((level) => level.key), ["top", "affinity", "attack", "element", "finish"]);
+  assert.deepEqual(goalFinishSort(sword, "skill"), DEFAULT_FINISH_SORT);
+  sword.planner.bonusEnabled = false;
+  assert.deepEqual(goalFinishSort(sword, "bonus"), DEFAULT_FINISH_SORT);
 });
 
 test("a planner export round-trips the position, weapons and progress, and other files are rejected", async () => {

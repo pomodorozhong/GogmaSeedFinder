@@ -358,3 +358,17 @@ export function sortFinishOptions(options, levels) {
     return a.option.finish - b.option.finish || a.index - b.index;
   });
 }
+
+// A weapon's default finish sort follows its bonus goal: top desired first,
+// then each stat with a minimum (more is better, top-desired tier first),
+// then each stat with a maximum (less is better), then the earliest roll.
+export function goalFinishSort(target, stream) {
+  if (stream !== "bonus" || !hasGoal(target, "bonus")) return DEFAULT_FINISH_SORT.map((level) => ({ ...level }));
+  const tiers = [target.planner.preferred, target.planner.acceptable];
+  const levels = [{ key: "top", dir: "desc" }];
+  const add = (key, dir) => { if (!levels.some((level) => level.key === key)) levels.push({ key, dir }); };
+  for (const tier of tiers) for (const key of availableStats(target)) if (tier.stats?.[key] > 0) add(key, "desc");
+  for (const tier of tiers) for (const key of availableStats(target)) if (key in (tier.maxStats ?? {})) add(key, "asc");
+  add("finish", "asc");
+  return levels;
+}
