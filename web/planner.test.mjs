@@ -209,6 +209,41 @@ test("a weapon is excluded only when it conflicts in a stream, not because of a 
   assert.deepEqual(selection.dropped.map((v) => `${v.id}:${v.reason}`), ["b:conflict"]);
 });
 
+test("an unreachable required weapon stays selected when its other stream conflicts", async () => {
+  for (const missingStream of ["bonus", "skill"]) for (const order of [["a", "b"], ["b", "a"]]) {
+    const req = { targets: ["a", "b"].map((id) => ({ id, planner: { optional: false } })), limits: { bonus: 1, skill: 1 } };
+    const pool = Object.fromEntries(["bonus", "skill"].map((stream) => [stream, req.targets.map(({ id }) => ({ id, choices: stream === missingStream && id === "b" ? [] : [{ finish: 1, action: stream === "bonus" ? "reset" : "skill" }] }))]));
+    const selection = await selectTargets(req, pool, order);
+    assert.ok(selection.kept.has("b"), `${missingStream}, ${order}`);
+    assert.ok(!selection.dropped.some(({ id }) => id === "b"));
+  }
+});
+
+test("real WASM cannot report completion after excluding an unreachable required goal", async () => {
+  const a = target("a"); const b = target("b");
+  a.planner.bonusEnabled = false;
+  for (const t of [a, b]) {
+    // Both need the only skill position, S1; B cannot reach Attack +48 in G1–2.
+    t.planner.acceptable = { stats: { attack: 48 }, maxStats: {}, skills: [{ seriesIndex: 16, groupIndex: 4 }] };
+    t.planner.preferred = { stats: {}, maxStats: {}, skills: [] };
+  }
+  for (const targets of [[a, b], [b, a]]) {
+    const req = request(targets, 2, 1);
+    for (const route of Object.values(await planWeapons(req, provider(req)))) {
+      assert.equal(route.complete, false);
+      assert.equal(route.total, null);
+      assert.equal(route.bonus.status, "missing");
+      assert.deepEqual(route.bonus.missing, ["b"]);
+      assert.ok(!route.dropped.some(({ id }) => id === "b"));
+    }
+  }
+  b.planner.optional = true;
+  const req = request([a, b], 2, 1);
+  const route = (await planWeapons(req, provider(req))).acceptable;
+  assert.ok(route.complete && route.proven);
+  assert.deepEqual(route.dropped, [{ id: "b", reason: "unreachable", optional: true }]);
+});
+
 test("optional weapons left out because the search budget ran out are marked unchecked, not conflicting", async () => {
   const req = { targets: ["a", "b", "c"].map((id) => ({ id, planner: { optional: id !== "a" } })), limits: { bonus: 10, skill: 10 } };
   // Keep finishes with acquisitions force the budgeted search.

@@ -284,7 +284,8 @@ export async function selectTargets(request, pool, order, options = {}) {
     byId: new Map(pool[stream].map((target) => [target.id, target])),
     budget: { nodes: 0, max: options.maxNodes ?? 200_000, work: 0, maxWork: options.maxWork ?? 300_000_000 },
   }));
-  for (const id of order) if (optional.has(id) && streams.some(({ byId }) => !byId.get(id).choices.length)) dropped.set(id, "unreachable");
+  const unreachable = new Set(order.filter((id) => streams.some(({ byId }) => !byId.get(id).choices.length)));
+  for (const id of order) if (optional.has(id) && unreachable.has(id)) dropped.set(id, "unreachable");
   const kept = [...order.filter((id) => !optional.has(id)), ...order.filter((id) => optional.has(id) && !dropped.has(id))];
   // A stream with an unreachable required weapon is reported as missing, so
   // it cannot exclude anything.
@@ -309,7 +310,10 @@ export async function selectTargets(request, pool, order, options = {}) {
       for (const id of kept.slice(i)) if (optional.has(id)) dropped.set(id, "unchecked"); else fit.push(id);
       break;
     }
-    if (trial) fit.push(kept[i]);
+    // Unreachable optional weapons were removed above. An unreachable
+    // required weapon must survive a conflict in its other stream, so the
+    // final solve still reports the missing goal.
+    if (trial || unreachable.has(kept[i])) fit.push(kept[i]);
     else dropped.set(kept[i], "conflict");
     await pause();
   }
