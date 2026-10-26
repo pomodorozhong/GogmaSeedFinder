@@ -91,8 +91,6 @@ const OFFICIAL_TERMS = {
 
 const UI_TEXT = {
   "武器プランナー": ["Weapon planner", "武器規劃器"],
-  "武器ごとの目標に一致した結果だけ表示": ["Show only matches for each weapon's target combinations", "僅顯示符合各武器目標組合的結果"],
-  "検索範囲内の表示条件に合う行をすべてCSVへ出力します。": ["Export all rows in the search range that meet the display conditions to CSV.", "將搜尋範圍內符合顯示條件的所有列匯出為CSV。"],
   "武器の属性": ["Weapon element", "武器屬性"],
   "内部位置の開始": ["Starting internal position", "內部位置開始值"],
   "内部位置の終了": ["Ending internal position", "內部位置結束值"],
@@ -286,31 +284,6 @@ const UI_TEXT = {
   "最大140件まで登録できます。登録数や表示回数が多いほど、計算と表示に時間がかかります。": ["You can register up to 140 targets. More targets and rolls take longer to calculate and display.", "最多可登錄140個目標。登錄數量與顯示次數越多，計算與顯示所需時間越長。"],
   "登録済みのタグまたは結果表の見出しをドラッグすると、表示順を変更できます。": ["Drag a registered tag or a result-table header to change the display order.", "拖曳已登錄的標籤或結果表標題即可變更顯示順序。"],
   "ドラッグして並び替え": ["Drag to reorder", "拖曳以重新排序"],
-  "狙うスキルの組み合わせ": ["Target Skill Combinations", "目標技能組合"],
-  "組み合わせ": ["Combination", "組合"],
-  "を削除": [" to remove", "刪除"],
-  "のシリーズスキルとグループスキルを選択してください。": [": select the Series and Group Skills.", "的系列與團體技能請選擇。"],
-  "武器ごとに武器種・属性と、狙うシリーズ／グループの組み合わせを設定します。1つの武器に複数の組み合わせを登録すると、いずれかに一致した結果を表示します。": ["Set the weapon type, element, and Series / Group combinations for each weapon. If a weapon has multiple combinations, a match for any one of them is shown.", "請為每把武器設定武器種類、屬性，以及目標系列／團體技能組合。為一把武器登錄多個組合時，符合其中任一組合的結果都會顯示。"],
-  "シリーズスキルとグループスキルが同じ行で一致したとき、その武器を当たりとして扱います。": ["A weapon counts as a hit when its Series and Group Skills match on the same row.", "系列與團體技能在同一列符合時，該武器會被視為命中。"],
-  "武器種別プリセット適用中": ["Weapon preset applied", "已套用武器種類預設"],
-  "プリセットから変更": ["Customised from preset", "已從預設修改"],
-  "手動設定": ["Manual setup", "手動設定"],
-  "＋組み合わせを追加": ["+ Add combination", "+ 新增組合"],
-  "編集をキャンセル": ["Cancel editing", "取消編輯"],
-  "登録内容を更新": ["Update Registered Target", "更新已登錄目標"],
-  "予測範囲": ["Forecast Range", "預測範圍"],
-  "全登録武器で同じスキルカウンター位置から確認します。": ["All registered weapons are checked from the same Skill Counter position.", "所有已登錄武器都會從相同的技能計數器位置開始確認。"],
-  "一致した武器": ["Matching Weapons", "符合的武器"],
-  "件 ×": [" targets ×", "個目標 ×"],
-  "回・全条件一致": [" rolls · all-target matches", "次・全部符合條件"],
-  "一致した": ["Matching ", "符合"],
-  "行（": [" rows (", "列（"],
-  "行": [" rows", "列"],
-  "武器結果）をCSVへ出力します。": [" weapon results) to CSV.", "個武器結果）匯出。"],
-  "一致した行だけを、カウンターと武器ごとのスキル結果として出力します。": ["Export only matching rows with the counter and each matching weapon's skill result.", "僅將符合的列、計數器與各符合武器的技能結果匯出。"],
-  "組み合わせ未設定": ["No combination set", "尚未設定組合"],
-  "編集": ["Edit", "編輯"],
-  "削除": ["Remove", "刪除"],
   "EX数で絞り込む": ["Filter by EX Count", "依EX數量篩選"],
   "いずれかの登録武器が最低EX数を満たす行だけ表示します。": ["Show only rows where at least one registered weapon meets the minimum EX count.", "僅顯示至少一把已登錄武器達到最低EX數量的列。"],
   "最低EX数": ["Minimum EX Count", "最低EX數量"],
@@ -347,10 +320,6 @@ const UI_TEXT = {
   "シリーズの複数選択はORで判定します。同じ条件を強調表示と行の絞り込みに使用します。": ["Multiple Series Skills are combined with OR. The same condition is used for highlighting and row filtering.", "選擇多個系列技能時以OR判定。同一條件用於強調顯示與列篩選。"],
   "グループスキル": ["Group Skill", "團體技能"],
   "シリーズスキル": ["Series Skill", "系列技能"],
-  "シリーズ": ["Series", "系列"],
-  "グループ": ["Group", "團體"],
-  "シリーズ ": ["Series ", "系列 "],
-  "グループ ": ["Group ", "團體 "],
   "カウンター位置": ["Counter Position", "計數器位置"],
   "シリーズ群との条件": ["Combine with Series", "與系列技能的條件"],
   "AND（両方一致）": ["AND (Both Match)", "AND（兩者皆符合）"],
@@ -359,7 +328,6 @@ const UI_TEXT = {
   "条件に合う要素だけ強調表示": ["Highlight Matching Skills", "僅強調符合條件的技能"],
   "1カウンターを1行にし、登録武器ごとにシリーズ・グループの列を追加します。フィルターがONの場合は、条件に合う行をすべて出力します。": ["Exports one counter per row with Series and Group columns for each registered weapon. If filtering is on, all matching rows are exported.", "每個計數器輸出一列，並為每把已登錄武器增加系列與團體欄位。開啟篩選時，會輸出所有符合條件的列。"],
   "スキル結果を採用してセーブした場合は、その行を新しい0地点にできます。復元ボーナスカウンターは維持されます。": ["After accepting and saving a skill result, you can set that row as the new origin. The Bonus Counter is preserved.", "採用技能結果並存檔後，可將該列設為新的0點。復原加成計數器會維持不變。"],
-  "表示された回数までゲーム内で進め、当たりの武器でスキル結果を確認してからセーブしてください。復元ボーナスカウンターは維持されます。": ["Advance in-game to a displayed matching attempt, verify the Skill result on the matching weapon, then save. The Bonus Counter is preserved.", "請在遊戲中前進至顯示的符合次數，使用符合的武器確認技能結果後再存檔。復原加成計數器會維持不變。"],
   "不具合や分かりにくい点があれば、": ["If you find a bug or anything unclear, let us know through ", "若發現錯誤或難以理解之處，請透過"],
   "でお知らせください。": [".", "告知我們。"],
   "選択してください": ["Select an option", "請選擇"],
@@ -464,8 +432,6 @@ const UI_TEXT = {
   "EX厳選する武器の現在5枠構成を入力してください。": ["Enter the current five-slot composition of the weapon being farmed for EX.", "請輸入要嚴選EX武器目前的5格組合。"],
   "指定した構成は表示範囲内にありません。表示回数を増やしてください。": ["The specified composition is not in the displayed range. Increase the number of rolls.", "指定組合不在顯示範圍內，請增加顯示次數。"],
   "指定したグループ・シリーズ条件に合う結果は表示範囲内にありません。表示回数を増やすか条件を変更してください。": ["No result in the displayed range matches the selected Group / Series conditions. Increase the number of rolls or change the conditions.", "顯示範圍內沒有符合指定團體／系列條件的結果。請增加顯示次數或更改條件。"],
-  "指定した組み合わせに一致する結果は表示範囲内にありません。表示回数を増やすか登録内容を変更してください。": ["No result in the displayed range matches the selected combinations. Increase the number of rolls or change the registered targets.", "顯示範圍內沒有符合指定組合的結果。請增加顯示次數或更改已登錄內容。"],
-  "狙うスキルの組み合わせを1つ以上設定してください。": ["Set at least one target skill combination.", "請至少設定一個目標技能組合。"],
   "CSVへ出力できる復元ボーナス未来予測の結果がありません。": ["There are no Bonus Forecast results available for CSV export.", "沒有可匯出CSV的復原加成未來預測結果。"],
   "CSVへ出力できるスキル未来予測の結果がありません。": ["There are no Skill Forecast results available for CSV export.", "沒有可匯出CSV的技能未來預測結果。"],
   "この武器種・属性は登録済みです。EX未厳選の別武器は「ボーナスを同じ構成で再復元」を選んでから登録してください。": ["This weapon type and element are already registered. To add another weapon awaiting EX farming, select Amend (Keep Bonuses) first.", "此武器種類與屬性已登錄。若要加入另一把尚未嚴選EX的武器，請先選擇「保留加成組合並再次復原強化」。"],
@@ -613,8 +579,6 @@ function translateTemplate(source, locale, fallback = source) {
   if ((match = source.match(/^再付与(\d+)のシリーズスキル$/))) return en ? `Reset ${match[1]} Series Skill` : `第${match[1]}次重新附加的系列技能`;
   if ((match = source.match(/^再付与(\d+)のグループスキル$/))) return en ? `Reset ${match[1]} Group Skill` : `第${match[1]}次重新附加的團體技能`;
   if ((match = source.match(/^希望 (\d+)$/))) return en ? `Desired ${match[1]}` : `目標 ${match[1]}`;
-  if ((match = source.match(/^組み合わせ(\d+)を削除$/))) return en ? `Remove combination ${match[1]}` : `刪除組合${match[1]}`;
-  if ((match = source.match(/^組み合わせ(\d+)のシリーズスキルとグループスキルを選択してください。$/))) return en ? `Select the Series and Group Skills for combination ${match[1]}.` : `請選擇組合${match[1]}的系列與團體技能。`;
   if ((match = source.match(/^(\d+)回先$/))) return en ? `${match[1]} rolls ahead` : `${match[1]}次後`;
   if ((match = source.match(/^(\d+)本先$/))) return en ? `${match[1]} weapons ahead` : `${match[1]}把之後`;
   if ((match = source.match(/^([\d,]+)〜([\d,]+) \/ ([\d,]+)件$/))) return en ? `${match[1]}–${match[2]} of ${match[3]}` : `${match[1]}～${match[2]} / 共${match[3]}筆`;
@@ -632,11 +596,6 @@ function translateTemplate(source, locale, fallback = source) {
   if ((match = source.match(/^検索範囲内の([\d,]+)行をCSVへ出力します。$/))) return en ? `Export all ${match[1]} rows in the search range to CSV.` : `將搜尋範圍內的${match[1]}列全部匯出為CSV。`;
   if ((match = source.match(/^EX条件に合う([\d,]+)行をCSVへ出力します。$/))) return en ? `Export all ${match[1]} EX-matching rows to CSV.` : `將符合EX條件的${match[1]}列全部匯出為CSV。`;
   if ((match = source.match(/^条件に合う([\d,]+)行をCSVへ出力します。$/))) return en ? `Export all ${match[1]} matching rows to CSV.` : `將符合條件的${match[1]}列全部匯出為CSV。`;
-  if ((match = source.match(/^現在表示中の([\d,]+)行をCSVへ出力します。$/))) return en ? `Export the ${match[1]} visible rows to CSV.` : `將目前顯示的${match[1]}列匯出為CSV。`;
-  if ((match = source.match(/^EX条件一致で現在表示中の([\d,]+)行をCSVへ出力します。$/))) return en ? `Export the ${match[1]} visible EX-matching rows to CSV.` : `將目前顯示且符合EX條件的${match[1]}列匯出為CSV。`;
-  if ((match = source.match(/^条件一致で現在表示中の([\d,]+)行をCSVへ出力します。$/))) return en ? `Export the ${match[1]} visible matching rows to CSV.` : `將目前顯示且符合條件的${match[1]}列匯出為CSV。`;
-  if ((match = source.match(/^([\d,]+)件 × ([\d,]+)回・全条件一致([\d,]+)行$/))) return en ? `${match[1]} targets × ${match[2]} rolls · ${match[3]} matching rows` : `${match[1]}個目標 × ${match[2]}次・${match[3]}列全部符合條件`;
-  if ((match = source.match(/^一致した([\d,]+)行（([\d,]+)武器結果）をCSVへ出力します。$/))) return en ? `Export ${match[1]} matching rows (${match[2]} weapon results) to CSV.` : `將${match[1]}列符合結果（${match[2]}個武器結果）匯出為CSV。`;
   if ((match = source.match(/^(EX厳選・)?([\d,]+)(条件|武器) × ([\d,]+)回(?:・EX(\d+)個以上 ([\d,]+)行)?$/))) {
     const prefix = match[1] ? en ? "EX farming · " : "EX嚴選・" : "";
     const unit = match[3] === "武器" ? en ? "weapons" : "把武器" : en ? "targets" : "個條件";

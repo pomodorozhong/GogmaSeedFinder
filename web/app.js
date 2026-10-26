@@ -252,6 +252,11 @@ const skillStatus = document.querySelector("#skill-status");
 const skillWeaponSelect = document.querySelector("#skill-weapon-type");
 const skillAttributeSelect = document.querySelector("#skill-attribute-force");
 const skillPredictionCountInput = document.querySelector("#skill-prediction-count");
+const skillHighlightEnabled = document.querySelector("#skill-highlight-enabled");
+const skillFilterEnabled = document.querySelector("#skill-filter-enabled");
+const skillFilterGroupSelect = document.querySelector("#skill-filter-group");
+const skillFilterOperatorSelect = document.querySelector("#skill-filter-operator");
+const skillFilterSeriesOptions = document.querySelector("#skill-filter-series-options");
 const exportSkillCsvButton = document.querySelector("#export-skill-csv");
 const skillExportStatus = document.querySelector("#skill-export-status");
 const skillObservationRows = document.querySelector("#skill-observation-rows");
@@ -294,24 +299,14 @@ const applySkillStateButton = document.querySelector("#apply-skill-state");
 const skillStateMessage = document.querySelector("#skill-state-message");
 const skillStateError = document.querySelector("#skill-state-error");
 const comparisonTargetLabelInput = document.querySelector("#comparison-target-label");
-const skillHighlightEnabled = document.querySelector("#skill-highlight-enabled");
-const skillFilterEnabled = document.querySelector("#skill-filter-enabled");
-const skillFilterGroupSelect = document.querySelector("#skill-filter-group");
-const skillFilterOperatorSelect = document.querySelector("#skill-filter-operator");
-const skillFilterSeriesOptions = document.querySelector("#skill-filter-series-options");
 const skillTargetLabelInput = document.querySelector("#skill-target-label");
 const skillTargetWeaponSelect = document.querySelector("#skill-target-weapon-type");
 const skillTargetAttributeSelect = document.querySelector("#skill-target-attribute-force");
 const addSkillTargetButton = document.querySelector("#add-skill-target");
-const cancelSkillTargetEditButton = document.querySelector("#cancel-skill-target-edit");
-const addSkillCombinationButton = document.querySelector("#add-skill-combination");
 const clearSkillTargetsButton = document.querySelector("#clear-skill-targets");
 const skillTargetList = document.querySelector("#skill-target-list");
 const skillTargetCapacity = document.querySelector("#skill-target-capacity");
 const skillTargetError = document.querySelector("#skill-target-error");
-const skillTargetPreset = document.querySelector("#skill-target-preset");
-const skillTargetCombinations = document.querySelector("#skill-target-combinations");
-const skillTargetsOnly = document.querySelector("#skill-targets-only");
 const bonusFutureKicker = document.querySelector("#bonus-future-kicker");
 const bonusOperationReset = document.querySelector("#bonus-operation-reset");
 const bonusOperationKeep = document.querySelector("#bonus-operation-keep");
@@ -384,7 +379,6 @@ populateSelect(
   LORDS_SOUL_GROUP_INDEX,
 );
 renderSkillFilterSeriesOptions(new Set([11]));
-renderSkillTargetCombinationInputs(defaultSkillCombinationsForWeapon(Number(skillTargetWeaponSelect.value)));
 const persistedAppState = loadPersistedAppState();
 let saveState = persistedAppState.saveState;
 let comparisonTargets = persistedAppState.targets;
@@ -464,7 +458,6 @@ const tablePagers = {
 
 wireTablePagers();
 closeSaveFeedbackButton.addEventListener("click", hideSaveFeedback);
-let editingSkillTargetId = null;
 
 renderComparisonTargets();
 renderBonusOperation();
@@ -684,11 +677,8 @@ comparisonCountInput.addEventListener("change", () => void refreshComparisonPred
 exportBonusCsvButton.addEventListener("click", () => exportVisibleBonusPredictionsCsv());
 
 addSkillTargetButton.addEventListener("click", () => void addSkillTarget());
-cancelSkillTargetEditButton.addEventListener("click", () => cancelSkillTargetEdit());
-addSkillCombinationButton.addEventListener("click", () => addSkillTargetCombination());
 clearSkillTargetsButton.addEventListener("click", () => {
   comparisonTargets = [];
-  cancelSkillTargetEdit();
   comparisonRollSets = [];
   renderComparisonTargets();
   renderComparisonTable();
@@ -744,14 +734,6 @@ skillHighlightEnabled.addEventListener("change", () => renderSkillPredictionTabl
     renderSkillPredictionTable();
   }));
 skillFilterSeriesOptions.addEventListener("change", () => {
-  resetTablePage("skill");
-  renderSkillPredictionTable();
-});
-skillTargetWeaponSelect.addEventListener("change", () => {
-  renderSkillTargetCombinationInputs(defaultSkillCombinationsForWeapon(Number(skillTargetWeaponSelect.value)));
-});
-skillTargetCombinations.addEventListener("change", () => updateSkillTargetPresetStatus());
-skillTargetsOnly.addEventListener("change", () => {
   resetTablePage("skill");
   renderSkillPredictionTable();
 });
@@ -943,140 +925,6 @@ function normalizeSkillCombinations(combinations) {
     normalized.push({ seriesIndex, groupIndex });
     return normalized;
   }, []);
-}
-
-function skillCombinationsEqual(left, right) {
-  const normalizedLeft = normalizeSkillCombinations(left);
-  const normalizedRight = normalizeSkillCombinations(right);
-  return normalizedLeft.length === normalizedRight.length && normalizedLeft.every(
-    (combination, index) =>
-      combination.seriesIndex === normalizedRight[index]?.seriesIndex &&
-      combination.groupIndex === normalizedRight[index]?.groupIndex,
-  );
-}
-
-function createSkillTargetRuleSelect(kind, skills, selectedIndex) {
-  const select = document.createElement("select");
-  const placeholder = document.createElement("option");
-  select.dataset.skillTargetKind = kind;
-  select.setAttribute("aria-label", kind === "series" ? "シリーズスキル" : "グループスキル");
-  placeholder.value = "";
-  placeholder.textContent = kind === "series" ? "シリーズを選択" : "グループを選択";
-  placeholder.selected = selectedIndex === null || selectedIndex === undefined;
-  select.append(placeholder);
-
-  const priority = kind === "series"
-    ? PRIORITY_SERIES_SKILL_INDICES
-    : PRIORITY_GROUP_SKILL_INDICES;
-  for (const [index, label] of prioritizedSkillOptions(skills, priority)) {
-    const option = document.createElement("option");
-    option.value = String(index);
-    option.textContent = label;
-    option.selected = index === selectedIndex;
-    select.append(option);
-  }
-  return select;
-}
-
-function createSkillTargetCombinationRow(value = {}) {
-  const row = document.createElement("div");
-  const number = document.createElement("span");
-  const seriesLabel = document.createElement("label");
-  const seriesText = document.createElement("span");
-  const groupLabel = document.createElement("label");
-  const groupText = document.createElement("span");
-  const removeButton = document.createElement("button");
-  const seriesIndex = Number.isSafeInteger(value.seriesIndex) ? value.seriesIndex : null;
-  const groupIndex = Number.isSafeInteger(value.groupIndex) ? value.groupIndex : null;
-
-  row.className = "skill-target-combination-row";
-  number.className = "skill-combination-number";
-  seriesLabel.className = "skill-combination-field";
-  groupLabel.className = "skill-combination-field";
-  seriesText.textContent = "シリーズスキル";
-  groupText.textContent = "グループスキル";
-  removeButton.type = "button";
-  removeButton.className = "skill-combination-remove text-button";
-  removeButton.textContent = "削除";
-  removeButton.addEventListener("click", () => {
-    const rows = skillTargetCombinations.querySelectorAll(".skill-target-combination-row");
-    if (rows.length <= 1) {
-      row.querySelectorAll("select").forEach((select) => { select.value = ""; });
-    } else {
-      row.remove();
-    }
-    renumberSkillTargetCombinationRows();
-    updateSkillTargetPresetStatus();
-  });
-
-  number.textContent = "1";
-  seriesLabel.append(seriesText, createSkillTargetRuleSelect("series", SERIES_SKILLS, seriesIndex));
-  groupLabel.append(groupText, createSkillTargetRuleSelect("group", GROUP_SKILLS, groupIndex));
-  row.append(number, seriesLabel, document.createTextNode("+"), groupLabel, removeButton);
-  return row;
-}
-
-function renderSkillTargetCombinationInputs(combinations = []) {
-  const values = Array.isArray(combinations) && combinations.length > 0
-    ? combinations
-    : [{ seriesIndex: null, groupIndex: null }];
-  skillTargetCombinations.replaceChildren(...values.map((value) => createSkillTargetCombinationRow(value)));
-  renumberSkillTargetCombinationRows();
-  updateSkillTargetPresetStatus();
-}
-
-function addSkillTargetCombination() {
-  skillTargetCombinations.append(createSkillTargetCombinationRow());
-  renumberSkillTargetCombinationRows();
-  updateSkillTargetPresetStatus();
-}
-
-function renumberSkillTargetCombinationRows() {
-  const rows = [...skillTargetCombinations.querySelectorAll(".skill-target-combination-row")];
-  rows.forEach((row, index) => {
-    row.querySelector(".skill-combination-number").textContent = `${index + 1}`;
-    const removeButton = row.querySelector(".skill-combination-remove");
-    removeButton.disabled = rows.length <= 1;
-    removeButton.setAttribute("aria-label", "組み合わせ" + (index + 1) + "を削除");
-  });
-}
-
-function readSkillTargetCombinations() {
-  const rows = [...skillTargetCombinations.querySelectorAll(".skill-target-combination-row")];
-  if (rows.length === 0) throw new Error("狙うスキルの組み合わせを1つ以上設定してください。");
-
-  return rows.map((row, index) => {
-    const seriesSelect = row.querySelector('[data-skill-target-kind="series"]');
-    const groupSelect = row.querySelector('[data-skill-target-kind="group"]');
-    if (seriesSelect.value === "" || groupSelect.value === "") {
-      throw new Error("組み合わせ" + (index + 1) + "のシリーズスキルとグループスキルを選択してください。");
-    }
-    return {
-      seriesIndex: Number(seriesSelect.value),
-      groupIndex: Number(groupSelect.value),
-    };
-  });
-}
-
-function updateSkillTargetPresetStatus() {
-  const weaponType = Number(skillTargetWeaponSelect.value);
-  const preset = defaultSkillCombinationsForWeapon(weaponType);
-  let current = [];
-  try {
-    current = readSkillTargetCombinations();
-  } catch {
-    // The incomplete row is still useful while the user is editing it.
-  }
-  if (preset.length === 0) {
-    skillTargetPreset.textContent = "手動設定";
-    skillTargetPreset.className = "status-pill";
-  } else if (skillCombinationsEqual(current, preset)) {
-    skillTargetPreset.textContent = "武器種別プリセット適用中";
-    skillTargetPreset.className = "status-pill complete";
-  } else {
-    skillTargetPreset.textContent = "プリセットから変更";
-    skillTargetPreset.className = "status-pill";
-  }
 }
 
 function renderSkillFilterSeriesOptions(selectedIndices = new Set()) {
@@ -2709,57 +2557,19 @@ async function addComparisonTarget() {
 
 async function addSkillTarget() {
   hideSkillTargetError();
-  let skillCombinations;
-  try {
-    skillCombinations = normalizeSkillCombinations(readSkillTargetCombinations());
-  } catch (error) {
-    showSkillTargetError(error instanceof Error ? error.message : String(error));
-    return;
-  }
   const target = {
     weaponType: Number(skillTargetWeaponSelect.value),
     attributeForce: Number(skillTargetAttributeSelect.value),
     label: skillTargetLabelInput.value.trim(),
-    skillCombinations,
   };
-
-  if (editingSkillTargetId) {
-    const existing = comparisonTargets.find((candidate) => candidate.id === editingSkillTargetId);
-    if (!existing) {
-      cancelSkillTargetEdit();
-      return;
-    }
-    if (!validateTargetRegistration(target, showSkillTargetError, false, editingSkillTargetId)) return;
-    Object.assign(existing, target);
-    persistAppState();
-    renderComparisonTargets();
-    cancelSkillTargetEdit();
-  } else {
-    if (!registerTarget(target, showSkillTargetError, false)) return;
-    resetSkillTargetEditor();
-  }
+  if (!registerTarget(target, showSkillTargetError, false)) return;
+  skillTargetLabelInput.value = "";
   await Promise.all([refreshComparisonPredictions(), refreshSkillPredictions()]);
 }
 
 function registerTarget(target, showError, allowDuplicateCombination) {
-  if (!validateTargetRegistration(target, showError, allowDuplicateCombination)) return false;
-  comparisonTargets.push({
-    ...target,
-    id: createTargetId(),
-    skillCombinations: target.skillCombinations ?? defaultSkillCombinationsForWeapon(target.weaponType),
-    keepCategories: [null, null, null, null, null],
-    keepSource: null,
-  });
-  renderComparisonTargets();
-  persistAppState();
-  return true;
-}
-
-function validateTargetRegistration(target, showError, allowDuplicateCombination, ignoreTargetId = null) {
   const duplicateCombination = comparisonTargets.filter(
-    (existing) =>
-      existing.id !== ignoreTargetId &&
-      comparisonCombinationKey(existing) === comparisonCombinationKey(target),
+    (existing) => comparisonCombinationKey(existing) === comparisonCombinationKey(target),
   );
   if (duplicateCombination.length > 0 && !allowDuplicateCombination) {
     showError("この武器種・属性は登録済みです。EX未厳選の別武器は「ボーナスを同じ構成で再復元」を選んでから登録してください。");
@@ -2771,46 +2581,25 @@ function validateTargetRegistration(target, showError, allowDuplicateCombination
   }
   if (
     target.label &&
-    comparisonTargets.some(
-      (existing) =>
-        existing.id !== ignoreTargetId &&
-        existing.label &&
-        existing.label === target.label,
-    )
+    comparisonTargets.some((existing) => existing.label && existing.label === target.label)
   ) {
     showError("同じ表示名が登録済みです。別の名前を入力してください。");
     return false;
   }
-  if (ignoreTargetId === null && comparisonTargets.length >= MAX_REGISTERED_TARGETS) {
+  if (comparisonTargets.length >= MAX_REGISTERED_TARGETS) {
     showError(`予測対象は最大${MAX_REGISTERED_TARGETS}件です。不要な武器を削除してください。`);
     return false;
   }
+  comparisonTargets.push({
+    ...target,
+    id: createTargetId(),
+    skillCombinations: defaultSkillCombinationsForWeapon(target.weaponType),
+    keepCategories: [null, null, null, null, null],
+    keepSource: null,
+  });
+  renderComparisonTargets();
+  persistAppState();
   return true;
-}
-
-function resetSkillTargetEditor() {
-  editingSkillTargetId = null;
-  skillTargetLabelInput.value = "";
-  addSkillTargetButton.textContent = "この組み合わせを登録";
-  cancelSkillTargetEditButton.hidden = true;
-  renderSkillTargetCombinationInputs(defaultSkillCombinationsForWeapon(Number(skillTargetWeaponSelect.value)));
-}
-
-function cancelSkillTargetEdit() {
-  hideSkillTargetError();
-  resetSkillTargetEditor();
-}
-
-function editSkillTarget(target) {
-  hideSkillTargetError();
-  editingSkillTargetId = target.id;
-  skillTargetLabelInput.value = target.label ?? "";
-  skillTargetWeaponSelect.value = String(target.weaponType);
-  skillTargetAttributeSelect.value = String(target.attributeForce);
-  addSkillTargetButton.textContent = "登録内容を更新";
-  cancelSkillTargetEditButton.hidden = false;
-  renderSkillTargetCombinationInputs(target.skillCombinations);
-  skillTargetLabelInput.focus();
 }
 
 function comparisonTargetKey(target) {
@@ -3070,19 +2859,6 @@ function predictionCsvTargetName(target) {
   return `${comparisonTargetName(target)} (${t(weapon)} / ${t(attribute)})`;
 }
 
-function skillCombinationLabel(combination) {
-  const series = SERIES_SKILLS[combination.seriesIndex] ?? "シリーズ " + combination.seriesIndex;
-  const group = GROUP_SKILLS[combination.groupIndex] ?? "グループ " + combination.groupIndex;
-  return `${t(series)} + ${t(group)}`;
-}
-
-function skillTargetCombinationSummary(target) {
-  const combinations = normalizeSkillCombinations(target.skillCombinations);
-  return combinations.length > 0
-    ? combinations.map(skillCombinationLabel).join(" / ")
-    : "組み合わせ未設定";
-}
-
 function downloadCsv(filename, headers, rows) {
   const escapeCell = (value) => `"${String(value).replace(/"/g, '""')}"`;
   const csv = [headers, ...rows]
@@ -3100,16 +2876,7 @@ function downloadCsv(filename, headers, rows) {
 }
 
 function renderComparisonTargets() {
-  const removeTarget = (target) => {
-    comparisonTargets = comparisonTargets.filter(
-      (candidate) => comparisonTargetKey(candidate) !== comparisonTargetKey(target),
-    );
-    if (editingSkillTargetId === target.id) cancelSkillTargetEdit();
-    renderComparisonTargets();
-    persistAppState();
-    void Promise.all([refreshComparisonPredictions(), refreshSkillPredictions()]);
-  };
-  const createItems = (targets) => targets.map((target) => {
+  const createItems = (targets, groupByCombination) => targets.map((target) => {
       const item = document.createElement("span");
       const handle = document.createElement("span");
       const text = document.createElement("span");
@@ -3120,47 +2887,24 @@ function renderComparisonTargets() {
       removeButton.className = "comparison-target-remove";
       removeButton.textContent = "×";
       removeButton.setAttribute("aria-label", t(`${comparisonTargetName(target)}を比較対象から削除`));
-      removeButton.addEventListener("click", () => removeTarget(target));
+      removeButton.addEventListener("click", () => {
+        comparisonTargets = comparisonTargets.filter(
+          (candidate) => comparisonTargetKey(candidate) !== comparisonTargetKey(target),
+        );
+        renderComparisonTargets();
+        persistAppState();
+        void Promise.all([refreshComparisonPredictions(), refreshSkillPredictions()]);
+      });
       item.append(handle, text, removeButton);
-      makeTargetReorderable(item, handle, target, targets, false);
+      makeTargetReorderable(item, handle, target, targets, groupByCombination);
       return item;
     });
-  const createSkillItems = (targets) => targets.map((target) => {
-    const item = document.createElement("article");
-    const heading = document.createElement("div");
-    const name = document.createElement("strong");
-    const actions = document.createElement("div");
-    const editButton = document.createElement("button");
-    const removeButton = document.createElement("button");
-    const combinations = document.createElement("p");
-
-    item.className = "skill-target-card";
-    heading.className = "skill-target-card-heading";
-    actions.className = "skill-target-card-actions";
-    name.textContent = comparisonTargetName(target);
-    editButton.type = "button";
-    editButton.className = "text-button";
-    editButton.textContent = "編集";
-    editButton.addEventListener("click", () => editSkillTarget(target));
-    removeButton.type = "button";
-    removeButton.className = "skill-target-remove";
-    removeButton.textContent = "×";
-    removeButton.setAttribute("aria-label", t(`${comparisonTargetName(target)}を比較対象から削除`));
-    removeButton.addEventListener("click", () => removeTarget(target));
-    combinations.className = "skill-target-card-combinations";
-    combinations.textContent = skillTargetCombinationSummary(target);
-    actions.append(editButton, removeButton);
-    heading.append(name, actions);
-    item.append(heading, combinations);
-    const handle = document.createElement("span");
-    heading.prepend(handle);
-    makeTargetReorderable(item, handle, target, targets, true);
-    return item;
-  });
-  comparisonTargetList.replaceChildren(...createItems(comparisonTargets));
-  skillTargetList.replaceChildren(...createSkillItems(uniqueTargetsByCombination()));
+  comparisonTargetList.replaceChildren(...createItems(comparisonTargets, false));
+  skillTargetList.replaceChildren(...createItems(uniqueTargetsByCombination(), true));
   const capacityText = `${comparisonTargets.length.toLocaleString("ja-JP")}/${MAX_REGISTERED_TARGETS.toLocaleString("ja-JP")}件`;
-  const capacityClass = comparisonTargets.length > LARGE_REGISTERED_TARGET_COUNT ? "status-pill running" : "status-pill";
+  const capacityClass = comparisonTargets.length > LARGE_REGISTERED_TARGET_COUNT
+    ? "status-pill running"
+    : "status-pill";
   comparisonTargetCapacity.textContent = capacityText;
   comparisonTargetCapacity.className = capacityClass;
   skillTargetCapacity.textContent = capacityText;
@@ -3592,21 +3336,6 @@ function readSkillPredictionCount() {
   return value;
 }
 
-function skillRollMatchesTarget(target, roll) {
-  return normalizeSkillCombinations(target.skillCombinations).some(
-    (combination) =>
-      combination.seriesIndex === roll.seriesIndex &&
-      combination.groupIndex === roll.groupIndex,
-  );
-}
-
-function matchingSkillTargetsAtIndex(index, filter = selectedSkillFilter()) {
-  return skillPredictionRollSets.filter((target) => {
-    const roll = skillRollAt(target, index);
-    return skillRollMatchesTarget(target, roll) && (!filter.enabled || skillRollMatchesFilter(roll, filter));
-  });
-}
-
 function selectedSkillFilter() {
   return {
     enabled: skillFilterEnabled.checked,
@@ -3647,25 +3376,24 @@ function skillPredictionVisibility(filter = selectedSkillFilter()) {
 
   const count = skillPredictionRollSets[0].rolls.length;
   const allIndices = Array.from({ length: count }, (_, index) => index);
-  const rowMatchesFilter = (index) => skillTargetsOnly.checked
-    ? matchingSkillTargetsAtIndex(index, filter).length > 0
-    : skillPredictionRollSets.some((target) => skillTableIndexMatchesFilter(target.rolls[index], filter));
+  const rowMatchesFilter = (index) => skillPredictionRollSets.some((target) =>
+    skillTableIndexMatchesFilter(target.rolls[index], filter)
+  );
   const matchingIndices = allIndices.filter(rowMatchesFilter);
   return {
     count,
     matchingRowCount: matchingIndices.length,
-    visibleIndices: filter.enabled || skillTargetsOnly.checked ? matchingIndices : allIndices,
+    visibleIndices: filter.enabled ? matchingIndices : allIndices,
   };
 }
 
 function renderSkillPredictionTable() {
   if (skillPredictionRollSets.length === 0) return;
-  skillTableWrap.querySelector("table").classList.toggle("skill-targets-compact", skillTargetsOnly.checked);
 
   const skillFilter = selectedSkillFilter();
   const highlightEnabled = skillHighlightEnabled.checked;
   const { count, matchingRowCount, visibleIndices } = skillPredictionVisibility(skillFilter);
-  const conditionMatchCount = skillTargetsOnly.checked ? visibleIndices.reduce((total, index) => total + matchingSkillTargetsAtIndex(index, skillFilter).length, 0) : skillPredictionRollSets.reduce((total, target) => {
+  const conditionMatchCount = skillPredictionRollSets.reduce((total, target) => {
     let targetMatches = 0;
     for (const tableIndex of target.rolls) {
       if (skillTableIndexMatchesFilter(tableIndex, skillFilter)) targetMatches += 1;
@@ -3680,7 +3408,7 @@ function renderSkillPredictionTable() {
   skillFutureStatus.className = "status-pill complete";
   skillTableWrap.hidden = false;
   exportSkillCsvButton.disabled = visibleIndices.length === 0;
-  skillExportStatus.textContent = skillFilter.enabled || skillTargetsOnly.checked
+  skillExportStatus.textContent = skillFilter.enabled
     ? `条件に合う${visibleIndices.length.toLocaleString("ja-JP")}行をCSVへ出力します。`
     : `検索範囲内の${visibleIndices.length.toLocaleString("ja-JP")}行をCSVへ出力します。`;
 
@@ -3690,23 +3418,20 @@ function renderSkillPredictionTable() {
   offsetHeader.textContent = "何回先";
   stateHeader.scope = "col";
   stateHeader.textContent = "保存後の状態";
-  const matchesHeader = document.createElement("th");
-  matchesHeader.scope = "col";
-  matchesHeader.textContent = "一致した武器";
   skillPredictionHeaderRow.replaceChildren(
     offsetHeader,
     stateHeader,
-    ...(skillTargetsOnly.checked ? [matchesHeader] : skillPredictionRollSets.map((target) => createReorderableTargetHeader(
+    ...skillPredictionRollSets.map((target) => createReorderableTargetHeader(
       target,
       skillPredictionRollSets,
       true,
-    ))),
+    )),
   );
 
   if (visibleIndices.length === 0) {
     const row = document.createElement("tr");
     const cell = document.createElement("td");
-    cell.colSpan = skillTargetsOnly.checked ? 3 : 2 + skillPredictionRollSets.length;
+    cell.colSpan = 2 + skillPredictionRollSets.length;
     cell.className = "prediction-empty";
     cell.textContent = "指定したグループ・シリーズ条件に合う結果は表示範囲内にありません。表示回数を増やすか条件を変更してください。";
     row.append(cell);
@@ -3728,15 +3453,6 @@ function exportVisibleSkillPredictionsCsv() {
   }
 
   hideSkillTargetError();
-  if (skillTargetsOnly.checked) {
-    const headers = [t("何回先"), t("カウンター位置"), t("一致した武器")];
-    const rows = visibleIndices.map((index) => [index + 1, saveState.skillCounter + index + 1,
-      matchingSkillTargetsAtIndex(index).map((target) => `${predictionCsvTargetName(target)}: ${skillCombinationLabel(skillRollAt(target, index))}`).join(" / "),
-    ]);
-    downloadCsv(`gogma-skill-future-seed-${saveState.baseSeed}-counter-${saveState.skillCounter}.csv`, headers, rows);
-    skillExportStatus.textContent = `${rows.length.toLocaleString("ja-JP")}行・${headers.length.toLocaleString("ja-JP")}列をCSVへ出力しました。`;
-    return;
-  }
   const headers = [
     t("何回先"),
     t("カウンター位置"),
@@ -3773,26 +3489,6 @@ function createSkillPredictionRow(index, skillFilter, highlightEnabled) {
   offsetCell.scope = "row";
   offsetCell.textContent = `${index + 1}回先`;
   row.append(offsetCell, createSavedStateCell("skill", index + 1, null, true));
-
-  if (skillTargetsOnly.checked) {
-    const cell = document.createElement("td");
-    const list = document.createElement("div");
-    list.className = "skill-matching-weapons";
-    for (const target of matchingSkillTargetsAtIndex(index, skillFilter)) {
-      const match = document.createElement("span");
-      const name = document.createElement("strong");
-      const result = document.createElement("span");
-      match.className = "skill-matching-weapon";
-      name.textContent = comparisonTargetName(target);
-      result.className = "skill-matching-result";
-      result.textContent = skillCombinationLabel(skillRollAt(target, index));
-      match.append(name, result);
-      list.append(match);
-    }
-    cell.append(list);
-    row.append(cell);
-    return row;
-  }
 
   for (const target of skillPredictionRollSets) {
     const roll = skillRollAt(target, index);
