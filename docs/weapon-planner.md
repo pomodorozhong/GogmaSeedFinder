@@ -44,10 +44,11 @@ A top-desired result also satisfies the acceptable route. An
 empty top-desired tier falls back to the acceptable tier. Disable bonuses or
 skills when that part of a weapon does not need more work.
 
-Known current bonuses can prove a goal is already met. An ordered category
-layout can seed Keep Bonuses predictions and prove ranges that hold for every
-valid choice of tiers, without supplying exact current gains. Unknown layouts
-require a Reset before Keep. Adopting a row in the
+Known current bonuses can prove a goal is already met. Known categories,
+including partially entered layouts, can prove ranges that hold for every valid
+completion without supplying exact current gains. A complete ordered category
+layout can also seed Keep Bonuses predictions. Incomplete layouts require a
+Reset before Keep. Adopting a row in the
 forecast tabs or editing the counters by hand does not change a weapon's current
 bonuses, skill or layout, so update them in the goal editor after rolling outside
 the planner. Status II/EX values must be entered from the actual weapon before
@@ -157,7 +158,8 @@ Keep-layout pruning, Any skill pairs, ordered layout scheduling, conflicting
 acquisitions, duplicate weapons, optional weapons and alternative routes, free
 top-desired upgrades, zero limits, budget exhaustion, goal preservation, and real
 WASM replay. Regressions cover large candidate merges, uncertain exclusions
-after candidate truncation, and zero Status minimums with unknown gains.
+after candidate truncation, zero Status minimums with unknown gains, and partially
+known layouts.
 Short-stream minimum proofs are also
 compared against independent exhaustive Reset/Keep/weapon action simulation.
 All planner copy has Japanese, English, and Traditional Chinese coverage.

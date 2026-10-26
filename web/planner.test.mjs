@@ -816,6 +816,42 @@ test("known categories prove already-met ranges without inventing their current 
   }
 });
 
+test("partially known categories preserve the proven zero-roll minimum", async () => {
+  const cases = [
+    { layout: [0, null, null, null, null], stats: { attack: 6 }, maxStats: {} },
+    { layout: [null, 1, null, 1, null], stats: { affinity: 12 }, maxStats: { attack: 33 } },
+    { layout: [0, 0, null, 0, 0], stats: { attack: 30 }, maxStats: {} },
+  ];
+  for (const c of cases) for (const limit of [0, 1]) {
+    const t = target("partial"); t.planner.skillEnabled = false;
+    t.keepCategories = c.layout;
+    t.planner.acceptable = { stats: c.stats, maxStats: c.maxStats, skills: [] };
+    t.planner.preferred = { stats: {}, maxStats: {}, skills: [] };
+    const req = request([t], limit, 0);
+    for (const route of Object.values(await planWeapons(req, provider(req)))) {
+      assert.equal(route.bonus.horizon, bruteForceHorizon(req, provider(req), route.mode));
+      assert.ok(route.complete && route.proven);
+      assert.equal(route.total, 0);
+      assert.deepEqual(route.steps, []);
+    }
+  }
+});
+
+test("partial layouts do not prove uncertain goals or invent a Keep action", async () => {
+  const t = target("partial"); t.planner.skillEnabled = false;
+  t.keepCategories = [0, null, null, null, null];
+  t.planner.acceptable = { stats: { attack: 7 }, maxStats: {}, skills: [] };
+  t.planner.preferred = { stats: {}, maxStats: {}, skills: [] };
+  assert.equal(bonusGoalAlwaysMet(t, "acceptable"), false);
+  const req = request([t], 1, 0);
+  for (const route of Object.values(await planWeapons(req, provider(req)))) {
+    assert.equal(route.bonus.horizon, bruteForceHorizon(req, provider(req), route.mode));
+    assert.ok(route.steps.every((step) => step.action !== "keep"));
+  }
+  t.keepCategories = [3, 3, 3, null, null];
+  assert.equal(bonusGoalAlwaysMet(t, "acceptable"), false, "an impossible partial layout cannot prove a goal vacuously");
+});
+
 test("zero-roll proofs cover alternative bonus tiers and reject any attainable gap", async () => {
   const t = target("alternatives"); t.planner.skillEnabled = false;
   t.planner.acceptable = { stats: { attack: 27 }, maxStats: {}, skills: [] };
@@ -854,14 +890,18 @@ test("uncertain bonus ranges still require a draw", async () => {
 // result and applying the existing validity rules, not the planner's proof.
 function currentBonusGoalGuaranteed(t, mode) {
   if (t.planner.currentBonuses) return matchesTier(bonusTotals(t.planner.currentBonuses, t), t, "bonus", mode);
-  const known = validLayout(t.keepCategories, t);
   const ids = Object.keys(BONUS_CATEGORY).map(Number);
-  const choices = Array.from({ length: 5 }, (_, i) => ids.filter((id) => !known || BONUS_CATEGORY[id] === t.keepCategories[i]));
+  const choices = Array.from({ length: 5 }, (_, i) => ids.filter((id) => t.keepCategories?.[i] == null || BONUS_CATEGORY[id] === t.keepCategories[i]));
+  let possible = false;
   function allMatch(draw) {
-    if (draw.length === 5) return !validBonuses(draw, t) || matchesTier(bonusTotals(draw, t), t, "bonus", mode);
+    if (draw.length === 5) {
+      if (!validBonuses(draw, t)) return true;
+      possible = true;
+      return matchesTier(bonusTotals(draw, t), t, "bonus", mode);
+    }
     return choices[draw.length].every((id) => allMatch([...draw, id]));
   }
-  return allMatch([]);
+  return allMatch([]) && possible;
 }
 
 function bruteForceHorizon(req, api, mode) {

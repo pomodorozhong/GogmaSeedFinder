@@ -174,14 +174,22 @@ export function bonusGoalAlwaysMet(target, mode) {
   const stats = availableStats(target);
   const categoryStats = ["attack", "affinity", "element", target.weaponType >= 12 ? "ammo" : "sharpness"];
   const ids = Object.keys(BONUS_CATEGORY).map(Number).filter((id) => stats.includes(categoryStats[BONUS_CATEGORY[id]]));
-  const limits = validLayout(target.keepCategories, target)
-    ? categoryStats.map((_, category) => target.keepCategories.filter((v) => v === category).length)
-    : categoryStats.map((stat) => CATEGORY_SLOTS[stat]);
+  const known = Array.isArray(target.keepCategories) && target.keepCategories.length === 5 ? target.keepCategories.filter((v) => v !== null) : [];
+  if (known.some((v) => !Number.isInteger(v) || !stats.includes(categoryStats[v]))) return false;
+  const minimums = categoryStats.map((_, category) => known.filter((v) => v === category).length);
+  const unknown = 5 - known.length;
+  const limits = categoryStats.map((stat, category) => stats.includes(stat) ? Math.min(CATEGORY_SLOTS[stat], minimums[category] + unknown) : 0);
+  if (minimums.some((count, category) => count > limits[category])) return false;
   const used = new Uint8Array(ids.length);
   const counts = new Uint8Array(categoryStats.length);
   const bonuses = [];
+  let possible = false;
   function allMatch(first) {
-    if (bonuses.length === 5) return matchesTier(bonusTotals(bonuses, target), target, "bonus", mode);
+    if (bonuses.length === 5) {
+      if (counts.some((count, category) => count < minimums[category])) return true;
+      possible = true;
+      return matchesTier(bonusTotals(bonuses, target), target, "bonus", mode);
+    }
     for (let i = first; i < ids.length; i += 1) {
       const category = BONUS_CATEGORY[ids[i]];
       if (used[i] === 2 || counts[category] === limits[category]) continue;
@@ -192,7 +200,7 @@ export function bonusGoalAlwaysMet(target, mode) {
     }
     return true;
   }
-  return allMatch(0);
+  return allMatch(0) && possible;
 }
 
 // Unknown current skills need no reroll when the goal accepts every pair,
