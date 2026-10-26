@@ -582,6 +582,29 @@ test("range goals are validated: min not above max, and max-0 stats leave slots 
   assert.throws(() => validatePlannerRequest(request([gun])), /excluded/);
 });
 
+test("zero-gain status tiers can fill slots under maximum-zero goals", async () => {
+  const t = target("zero-status", 3, 6);
+  t.planner.skillEnabled = false;
+  t.planner.elementValues = [0, 0];
+  t.planner.currentBonuses = [11, 11, 14, 6, 10];
+  t.keepCategories = layoutOf(t.planner.currentBonuses);
+  t.planner.acceptable = { stats: {}, maxStats: { attack: 0, affinity: 0, element: 0 }, skills: [] };
+  t.planner.preferred = { stats: {}, maxStats: {}, skills: [] };
+  const req = request([t], 0, 0);
+  assert.ok(validBonuses(t.planner.currentBonuses, t));
+  assert.ok(matchesTier(bonusTotals(t.planner.currentBonuses, t), t, "bonus", "acceptable"));
+  for (const route of Object.values(await planWeapons(req, provider(req)))) {
+    assert.ok(route.complete && route.proven);
+    assert.equal(route.total, 0);
+  }
+  // One zero-valued tier supplies only two slots; the other tier cannot fill
+  // the fifth slot without exceeding Status max 0.
+  for (const values of [[0, 10], [10, 0], [0, null], [null, 0], [null, null]]) {
+    t.planner.elementValues = values;
+    assert.throws(() => validatePlannerRequest(req), /excluded/);
+  }
+});
+
 test("Keep layouts are pruned only when no tier choice could fit the range", () => {
   const t = target("prune");
   t.planner.acceptable = { stats: { attack: 24 }, maxStats: { sharpness: 30 }, skills: [] };

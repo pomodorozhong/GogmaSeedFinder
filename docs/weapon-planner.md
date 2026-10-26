@@ -19,11 +19,12 @@ affinity uses percentage points. Element gains depend on weapon type. Sharpness
 and bowgun capacity use separate fields and units. EX counts do not rank results.
 
 Each stat goal is a range per tier: a minimum and a maximum, where a blank side
-is unbounded and a minimum of 0 reads as no bound. A maximum of 0 excludes the
-stat, leaving the five slots to the others. A tier may hold only maximums. An
-unknown status value proves neither a positive minimum nor a maximum, so a
-positive status bound needs the II/EX values; minimum 0 and maximum 0 do not.
-Max-0 stats must leave enough categories to fill five slots, and a minimum may
+is unbounded and a minimum of 0 reads as no bound. A maximum of 0 allows no gain
+in that stat; status tiers entered as +0 can still fill slots. A tier may hold
+only maximums. An unknown status value proves neither a positive minimum nor a
+maximum, so a positive status bound needs the II/EX values; minimum 0 and maximum
+0 do not.
+Max-0 stats must leave enough valid tiers to fill five slots, and a minimum may
 not exceed its maximum. Unknown current
 bonuses need no roll only when every valid result meets the goal. This includes
 maximums at the physical stat limits, ranges guaranteed by known categories,
@@ -158,8 +159,8 @@ Keep-layout pruning, Any skill pairs, ordered layout scheduling, conflicting
 acquisitions, duplicate weapons, optional weapons and alternative routes, free
 top-desired upgrades, zero limits, budget exhaustion, goal preservation, and real
 WASM replay. Regressions cover large candidate merges, uncertain exclusions
-after candidate truncation, zero Status minimums with unknown gains, and partially
-known layouts.
+after candidate truncation, zero Status minimums with unknown gains, partially
+known layouts, and zero-gain status slots.
 Short-stream minimum proofs are also
 compared against independent exhaustive Reset/Keep/weapon action simulation.
 All planner copy has Japanese, English, and Traditional Chinese coverage.

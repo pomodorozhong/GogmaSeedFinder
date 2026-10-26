@@ -93,7 +93,12 @@ export function skillGoalMatches(index, pairs) {
 const CATEGORY_SLOTS = { attack: 5, affinity: 5, element: 4, sharpness: 2, ammo: 2 };
 
 export function canFillSlots(target, excluded) {
-  return availableStats(target).filter((key) => !excluded.includes(key)).reduce((sum, key) => sum + CATEGORY_SLOTS[key], 0) >= 5;
+  return availableStats(target).reduce((sum, key) => {
+    // A zero maximum can still use tiers whose known gain is zero. Each
+    // exact tier supplies at most two slots, within the category's own cap.
+    const slots = excluded.includes(key) ? statRollValues(key, target).filter(([, value]) => value === 0).length * 2 : CATEGORY_SLOTS[key];
+    return sum + Math.min(CATEGORY_SLOTS[key], slots);
+  }, 0) >= 5;
 }
 
 export function normalizedPlanner(target) {
@@ -138,7 +143,7 @@ export function copiedPlanner(source, target) {
   const goals = structuredClone(normalizedPlanner(source));
   const sameAttribute = source.attributeForce === target.attributeForce;
   const sameGains = source.weaponType === target.weaponType && (sameAttribute || (source.attributeForce < 6 && target.attributeForce < 6));
-  // Max 0 excludes the category whatever its gains, so it always carries over.
+  // Max 0 remains a valid zero-gain bound on every weapon, so it carries over.
   if (!sameGains) for (const tier of [goals.acceptable, goals.preferred]) { delete tier.stats.element; if (tier.maxStats.element > 0) delete tier.maxStats.element; }
   const own = normalizedPlanner(target);
   return normalizedPlanner({ ...target, planner: { ...goals, currentBonuses: own.currentBonuses, currentSkill: own.currentSkill, elementValues: sameGains && sameAttribute ? goals.elementValues : own.elementValues } });
