@@ -93,7 +93,9 @@ export async function buildCandidatePools(request, provider, report = () => {}, 
       // A weapon that already meets its acceptable goal can still be
       // upgraded for free; the top-desired candidates are its options.
       if (sets.acceptable.length === 1 && sets.acceptable[0].action === "already" && !sets.acceptable[0].top) {
-        sets.acceptable.push(...sets.preferred.filter((v) => v.action !== "already").map((v) => ({ ...v, top: true })));
+        for (const choice of sets.preferred) {
+          if (choice.action !== "already") sets.acceptable.push({ ...choice, top: true });
+        }
       }
       for (const mode of MODES) {
         const choices = sets[mode].sort((a, b) => a.finish - b.finish || Number(Boolean(a.acquisitions)) - Number(Boolean(b.acquisitions)));

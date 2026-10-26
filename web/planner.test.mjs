@@ -94,6 +94,24 @@ test("known goals can require zero draws; zero is a valid roll limit", async () 
   assert.equal(routes.preferred.complete, true);
 });
 
+test("large top-desired pools preserve an already-met acceptable goal", async () => {
+  const t = target("already-acceptable");
+  t.planner.skillEnabled = false;
+  t.planner.acceptable.stats = { attack: 6 };
+  t.planner.preferred.stats = { attack: 12 };
+  t.planner.currentBonuses = [8, 9, 13, 6, 11];
+  t.keepCategories = layoutOf(t.planner.currentBonuses);
+  // This stream fills the 200,000-candidate pool, exceeding the number of
+  // function arguments JavaScript accepts in a single spread into push.
+  const req = request([t], 1000, 0);
+  const routes = await planWeapons(req, provider(req));
+  assert.ok(routes.acceptable.complete && routes.acceptable.proven);
+  assert.equal(routes.acceptable.total, 0);
+  assert.deepEqual(routes.acceptable.steps, []);
+  assert.ok(routes.preferred.complete);
+  assert.ok(routes.preferred.bonus.choices.every((c) => c.finish > 0));
+});
+
 test("real WASM routes replay every intermediate draw and preserve separate counters", async () => {
   const a = target("same-weapon-a");
   const b = target("same-weapon-b");
