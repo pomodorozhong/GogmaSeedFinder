@@ -167,7 +167,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     form.elements.skillEnabled.checked = p.skillEnabled;
     for (const input of form.querySelectorAll("[data-stat]")) input.value = p[input.dataset.tier][input.dataset.bound === "min" ? "stats" : "maxStats"][input.dataset.stat] ?? "";
     for (const mode of ["acceptable", "preferred"]) form.querySelector(`[data-pairs="${mode}"]`).innerHTML = p[mode].skills.map(comboRow).join("");
-    if (form.elements.element0 && raw.attributeForce === current.attributeForce) [0, 1].forEach((i) => { form.elements[`element${i}`].value = p.elementValues[i] ?? ""; });
+    if (form.elements.element0 && raw.weaponType === current.weaponType && raw.attributeForce === current.attributeForce) [0, 1].forEach((i) => { form.elements[`element${i}`].value = p.elementValues[i] ?? ""; });
   }
   // Duplicate reuses the add form so the copy's element can differ.
   function openAddForm(source = null) {

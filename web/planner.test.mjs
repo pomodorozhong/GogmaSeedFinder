@@ -299,6 +299,21 @@ test("copied goals keep the new weapon's own rolls and drop element goals whose 
   assert.deepEqual(copiedPlanner(poison, target("sleep", 3, 8)).elementValues, [null, null]);
 });
 
+test("copying goals across weapon types preserves the destination's status gains", () => {
+  const source = target("poison long sword", 3, 6);
+  source.planner.elementValues = [10, 20];
+  source.planner.acceptable = { stats: { attack: 30, element: 40 }, maxStats: {}, skills: [] };
+  for (const values of [[30, 50], [null, null]]) {
+    const destination = target("poison great sword", 0, 6);
+    destination.planner.elementValues = values;
+    const copied = copiedPlanner(source, destination);
+    assert.deepEqual(copied.elementValues, values);
+    assert.deepEqual(copied.acceptable.stats, { attack: 30 });
+    assert.deepEqual(destination.planner.elementValues, values);
+    assert.deepEqual(source.planner.elementValues, [10, 20]);
+  }
+});
+
 test("up to MAX_SELECTED weapons can be planned together", () => {
   assert.equal(MAX_SELECTED, 100);
   const many = Array.from({ length: MAX_SELECTED + 1 }, (_, i) => target(`w${i}`));

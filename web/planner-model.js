@@ -141,7 +141,7 @@ export function copiedPlanner(source, target) {
   // Max 0 excludes the category whatever its gains, so it always carries over.
   if (!sameGains) for (const tier of [goals.acceptable, goals.preferred]) { delete tier.stats.element; if (tier.maxStats.element > 0) delete tier.maxStats.element; }
   const own = normalizedPlanner(target);
-  return normalizedPlanner({ ...target, planner: { ...goals, currentBonuses: own.currentBonuses, currentSkill: own.currentSkill, elementValues: sameAttribute ? goals.elementValues : own.elementValues } });
+  return normalizedPlanner({ ...target, planner: { ...goals, currentBonuses: own.currentBonuses, currentSkill: own.currentSkill, elementValues: sameGains && sameAttribute ? goals.elementValues : own.elementValues } });
 }
 
 export function hasGoal(target, stream) {
