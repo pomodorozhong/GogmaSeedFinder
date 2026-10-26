@@ -219,6 +219,52 @@ test("zero status minimums retain a better Keep path with unknown status gains",
   }
 });
 
+test("Keep pruning preserves the shortest route when status EX gains are below II", async () => {
+  for (const [knownLayout, limit] of [[false, 2], [false, 6], [true, 1]]) {
+    const t = target("status", 3, 9);
+    t.planner.skillEnabled = false;
+    t.planner.elementValues = [20, 10];
+    t.planner.acceptable = { stats: { affinity: 8, element: 10 }, maxStats: { element: 10 }, skills: [] };
+    t.planner.preferred = { stats: {}, maxStats: {}, skills: [] };
+    if (knownLayout) t.keepCategories = [1, 3, 1, 1, 2];
+    const req = request([t], limit, 0);
+    req.origin.baseSeed = 55_944_111;
+    req.origin.bonusCounter = knownLayout ? 3660 : 3659;
+    // Reset at G3660 acquires the layout; Keep at G3661 reaches Status +10.
+    // Treating II +20 as a lower bound used to discard this two-roll route
+    // and incorrectly prove the direct Reset at draw 5 was minimal.
+    for (const route of Object.values(await planWeapons(req, provider(req)))) {
+      assert.ok(route.complete && route.proven);
+      assert.equal(route.total, knownLayout ? 1 : 2);
+      assert.equal(route.bonus.horizon, bruteForceHorizon(req, provider(req), route.mode));
+      const finish = route.steps.at(-1);
+      assert.equal(finish.action, "keep");
+      assert.deepEqual(finish.rolls.at(-1).raw, [13, 6, 9, 9, 14]);
+      assert.equal(finish.rolls.at(-1).totals.affinity, 20);
+      assert.equal(finish.rolls.at(-1).totals.element, 10);
+    }
+  }
+});
+
+test("Keep pruning retains a known zero status gain when the other tier is unknown", async () => {
+  const t = target("status", 3, 9);
+  t.planner.skillEnabled = false;
+  t.planner.elementValues = [null, 0];
+  t.keepCategories = [1, 3, 1, 1, 2];
+  t.planner.acceptable = { stats: { affinity: 20 }, maxStats: { element: 0 }, skills: [] };
+  t.planner.preferred = { stats: {}, maxStats: {}, skills: [] };
+  const req = request([t], 1, 0);
+  req.origin.baseSeed = 55_944_111;
+  req.origin.bonusCounter = 3660;
+  // The next Reset only has Affinity +10; Keep has +20 and the known EX +0.
+  for (const route of Object.values(await planWeapons(req, provider(req)))) {
+    assert.ok(route.complete && route.proven);
+    assert.equal(route.total, 1);
+    assert.equal(route.steps[0].action, "keep");
+    assert.equal(route.steps[0].rolls.at(-1).totals.element, 0);
+  }
+});
+
 test("stat maximums follow the two-copy and two-slot sharpness/ammo limits", () => {
   const blade = target("blade");
   assert.deepEqual(statRollValues("attack", blade), [["II", 6], ["III", 9], ["EX", 12]]);

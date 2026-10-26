@@ -75,6 +75,13 @@ export async function buildCandidatePools(request, provider, report = () => {}, 
             // caps for every candidate.
             const maximum = bonusTotals(layout.map((category) => [15, 16, 14, 10][category]), target);
             const minimum = bonusTotals(layout.map((category) => [8, 9, 11, 6][category]), target);
+            // Custom status gains can put either tier first. A bounded stat
+            // can only match known gains, so ignore unknown endpoints.
+            for (const stat of Object.keys(minimum)) {
+              const known = [minimum[stat], maximum[stat]].filter(Number.isFinite);
+              minimum[stat] = known.length ? Math.min(...known) : null;
+              maximum[stat] = known.length ? Math.max(...known) : null;
+            }
             if (!needed.some((mode) => rangeCanMatch(minimum, maximum, target, mode))) continue;
             const kept = provider.keep(target, 0, count, layout);
             for (let index = known ? 0 : positions[0]; index < count; index += 1) {
