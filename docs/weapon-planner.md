@@ -172,6 +172,10 @@ after candidate truncation, zero Status minimums with unknown gains, partially
 known layouts, zero-gain status slots, and combined conflict alternatives.
 Short-stream minimum proofs are also
 compared against independent exhaustive Reset/Keep/weapon action simulation.
+Deterministic mixed-event cases check minimum horizons and free upgrades against
+every event assignment. Dual-stream WASM cases enumerate every weapon subset
+and its actions to check both route minima and the full set of conflict alternatives
+within the display limit.
 All planner copy has Japanese, English, and Traditional Chinese coverage.
 
 Attack, affinity, sharpness and capacity values are documented in Masuku's

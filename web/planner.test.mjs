@@ -82,6 +82,74 @@ test("bounded optimization reports uncertainty when its search budget is exhaust
   assert.equal(result.proven, false);
 });
 
+test("minimum schedules and free upgrades agree with exhaustive event assignments", async () => {
+  let seed = 0x517ac4;
+  const random = (count) => {
+    seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
+    return (seed >>> 0) % count;
+  };
+  let feasible = 0; let infeasible = 0;
+  for (let scenario = 0; scenario < 128; scenario += 1) {
+    const limit = 1 + random(6);
+    const targets = Array.from({ length: 1 + random(4) }, (_, i) => ({
+      id: `w${i}`,
+      choices: Array.from({ length: 1 + random(5) }, () => {
+        const finish = random(limit + 1);
+        const acquisitions = finish > 1 && random(3) === 0
+          ? Array.from({ length: finish - 1 }, (_, j) => j + 1).filter(() => random(2)) : null;
+        // A Keep candidate must have at least one earlier acquisition.
+        if (acquisitions && !acquisitions.length) acquisitions.push(1);
+        return { finish, action: finish === 0 ? "already" : acquisitions ? "keep" : "reset", acquisitions, top: Boolean(random(2)) };
+      }).sort((a, b) => a.finish - b.finish),
+    }));
+    let expected = null;
+    // Enumerate every assignment without the scheduler's matching, target
+    // ordering, dominance, binary search, or greedy upgrade rules.
+    function assign(index, occupied, horizon, topScore) {
+      if (index === targets.length) {
+        if (!expected || horizon < expected.horizon || (horizon === expected.horizon && topScore > expected.topScore)) expected = { horizon, topScore };
+        return;
+      }
+      for (const choice of targets[index].choices) {
+        const finishBit = choice.finish ? 1 << choice.finish : 0;
+        if (occupied & finishBit) continue;
+        for (const acquire of choice.acquisitions ?? [0]) {
+          const acquireBit = acquire ? 1 << acquire : 0;
+          if (occupied & acquireBit) continue;
+          assign(index + 1, occupied | finishBit | acquireBit, Math.max(horizon, choice.finish), topScore * 2 + Number(choice.top));
+        }
+      }
+    }
+    assign(0, 0, 0, 0);
+    const actual = await optimizeStream(targets, limit);
+    const context = `scenario ${scenario}: ${JSON.stringify(targets)}`;
+    assert.ok(actual.proven, context);
+    assert.equal(actual.horizon, expected?.horizon ?? null, context);
+    if (!expected) {
+      infeasible += 1;
+      assert.equal(actual.status, "missing", context);
+      continue;
+    }
+    feasible += 1;
+    assert.equal(actual.status, "complete", context);
+    assert.equal(actual.choices.length, targets.length, context);
+    assert.equal(new Set(actual.choices.map((c) => c.id)).size, targets.length, context);
+    const reserved = new Set();
+    for (const choice of actual.choices) {
+      assert.ok(targets.find((t) => t.id === choice.id).choices.some((candidate) => candidate.finish === choice.finish
+        && candidate.action === choice.action && candidate.top === choice.top
+        && (candidate.acquisitions ? candidate.acquisitions.includes(choice.acquire) && choice.acquire < choice.finish : !choice.acquire)), context);
+      for (const position of [choice.acquire, choice.finish].filter(Boolean)) {
+        assert.ok(!reserved.has(position), `${context}: event collision at ${position}`);
+        reserved.add(position);
+      }
+    }
+    const topScore = targets.reduce((score, t) => score * 2 + Number(actual.choices.find((c) => c.id === t.id).top), 0);
+    assert.equal(topScore, expected.topScore, context);
+  }
+  assert.ok(feasible > 0 && infeasible > 0, "exercise feasible schedules and proven conflicts");
+});
+
 test("known goals can require zero draws; zero is a valid roll limit", async () => {
   const t = target("one");
   t.planner.currentBonuses = [15, 15, 12, 12, 6];
@@ -1087,6 +1155,89 @@ test("proven bonus minima agree with exhaustive action search on short WASM stre
       const brute = bruteForceHorizon(req, api, mode);
       assert.equal(routes[mode].bonus.horizon, brute, `${mode} at G${counter}`);
       assert.equal(routes[mode].bonus.proven, true);
+    }
+  }
+});
+
+function bruteForceSkillHorizon(req, api, mode) {
+  for (let horizon = 0; horizon <= req.limits.skill; horizon += 1) {
+    function assign(index, occupied) {
+      if (index === req.targets.length) return true;
+      const t = req.targets[index];
+      if (!t.planner.skillEnabled || (t.planner.currentSkill !== null && matchesTier(t.planner.currentSkill, t, "skill", mode))) return assign(index + 1, occupied);
+      for (let offset = 0; offset < horizon; offset += 1) {
+        const bit = 1 << offset;
+        if (!(occupied & bit) && matchesTier(api.skills(t, offset, 1)[0], t, "skill", mode) && assign(index + 1, occupied | bit)) return true;
+      }
+      return false;
+    }
+    if (assign(0, 0)) return horizon;
+  }
+  return null;
+}
+
+test("dual-stream WASM alternatives and minima agree with exhaustive actions for every weapon subset", async () => {
+  for (let scenario = 0; scenario < 16; scenario += 1) {
+    const limit = 3 + scenario % 3;
+    const weapons = [target("a", 3, scenario % 2 ? 6 : 1), target("b", 3, scenario % 2 ? 6 : 1), target("c", 8, 5)];
+    if (scenario % 2) weapons.push(target("d", 12, 0));
+    const req = request(weapons, limit, limit);
+    req.origin.baseSeed = [86_315_169, 55_944_111, 67_723_575, 7][scenario % 4];
+    req.origin.bonusCounter = [0, 80, 480, 3659][scenario % 4];
+    req.origin.skillCounter += scenario;
+    const api = provider(req);
+    for (let i = 0; i < weapons.length; i += 1) {
+      const t = weapons[i];
+      t.planner.optional = Boolean(scenario & (1 << i));
+      t.planner.elementValues = scenario % 3 ? [0, 15] : [30, 10];
+      const initial = Array.from(api.reset(t, 0, 1));
+      if ((scenario + i) % 3 === 0) t.keepCategories = layoutOf(initial);
+      if ((scenario + i) % 5 === 0) t.planner.currentBonuses = initial;
+      if ((scenario + i) % 4 === 0) t.planner.currentSkill = api.skills(t, 0, 1)[0];
+      for (const [mi, mode] of ["acceptable", "preferred"].entries()) {
+        const offset = 1 + (scenario + i + mi) % (limit - 1);
+        // An unknown layout can still acquire the G1 Reset layout and Keep
+        // later. Exact ranges make both acquisition and finish collisions
+        // matter; duplicates can compete in either independent stream.
+        const raw = mi ? api.keep(t, offset, 1, layoutOf(initial)) : api.reset(t, offset, 1);
+        const totals = bonusTotals(raw, t);
+        const skill = api.skills(t, (scenario + i + mi) % limit, 1)[0];
+        const bounds = Object.fromEntries(availableStats(t).map((key) => [key, totals[key]]));
+        t.planner[mode] = { stats: { ...bounds }, maxStats: { ...bounds }, skills: [{ seriesIndex: Math.floor(skill / 14), groupIndex: skill % 14 }] };
+      }
+    }
+    const routes = await planWeapons(req, api);
+    const required = weapons.reduce((mask, t, i) => t.planner.optional ? mask : mask | (1 << i), 0);
+    for (const mode of ["acceptable", "preferred"]) {
+      const feasible = new Map();
+      for (let mask = 0; mask < (1 << weapons.length); mask += 1) {
+        const subset = { ...req, targets: weapons.filter((_, i) => mask & (1 << i)) };
+        const bonus = bruteForceHorizon(subset, api, mode);
+        const skill = bruteForceSkillHorizon(subset, api, mode);
+        if (bonus !== null && skill !== null) feasible.set(mask, { bonus, skill });
+      }
+      const expected = new Map();
+      for (const [mask, minima] of feasible) {
+        if (weapons.some((t, i) => !(mask & (1 << i)) && feasible.has((t.planner.optional ? mask : mask & required) | (1 << i)))) continue;
+        expected.set(weapons.filter((_, i) => mask & (1 << i)).map((t) => t.id).sort().join(","), minima);
+      }
+      const offered = [routes[mode], ...routes[mode].alternatives];
+      const actual = new Set();
+      const context = `${mode}, scenario ${scenario}`;
+      for (const route of offered) {
+        const key = route.bonus.choices.map((c) => c.id).sort().join(",");
+        actual.add(key);
+        assert.equal(route.skill.choices.map((c) => c.id).sort().join(","), key, `${context}: each weapon must fit both streams`);
+        assert.ok(expected.has(key), `${context}: ${key} must be feasible and maximal in both streams`);
+        assert.ok(route.complete && route.proven, context);
+        assert.equal(route.bonus.horizon, expected.get(key).bonus, context);
+        assert.equal(route.skill.horizon, expected.get(key).skill, context);
+        assert.equal(route.total, expected.get(key).bonus + expected.get(key).skill, context);
+      }
+      assert.equal(actual.size, Math.min(5, expected.size), context);
+      if (expected.size <= 5) assert.deepEqual(actual, new Set(expected.keys()), context);
+      if (expected.size < 5) assert.equal(routes[mode].alternativesComplete, true, context);
+      if (expected.size > 5) assert.equal(routes[mode].alternativesComplete, false, context);
     }
   }
 });
