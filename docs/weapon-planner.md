@@ -170,7 +170,8 @@ weapon that still meets the route's goal and keeps that stream's roll count,
 with only the earliest copy of an identical result. The list's default sort
 follows the weapon's bonus goal: top desired first, then each stat with a
 minimum from high to low (top-desired tier first), then each stat with a
-maximum from low to high, then roll position; skill lists sort by top desired,
+maximum above 0 from low to high, then roll position. A stat either goal
+excludes (max 0) is left out; skill lists sort by top desired,
 then roll position. Sort levels show as chips in one row: **＋ Sort** opens a
 menu of the unused fields (any stat, top desired, "No Reset needed", roll
 position) and adds a chip (before a trailing roll-position chip, which would

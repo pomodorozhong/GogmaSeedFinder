@@ -950,11 +950,17 @@ test("a weapon's default finish sort follows its bonus goal", () => {
   const sword = target("sword", 0, 5);
   sword.planner.acceptable = { ...sword.planner.acceptable, stats: { attack: 30, sharpness: 50 }, maxStats: {} };
   sword.planner.preferred = { ...sword.planner.preferred, stats: { attack: 42, sharpness: 50 }, maxStats: { element: 0 } };
-  assert.deepEqual(goalFinishSort(sword, "bonus"), [{ key: "top", dir: "desc" }, { key: "attack", dir: "desc" }, { key: "sharpness", dir: "desc" }, { key: "element", dir: "asc" }, { key: "finish", dir: "asc" }]);
+  // Element is excluded (max 0) by the top-desired goal, so it is not sorted.
+  assert.deepEqual(goalFinishSort(sword, "bonus"), [{ key: "top", dir: "desc" }, { key: "attack", dir: "desc" }, { key: "sharpness", dir: "desc" }, { key: "finish", dir: "asc" }]);
+  sword.planner.acceptable.maxStats = { sharpness: 80 };
+  assert.deepEqual(goalFinishSort(sword, "bonus").map((level) => `${level.key}:${level.dir}`), ["top:desc", "attack:desc", "sharpness:desc", "finish:asc"]);
+  sword.planner.acceptable.maxStats = { affinity: 20 };
+  assert.deepEqual(goalFinishSort(sword, "bonus").map((level) => `${level.key}:${level.dir}`), ["top:desc", "attack:desc", "sharpness:desc", "affinity:asc", "finish:asc"]);
+  sword.planner.acceptable.maxStats = {};
   // The top-desired tier's stats come first; a zero minimum is no goal.
   sword.planner.preferred.stats = { affinity: 20 };
   sword.planner.acceptable.stats = { attack: 30, element: 0 };
-  assert.deepEqual(goalFinishSort(sword, "bonus").map((level) => level.key), ["top", "affinity", "attack", "element", "finish"]);
+  assert.deepEqual(goalFinishSort(sword, "bonus").map((level) => level.key), ["top", "affinity", "attack", "finish"]);
   assert.deepEqual(goalFinishSort(sword, "skill"), DEFAULT_FINISH_SORT);
   sword.planner.bonusEnabled = false;
   assert.deepEqual(goalFinishSort(sword, "bonus"), DEFAULT_FINISH_SORT);
