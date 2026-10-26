@@ -6,25 +6,29 @@
 
 - Task: replace manual table comparison with a guided multi-weapon bonus/skill planner. Local task; no primary issue yet (see P-02).
 - PR: none. No open, closed, or merged PR exists for this branch on the fork or upstream.
-- Code checkpoint: `6b16af7` — `refactor(web): leave planner weapon state alone when forecast rows are adopted`.
-- Base: local `main` and `origin/main` (upstream `apeshinzo78/GogmaSeedFinder`) are `65789e9`, freshly fetched at wrap-up. `fork` is `pomodorozhong/GogmaSeedFinder`.
-- Publication: the branch is pushed to `fork` with this handoff. Opening a PR needs separate authorization and a choice of base repository.
-- State: implementation complete and awaiting user review. The latest work fixed three planner correctness bugs from a code review (cross-stream weapon exclusion, keeping earlier top-desired finishes during upgrades, per-tier zero-roll proof; `2c4e699`, `4cbc37c`, `6804dff`). It also limited the branch to the planner page (`450b407`, `3004382`, `6b16af7`):
-  - Skill Forecast (tab 05) is back to upstream. The earlier local per-weapon combination editor, editable cards, targets-only view and CSV export were removed.
-  - The planner is tab **08**, after 07. The app opens on 01 Guide again; `#planner` links still work.
-  - Adopting a Bonus/Skill Forecast row no longer touches planner state or stored Keep layouts. Users update a weapon's current state in the planner goal editor after rolling elsewhere (documented in `docs/weapon-planner.md`).
-  - Outside the planner, shared files only add the tab button/view and stylesheet link, the 8-column tab bar, the tab label translation, per-weapon skill presets stored as target data (the planner's default skill goals), page 2's "この構成でEX厳選へ" recording that weapon's bonuses, and a state-change event.
-- Verification at `6b16af7`: `npm run check`, `npm test` (50 JavaScript/WASM tests), `npm run build`, and `git diff --check` passed. Each of the three fix commits passed the same checks on its own in a detached worktree. Browser: tab order 01–08 with Guide as default, upstream page 5 layout, page 4 and the planner load with no console errors.
-- Checks not run: Rust tests/clippy (`cargo` not installed; Rust and `web/pkg` unchanged). No fresh full planner walk-through in the browser after the scope reduction; only load/render checks. Independent in-game verification of Keep Bonuses and skill predictions remains an inherited limitation.
+- Code checkpoint: `f1c703f` — `fix(web): ignore zero status minimums when gains are unknown`.
+- Base: local `main`, `origin/main`, and upstream `apeshinzo78/GogmaSeedFinder:main` are `65789e9`; remote heads and the absence of branch PRs were checked on 2026-10-26. `fork` is `pomodorozhong/GogmaSeedFinder`; its `main` is `0545af0`.
+- Publication: the remote `fork/codex/weapon-planner-ui` remains at `a9dbecb`. The five fixes after it and this wrap-up's documentation commit are local only; another computer cannot retrieve them yet. Publishing these commits awaits P-03. Opening a PR needs separate authorization and a choice of base repository.
+- State: the code review and its three findings are resolved; implementation awaits live planner validation. The user asked to commit the existing edits first, then fix the findings and commit again. Independent changes were saved as five atomic commits:
+  - `744ff49`: prove zero-roll bonus goals across valid tier combinations and known categories, and recognize unrestricted skill goals without inventing a current result.
+  - `986f469`: retain an unreachable required weapon even when it also conflicts in the other stream, so a partial route cannot be reported complete.
+  - `37a8207`: merge up to 200,000 top-desired candidates without overflowing JavaScript's function argument limit; retain an already-met acceptable goal.
+  - `ebeea3e`: treat failed schedules from truncated candidates as uncertain, mark optional exclusions "not checked", and retain uncertain required weapons. A complete skill stream can still prove a conflict.
+  - `f1c703f`: treat Status minimum 0 like a blank minimum during validation, current-result proofs, and Keep-layout pruning; preserve positive bounds and maximum 0. A real one-roll Keep path remains available with unknown Status II/EX gains.
+- Scope: the planner remains tab **08** with Guide as the default and Skill Forecast matching upstream. Adopting forecast rows does not change planner current results or Keep layouts; users update them in the goal editor after rolling elsewhere. Preserve the planner-only scope and the existing limited shared integration described in [the weapon planner](docs/weapon-planner.md).
+- Verification at `f1c703f`: `npm run check`, `npm test` (**65** JavaScript/WASM tests), `npm run build`, and `git diff --check` passed. Each of the five commits was checked independently in a temporary detached worktree; the final tested tree matched the final source commit, and that temporary worktree was removed. Review-only scripts additionally matched 1,500 real WASM short-stream exhaustive action searches and 5,000 exhaustive synthetic scheduling cases; these extra scripts were temporary, not committed test tooling.
+- Limits: no exhaustive mismatch was found within the tested bounds; this is not a general proof beyond the search/candidate budgets. Bounds can omit a shorter route or a feasible additional weapon, so preserve honest "Best found", "not checked", and incomplete-required-goal behavior.
+- Checks not run this session: Rust tests/clippy (Rust and `web/pkg` unchanged), a fresh browser walk-through, real-phone performance, or independent in-game Keep Bonuses/skill validation. Earlier browser load checks passed, but the live-game and phone checks remain outstanding.
+- Uncommitted work: no tracked source edits remain. `.claude/launch.json` is an existing untracked local preview configuration and was deliberately excluded from the commits.
 - Resume: `npm install`, then `npm run serve`; open `http://127.0.0.1:4341/#planner`. Browser-origin weapons, seed/counters and progress are local data, not source defaults.
-- Next action: review the live planner (tab 08) with the user's desired weapons, then decide whether to open a PR and against which repository.
+- Next action: validate a representative route in the live planner (tab 08) with the user's weapons, including independent G/S saves and an already-met goal, before deciding whether to open a PR and against which repository.
 - Durable design/algorithm details: [weapon planner](docs/weapon-planner.md); [documentation index](docs/README.md).
 - Preservation: stash `pre-planner-ui local weapon and skill changes` still holds the original local per-weapon skill editor, which is now removed from this branch. The old `codex/fix-dynamic-status-i18n` branch was not deleted. Keep both until the user decides whether that editor should return as separate work.
 - Avoid: changing non-planner tabs on this branch; syncing planner state from forecast-tab adoption (the user rejected both a page-4 layout clear and a planner-side "unconfirmed layout" prompt as confusing); ranking or matching by EX count (a stat maximum, including max 0, is allowed); collapsing distinct weapon instances; marking a matched result as saved; updating counters on previews; claiming optimality after the complexity budget is exhausted; mixing base Artian counters with Gogma G/S counters.
 
 Pending requests for this branch:
 
-- **P-02 — Choose an issue destination and file the draft below.** The fork has issues disabled; this is a repository setting, not an authentication or network failure. Choose either an issue-enabled fork or the upstream repository, then authorize filing. Proposed label: `enhancement`; milestone: none. Blocks: issue-backed tracking/branch linkage only; review and testing can proceed. Do not enable issues, file upstream, or create labels without the necessary authorization.
+- **P-02 — Choose an issue destination and file the draft below. Deferred at the user's request on 2026-10-26.** The fork has issues disabled; this is a repository setting, not an authentication or network failure. Choose either an issue-enabled fork or the upstream repository, then authorize filing. Proposed label: `enhancement`; milestone: none. Blocks: issue-backed tracking/branch linkage only; review and testing can proceed. Do not enable issues, file upstream, or create labels without the necessary authorization.
 
   Proposed title: **Add guided multi-weapon bonus and skill planning**
 
@@ -40,7 +44,9 @@ Pending requests for this branch:
   >
   > Add it as tab 08 without changing the existing tabs, forecasts, weapon profiles, base Artian tools, or the three UI languages. Cover stat equivalence, distinct weapon instances, conflicting acquisitions, zero limits, route replay, save consistency, and optimality against exhaustive short-stream action search.
   >
-  > Status: implemented on `codex/weapon-planner-ui` (fork), based on upstream `65789e9`, with 50 passing JavaScript/WASM tests. Awaiting user review. The existing engine's independent in-game verification of Keep Bonuses and skills remains a separate validation item.
+  > Status: implemented on `codex/weapon-planner-ui`, based on upstream `65789e9`, with 65 passing JavaScript/WASM tests. Code review fixes are committed locally through `f1c703f`; publication and live planner validation remain pending. The existing engine's independent in-game verification of Keep Bonuses and skills remains a separate validation item.
+
+- **P-03 — Authorize pushing the completed branch to the fork.** Proposed action: push `codex/weapon-planner-ui` to `fork` (`pomodorozhong/GogmaSeedFinder`), publishing the five local fixes after `a9dbecb` and the documentation commit for this wrap-up. The user authorized local commits; publishing these new commits has not been authorized. Blocks: retrieving the fixes and updated handoff from another computer. This request does not cover opening or merging a PR.
 
 ## Ranked work
 
@@ -50,4 +56,4 @@ Pending requests for this branch:
 
 ## Pending
 
-No requests outside the active branch. P-02 belongs to `codex/weapon-planner-ui` above.
+No requests outside the active branch. P-02 and P-03 belong to `codex/weapon-planner-ui` above.

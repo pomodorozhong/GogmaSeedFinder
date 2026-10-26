@@ -23,8 +23,8 @@ is unbounded and a minimum of 0 reads as no bound. A maximum of 0 excludes the
 stat, leaving the five slots to the others. A tier may hold only maximums. An
 unknown status value proves neither a positive minimum nor a maximum, so a
 positive status bound needs the II/EX values; minimum 0 and maximum 0 do not.
-Max-0 stats must leave enough categories to
-fill five slots, and a minimum may not exceed its maximum. Unknown current
+Max-0 stats must leave enough categories to fill five slots, and a minimum may
+not exceed its maximum. Unknown current
 bonuses need no roll only when every valid result meets the goal. This includes
 maximums at the physical stat limits, ranges guaranteed by known categories,
 and alternative tiers that together accept every possible result. Keep layouts
@@ -50,10 +50,9 @@ valid choice of tiers, without supplying exact current gains. Unknown layouts
 require a Reset before Keep. Adopting a row in the
 forecast tabs or editing the counters by hand does not change a weapon's current
 bonuses, skill or layout, so update them in the goal editor after rolling outside
-the planner. Status II/EX values must be
-entered from the actual weapon before using a status minimum or a status maximum
-above 0; elemental deltas
-are not silently applied to status weapons.
+the planner. Status II/EX values must be entered from the actual weapon before
+using a positive status minimum or maximum; elemental deltas are not silently
+applied to status weapons.
 
 The bonus and skill roll limits are independent windows of 0–10,000 draws from
 the saved G and S counters. A shared base seed is required. A counter may remain
@@ -107,6 +106,7 @@ cap on candidates scanned so that large selections stay bounded in time. Candida
 collection retains at most 200,000 finishes per bonus tier and weapon. A feasible
 route is marked **Best found** if either budget prevents proving the minimum;
 an unsuccessful incomplete search is not reported as proof that no route exists.
+Reaching a bound can hide a shorter route or a feasible additional weapon.
 Roll limits remain the user-facing search bounds. Cancellation terminates the
 worker; any completed alternative remains available.
 
@@ -156,7 +156,9 @@ state to change a route already in progress. State-code formats are unchanged.
 Keep-layout pruning, Any skill pairs, ordered layout scheduling, conflicting
 acquisitions, duplicate weapons, optional weapons and alternative routes, free
 top-desired upgrades, zero limits, budget exhaustion, goal preservation, and real
-WASM replay. Short-stream minimum proofs are also
+WASM replay. Regressions cover large candidate merges, uncertain exclusions
+after candidate truncation, and zero Status minimums with unknown gains.
+Short-stream minimum proofs are also
 compared against independent exhaustive Reset/Keep/weapon action simulation.
 All planner copy has Japanese, English, and Traditional Chinese coverage.
 
