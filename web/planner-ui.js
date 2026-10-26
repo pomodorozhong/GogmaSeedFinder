@@ -1,6 +1,6 @@
 import { t, localizedTargetName } from "./i18n.js";
 import { pl } from "./planner-text.js";
-import { availableStats, BONUS_CATEGORY, copiedPlanner, hasBonusGoal, layoutOf, MAX_SELECTED, normalizedPlanner, normalizedProgress, routePosition, routeWeaponsMatch, samePosition, statMaximum, statRollValues, streamSteps, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { availableStats, BONUS_CATEGORY, copiedPlanner, hasBonusGoal, layoutOf, MAX_SELECTED, normalizedPlanner, normalizedProgress, parsePlannerExport, plannerExport, routePosition, routeWeaponsMatch, samePosition, statMaximum, statRollValues, streamSteps, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
 
 const STORAGE_KEY = "gogma-weapon-planner-v1";
 const esc = (text) => String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -11,12 +11,10 @@ const number = (value) => value === null || value === undefined ? pl("Unknown") 
 const stateCode = (state) => state.baseSeed === null ? pl("Unknown") : `GSF2-B${state.baseSeed}-G${state.bonusCounter ?? "?"}-S${state.skillCounter ?? "?"}`;
 const errorText = (key) => pl(({ targets: "Select between 1 and {max} weapons.", state: "Enter a known base seed and the counters for the streams you want to plan.", limits: "Enter whole-number roll limits from 0 to 10,000.", goals: "Enable at least one goal per weapon and enter a stat minimum or skill pair.", statusValues: "Enter both status boost values before using a status minimum.", excluded: "Excluding these stats leaves too few bonuses to fill five slots.", minAboveMax: "A minimum is higher than its maximum." })[key] ?? "Unable to calculate the guide. {detail}", { detail: key, max: MAX_SELECTED });
 
-export function initPlanner({ root, getState, getTargets, setTargets, saveStep, openState, metadata }) {
-  const { weapons, attributes, bonuses, bonusName, series, groups, defaultSkills } = metadata;
-  let stored;
-  try { stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null"); } catch { stored = null; }
+// Rebuilds planner state from browser storage or an imported plan.
+function restoredCache(stored, targets) {
   const cache = {
-    selected: Array.isArray(stored?.selected) ? stored.selected.filter((v) => typeof v === "string") : getTargets().slice(0, MAX_SELECTED).map((target) => target.id),
+    selected: Array.isArray(stored?.selected) ? stored.selected.filter((v) => typeof v === "string") : targets.slice(0, MAX_SELECTED).map((target) => target.id),
     limits: { bonus: stored?.limits?.bonus ?? 250, skill: stored?.limits?.skill ?? 1000 },
     routes: stored?.routes && typeof stored.routes === "object" ? stored.routes : {},
     mode: stored?.mode === "preferred" ? "preferred" : "acceptable",
@@ -24,12 +22,20 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     matches: stored?.matches && typeof stored.matches === "object" ? stored.matches : {},
     signature: typeof stored?.signature === "string" ? stored.signature : "",
   };
-  // Browser data is optional. Ignore an incompatible/corrupt stored route.
+  // Saved data is optional. Ignore an incompatible/corrupt stored route.
   for (const mode of ["acceptable", "preferred"]) {
     const route = cache.routes[mode];
     if (route && (!Array.isArray(route.steps) || !Array.isArray(route.targets) || !route.origin || !route.bonus || !route.skill || route.steps.some((step) => !step.after || !Array.isArray(step.rolls) || !step.rolls.length))) delete cache.routes[mode];
   }
   cache.completed = cache.routes[cache.mode] ? normalizedProgress(cache.routes[cache.mode], cache.completed) : { bonus: 0, skill: 0 };
+  return cache;
+}
+
+export function initPlanner({ root, getState, getTargets, setTargets, saveStep, openState, importState, metadata }) {
+  const { weapons, attributes, bonuses, bonusName, series, groups, defaultSkills } = metadata;
+  let stored;
+  try { stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null"); } catch { stored = null; }
+  let cache = restoredCache(stored, getTargets());
   // Each stream has its own current step: the first unsaved step in its table.
   const totalDone = () => cache.completed.bonus + cache.completed.skill;
   const currentIndex = (r, stream) => {
@@ -87,7 +93,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
 
   root.innerHTML = `
     <header class="pl-page-heading"><div><p class="step">WEAPON PLANNER</p><h2>${html("Plan your weapons, roll by roll.")}</h2><p class="pl-muted">${html("Choose your weapons and minimum stat gains. Get a complete bonus and skill route.")}</p></div><span id="pl-storage" class="pl-storage"></span></header>
-    <div class="pl-state-strip"><span>${html("Saved position")}</span><code id="pl-position"></code><button class="text-button" type="button" data-pl-action="state">${html("Set current state")}</button></div>
+    <div class="pl-state-strip"><span>${html("Saved position")}</span><code id="pl-position"></code><button class="text-button" type="button" data-pl-action="state">${html("Set current state")}</button><span class="pl-transfer"><button class="text-button" type="button" data-pl-action="export">${html("Export plan")}</button><button class="text-button" type="button" data-pl-action="import">${html("Import plan")}</button><input id="pl-import-file" type="file" accept=".json,application/json" hidden></span></div>
     <section class="pl-section" aria-labelledby="pl-weapons-title"><div class="pl-section-heading"><div><h3 id="pl-weapons-title"><span class="pl-index">01</span> ${html("Your weapons")}</h3><p class="pl-muted">${html("Select up to {max} weapons. Each copy is planned separately.", { max: MAX_SELECTED })}</p></div><button class="secondary small-button" type="button" data-pl-action="add">＋ ${html("Add weapon")}</button></div>
       <form id="pl-add-form" class="pl-add-form" hidden><label>${html("Weapon name")}<input name="label" maxlength="24" placeholder="${html("Optional name")}"></label><label>${html("Weapon type")}<select name="weaponType">${options(weapons, 3)}</select></label><label>${html("Element / status")}<select name="attributeForce">${options(attributes, 1)}</select></label><label>${html("Copy goals from")}<select name="copyFrom"></select></label><button class="secondary small-button" type="submit">${html("Add weapon")}</button><button class="text-button" type="button" data-pl-action="cancel-add">${html("Cancel")}</button></form>
       <div id="pl-weapons" class="pl-weapon-grid"></div><div id="pl-editor"></div>
@@ -395,6 +401,36 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     worker.onerror = (error) => { if (worker !== searchWorker) return; stopWorker(); setError(pl("Unable to calculate the guide. {detail}", { detail: error.message })); renderResults(); };
     worker.postMessage({ request });
   }
+  function exportPlan() {
+    const state = getState();
+    const blob = new Blob([JSON.stringify(plannerExport(state, getTargets(), cache))], { type: "application/json" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `gogma-planner-B${state.baseSeed ?? "unknown"}-G${state.bonusCounter ?? "unknown"}-S${state.skillCounter ?? "unknown"}.json`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 0);
+    setStatus(pl("Plan exported. Import the file on another computer to continue."));
+  }
+  // Replaces this browser's weapons, saved position and planner progress.
+  // importState validates the position and weapons before changing anything.
+  async function importPlan(file) {
+    setError();
+    let data;
+    try { data = parsePlannerExport(await file.text()); }
+    catch { setError(pl("This file is not a valid planner export.")); return; }
+    if (!window.confirm(pl("Replace this browser's weapons, saved position and planner progress with the imported plan?"))) return;
+    stopWorker();
+    try { importState({ state: data.state, targets: data.targets }); }
+    catch (error) { setError(error.message); return; }
+    cache = restoredCache(data.planner, getTargets());
+    cache.selected = cache.selected.filter((id) => getTargets().some((v) => v.id === id));
+    stale = false; editing = null; q("#pl-editor").replaceChildren();
+    q("#pl-limits").elements.bonus.value = cache.limits.bonus;
+    q("#pl-limits").elements.skill.value = cache.limits.skill;
+    inspected = route() ? nextCurrent(route()) : 0;
+    persist(); renderWeapons(); renderResults(); schedulePointer();
+    setStatus(pl("Plan imported."));
+  }
   function markDone(index = inspected) {
     const r = route();
     if (worker || !r?.complete || !compatible() || !r.steps[index] || !isCurrent(r, index)) return;
@@ -413,6 +449,8 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const button = event.target.closest("[data-pl-action]");
     const action = button?.dataset.plAction;
     if (action === "state") openState();
+    else if (action === "export") exportPlan();
+    else if (action === "import") q("#pl-import-file").click();
     else if (action === "add") openAddForm();
     else if (action === "cancel-add") q("#pl-add-form").hidden = true;
     else if (action === "edit") renderEditor(button.dataset.id);
@@ -459,6 +497,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       invalidate(); renderWeapons();
     } else if (input.matches("[data-copy-goals]")) { copyGoals(input.value); input.value = ""; }
     else if (input.matches("[data-pl-done]")) markDone(Number(input.dataset.plDone));
+    else if (input.matches("#pl-import-file")) { const [file] = input.files; input.value = ""; if (file) void importPlan(file); }
     else if (input.closest("#pl-limits")) { cache.limits[input.name] = Number(input.value); invalidate(); }
   });
   q("#pl-add-form").addEventListener("submit", (event) => {

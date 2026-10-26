@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import { initSync, predict_gogma_rolls, predict_gogma_keep_rolls, predict_skill_rolls } from "./pkg/gogma_wasm_search.js";
-import { availableStats, BONUS_CATEGORY, bonusGoalAlwaysMet, bonusTotals, canFillSlots, copiedPlanner, layoutOf, MAX_SELECTED, rangeCanMatch, matchesTier, normalizedPlanner, normalizedProgress, routePosition, streamSteps, resultQuality, routeWeaponsMatch, skillGoalMatches, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { availableStats, BONUS_CATEGORY, bonusGoalAlwaysMet, bonusTotals, canFillSlots, copiedPlanner, layoutOf, MAX_SELECTED, rangeCanMatch, matchesTier, normalizedPlanner, normalizedProgress, parsePlannerExport, plannerExport, routePosition, streamSteps, resultQuality, routeWeaponsMatch, skillGoalMatches, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
 import { optimizeStream, planWeapons, selectTargets } from "./planner-engine.js";
 
 initSync({ module: await readFile(new URL("./pkg/gogma_wasm_search_bg.wasm", import.meta.url)) });
@@ -899,6 +899,21 @@ test("regression fixture: a reported seven-weapon session keeps its free top-des
   for (const step of expected.freeUpgrade) {
     const actual = finishes.find((s) => s.targetId === step.target && s.stream === "bonus");
     assert.deepEqual({ target: actual.targetId, action: actual.action, start: actual.start, end: actual.end, quality: actual.rolls.at(-1).quality }, step);
+  }
+});
+
+test("a planner export round-trips the position, weapons and progress, and other files are rejected", async () => {
+  const weapon = target("one");
+  const req = request([weapon], 20, 20);
+  const routes = await planWeapons(req, provider(req));
+  const planner = { selected: ["one"], limits: { bonus: 20, skill: 20 }, routes, mode: "acceptable", completed: { bonus: 1, skill: 0 }, matches: { 0: 2 }, signature: "sig", unrelated: true };
+  const text = JSON.stringify(plannerExport({ ...req.origin, baseSource: "手入力" }, [weapon], planner));
+  const data = parsePlannerExport(text);
+  assert.deepEqual(data.state, req.origin);
+  assert.deepEqual(data.targets, JSON.parse(JSON.stringify([weapon])));
+  assert.deepEqual(data.planner, JSON.parse(JSON.stringify({ ...planner, unrelated: undefined })));
+  for (const bad of ["not json", "[]", JSON.stringify({ ...data, format: "other" }), JSON.stringify({ ...data, version: 2 }), JSON.stringify({ ...data, targets: {} }), JSON.stringify({ ...data, planner: null })]) {
+    assert.throws(() => parsePlannerExport(bad), /invalidExport/);
   }
 });
 

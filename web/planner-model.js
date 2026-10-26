@@ -303,3 +303,31 @@ export function routeWeaponsMatch(route, completed, registered) {
     return JSON.stringify([expected.bonuses, expected.skill, expected.layout]) === JSON.stringify([p.currentBonuses, p.currentSkill, actual.keepCategories]);
   });
 }
+
+// A planner export carries everything needed to resume on another browser:
+// the saved position, every registered weapon (goals and known results), and
+// the planner's selection, limits, routes and progress.
+export const PLAN_EXPORT_FORMAT = "gogma-weapon-planner";
+
+export function plannerExport(state, targets, planner) {
+  const { selected, limits, routes, mode, completed, matches, signature } = planner;
+  return {
+    format: PLAN_EXPORT_FORMAT,
+    version: 1,
+    state: { baseSeed: state.baseSeed, bonusCounter: state.bonusCounter, skillCounter: state.skillCounter },
+    targets,
+    planner: { selected, limits, routes, mode, completed, matches, signature },
+  };
+}
+
+// Checks only the envelope; the app and planner normalize the contents as
+// they do for browser storage.
+export function parsePlannerExport(text) {
+  let data;
+  try { data = JSON.parse(text); } catch { data = null; }
+  const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+  if (!object(data) || data.format !== PLAN_EXPORT_FORMAT || data.version !== 1 || !object(data.state) || !Array.isArray(data.targets) || !object(data.planner)) {
+    throw new Error("invalidExport");
+  }
+  return data;
+}

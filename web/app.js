@@ -506,6 +506,30 @@ initPlanner({
     showSavedCounters([savedCounterMessage(step.stream === "bonus" ? "復元ボーナスカウンター" : "スキルカウンター", saveState[`${step.stream}Counter`])]);
     void Promise.all([refreshPredictions(), refreshComparisonPredictions(), refreshSkillPredictions()]);
   },
+  // A planner export restores the weapons and saved position like a pasted
+  // save-state code; nothing changes unless the whole position is valid.
+  importState: ({ state, targets }) => {
+    const value = (raw) => raw === null || raw === undefined ? null : Number(raw);
+    const baseSeed = value(state.baseSeed);
+    const bonusCounter = value(state.bonusCounter);
+    const skillCounter = value(state.skillCounter);
+    if (
+      !Number.isSafeInteger(baseSeed) || baseSeed < 0 || baseSeed > 99_999_999 ||
+      [bonusCounter, skillCounter].some((counter) => counter !== null && !isValidCounter(counter))
+    ) throw new Error(pl("This file is not a valid planner export."));
+    comparisonTargets = normalizeStoredTargets(targets);
+    saveState = {
+      baseSeed,
+      bonusCounter,
+      skillCounter,
+      baseSource: "状態コード",
+      bonusSource: bonusCounter === null ? null : "状態コード",
+      skillSource: skillCounter === null ? null : "状態コード",
+    };
+    renderComparisonTargets();
+    renderSaveState();
+    void Promise.all([refreshPredictions(), refreshComparisonPredictions(), refreshSkillPredictions()]);
+  },
   openState: () => {
     const details = document.querySelector(".state-manual-details");
     details.open = true;
@@ -981,30 +1005,7 @@ function loadPersistedAppState() {
       bonusSource: typeof candidateState.bonusSource === "string" ? candidateState.bonusSource : null,
       skillSource: typeof candidateState.skillSource === "string" ? candidateState.skillSource : null,
     };
-    const targets = Array.isArray(saved?.targets)
-      ? saved.targets
-          .filter((target) =>
-            Number.isSafeInteger(target?.weaponType) &&
-            target.weaponType >= 0 &&
-            target.weaponType <= 13 &&
-            Number.isSafeInteger(target?.attributeForce) &&
-            target.attributeForce >= 0 &&
-            target.attributeForce <= 9,
-          )
-          .slice(0, MAX_REGISTERED_TARGETS)
-          .map((target, index) => ({
-            id: typeof target.id === "string" && target.id ? target.id : `legacy-${index}`,
-            weaponType: target.weaponType,
-            attributeForce: target.attributeForce,
-            label: typeof target.label === "string" ? target.label.slice(0, 24) : "",
-            skillCombinations: Array.isArray(target.skillCombinations)
-              ? normalizeSkillCombinations(target.skillCombinations)
-              : defaultSkillCombinationsForWeapon(target.weaponType),
-            keepCategories: normalizeKeepCategories(target.keepCategories),
-            keepSource: typeof target.keepSource === "string" ? target.keepSource : null,
-            planner: normalizedPlanner(target),
-          }))
-      : [];
+    const targets = normalizeStoredTargets(saved?.targets);
     const bonusPrediction = {
       mode: saved?.bonusPrediction?.mode === "keep" ? "keep" : "reset",
     };
@@ -1056,6 +1057,33 @@ function persistAppState() {
     // The app remains usable when storage is unavailable.
   }
   window.dispatchEvent(new Event("gogma-state-change"));
+}
+
+function normalizeStoredTargets(targets) {
+  return Array.isArray(targets)
+    ? targets
+        .filter((target) =>
+          Number.isSafeInteger(target?.weaponType) &&
+          target.weaponType >= 0 &&
+          target.weaponType <= 13 &&
+          Number.isSafeInteger(target?.attributeForce) &&
+          target.attributeForce >= 0 &&
+          target.attributeForce <= 9,
+        )
+        .slice(0, MAX_REGISTERED_TARGETS)
+        .map((target, index) => ({
+          id: typeof target.id === "string" && target.id ? target.id : `legacy-${index}`,
+          weaponType: target.weaponType,
+          attributeForce: target.attributeForce,
+          label: typeof target.label === "string" ? target.label.slice(0, 24) : "",
+          skillCombinations: Array.isArray(target.skillCombinations)
+            ? normalizeSkillCombinations(target.skillCombinations)
+            : defaultSkillCombinationsForWeapon(target.weaponType),
+          keepCategories: normalizeKeepCategories(target.keepCategories),
+          keepSource: typeof target.keepSource === "string" ? target.keepSource : null,
+          planner: normalizedPlanner(target),
+        }))
+    : [];
 }
 
 function normalizeKeepCategories(categories) {

@@ -31,6 +31,8 @@
 .pl-state-strip { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; padding: 10px 14px; background: #22241e; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); font-size: 12px; }
 .pl-state-strip code { color: #ebe4ce; font-size: 12px; overflow-wrap: anywhere; }
 .pl-state-strip button { margin-left: auto; }
+.pl-transfer { display: flex; gap: 14px; }
+.pl-state-strip .pl-transfer button { margin-left: 0; }
 .pl-section { margin-top: 28px; }
 .pl-section-heading { margin-bottom: 12px; }
 .pl-index { color: var(--gold); margin-right: 7px; font-weight: 400; }

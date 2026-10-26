@@ -161,6 +161,19 @@ after a build, the old route is hidden behind a warning, even after a reload,
 so it cannot be mistaken for a current result. Build new guides from the current saved
 state to change a route already in progress. State-code formats are unchanged.
 
+## Moving a plan to another computer
+
+**Export plan** in the saved-position strip downloads a JSON file
+(`gogma-planner-B<seed>-G<bonus>-S<skill>.json`) holding the base seed and both
+Gogma counters, every registered weapon with its goals, known current results
+and Keep layout, and the planner's selection, roll limits, built routes, chosen
+route, matches and saved-step progress. **Import plan** on another browser asks
+for confirmation, then replaces that browser's weapons, saved position and
+planner progress, so the guide resumes at the same step. A file that is not a
+planner export (format `gogma-weapon-planner`, version 1) is rejected without
+changing anything. Base Artian counters and forecast-tab settings are not
+included.
+
 ## Validation and data
 
 `npm test` covers stat equivalence, separate units, stat ranges and exclusion,
