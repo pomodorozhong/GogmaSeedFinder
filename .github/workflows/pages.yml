@@ -2,8 +2,6 @@ name: Deploy web app to GitHub Pages
 
 on:
   push:
-    branches:
-      - main
     paths:
       - "web/**"
       - ".github/workflows/pages.yml"
