@@ -167,7 +167,10 @@ Every result that meets a tier counts the same, so the route takes the earliest
 workable finish and ignores stats outside the goal. A weapon's finish step in
 the guide offers **Other finishes (no extra rolls)**: every result for that
 weapon that still meets the route's goal and keeps that stream's roll count,
-top-desired results first, with only the earliest copy of an identical result.
+with only the earliest copy of an identical result. The list sorts by
+top-desired first, then roll position; ＋ adds further sort levels (any stat,
+"No Reset needed", roll position), each high-first or low-first, and the
+levels are remembered per stream in this browser.
 Choosing one rebuilds the route with that finish locked. Other weapons keep
 their finishes when possible; otherwise the option names the weapons whose
 finish changes. A weapon finishing top desired stays top desired, and a finish

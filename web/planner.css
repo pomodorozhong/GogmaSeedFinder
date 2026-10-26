@@ -42,6 +42,10 @@
 .pl-finish-option:disabled { cursor: default; }
 .pl-finish-option.is-current { border-color: var(--pl-teal); }
 .pl-finish-where { color: #ebe4ce; }
+.pl-sort { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 8px; }
+.pl-sort-level { display: inline-flex; align-items: center; gap: 4px; }
+.pl-sort select { min-height: 0; padding: 3px 6px; font-size: 12px; }
+.pl-sort-add { font-size: 14px; color: var(--gold-bright); }
 .pl-state-strip .pl-transfer button { margin-left: 0; }
 .pl-section { margin-top: 28px; }
 .pl-section-heading { margin-bottom: 12px; }

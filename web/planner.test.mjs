@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import { initSync, predict_gogma_rolls, predict_gogma_keep_rolls, predict_skill_rolls } from "./pkg/gogma_wasm_search.js";
-import { availableStats, BONUS_CATEGORY, bonusGoalAlwaysMet, bonusTotals, canFillSlots, copiedPlanner, layoutOf, MAX_SELECTED, rangeCanMatch, matchesTier, normalizedPlanner, normalizedProgress, parsePlannerExport, plannerExport, routePosition, streamSteps, resultQuality, routeWeaponsMatch, skillGoalMatches, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { availableStats, BONUS_CATEGORY, DEFAULT_FINISH_SORT, sortFinishOptions, bonusGoalAlwaysMet, bonusTotals, canFillSlots, copiedPlanner, layoutOf, MAX_SELECTED, rangeCanMatch, matchesTier, normalizedFinishSort, normalizedPlanner, normalizedProgress, parsePlannerExport, plannerExport, routePosition, streamSteps, resultQuality, routeWeaponsMatch, skillGoalMatches, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
 import { finishOptions, optimizeStream, pinFinish, planWeapons, selectTargets } from "./planner-engine.js";
 
 initSync({ module: await readFile(new URL("./pkg/gogma_wasm_search_bg.wasm", import.meta.url)) });
@@ -931,6 +931,19 @@ test("other finishes keep the roll count, and a chosen finish survives choosing 
   assert.equal(finishOf(again, "b").finish, option.finish);
   assert.equal(finishOf(again, "c").finish, other.finish);
   assert.deepEqual(Object.keys(again.pins.bonus).sort(), ["b", "c"]);
+});
+
+test("other finishes sort by several levels in order, falling back to the earliest roll", () => {
+  const option = (finish, totals, extra = {}) => ({ finish, totals: { attack: 0, affinity: 0, ...totals }, top: false, acquire: null, ...extra });
+  const options = [option(5, { attack: 30, affinity: 10 }), option(2, { attack: 33, affinity: 6 }, { acquire: 1 }), option(9, { attack: 33, affinity: 10 }), option(3, { attack: 30, affinity: 10 }, { top: true })];
+  const order = (levels) => sortFinishOptions(options, levels).map(({ index }) => index);
+  assert.deepEqual(order(DEFAULT_FINISH_SORT), [3, 1, 0, 2]);
+  assert.deepEqual(order([{ key: "attack", dir: "desc" }, { key: "affinity", dir: "desc" }]), [2, 1, 3, 0]);
+  assert.deepEqual(order([{ key: "affinity", dir: "desc" }, { key: "attack", dir: "asc" }]), [3, 0, 2, 1]);
+  assert.deepEqual(order([{ key: "direct", dir: "desc" }, { key: "finish", dir: "desc" }]), [2, 0, 3, 1]);
+  assert.deepEqual(order([]), [1, 3, 0, 2]);
+  assert.deepEqual(normalizedFinishSort([{ key: "attack", dir: "desc" }, { key: "attack", dir: "asc" }, { key: "bogus", dir: "asc" }, { key: "finish", dir: "up" }]), [{ key: "attack", dir: "desc" }]);
+  assert.deepEqual(normalizedFinishSort(undefined), DEFAULT_FINISH_SORT);
 });
 
 test("a planner export round-trips the position, weapons and progress, and other files are rejected", async () => {

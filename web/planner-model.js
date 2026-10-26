@@ -331,3 +331,30 @@ export function parsePlannerExport(text) {
   }
   return data;
 }
+
+// Sort levels for the other-finishes list, applied in order. "top" and
+// "direct" (no Reset needed first) are yes/no keys where "desc" puts yes
+// first; ties fall back to the earliest roll.
+export const FINISH_SORT_KEYS = ["top", "direct", "finish", ...STAT_KEYS];
+export const DEFAULT_FINISH_SORT = [{ key: "top", dir: "desc" }, { key: "finish", dir: "asc" }];
+
+export function normalizedFinishSort(levels) {
+  if (!Array.isArray(levels)) return DEFAULT_FINISH_SORT.map((level) => ({ ...level }));
+  const seen = new Set();
+  return levels.filter((level) => FINISH_SORT_KEYS.includes(level?.key) && ["asc", "desc"].includes(level.dir) && !seen.has(level.key) && seen.add(level.key))
+    .map(({ key, dir }) => ({ key, dir }));
+}
+
+export function sortFinishOptions(options, levels) {
+  const value = (option, key) => key === "top" ? Number(option.top)
+    : key === "direct" ? Number(!option.acquire)
+      : key === "finish" ? option.finish
+        : option.totals?.[key] ?? 0;
+  return options.map((option, index) => ({ option, index })).sort((a, b) => {
+    for (const { key, dir } of levels) {
+      const difference = value(a.option, key) - value(b.option, key);
+      if (difference) return dir === "asc" ? difference : -difference;
+    }
+    return a.option.finish - b.option.finish || a.index - b.index;
+  });
+}

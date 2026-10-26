@@ -1,6 +1,6 @@
 import { t, localizedTargetName } from "./i18n.js";
 import { pl } from "./planner-text.js";
-import { availableStats, BONUS_CATEGORY, copiedPlanner, hasBonusGoal, layoutOf, MAX_SELECTED, normalizedPlanner, normalizedProgress, parsePlannerExport, plannerExport, routePosition, routeWeaponsMatch, samePosition, statMaximum, statRollValues, streamSteps, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { availableStats, BONUS_CATEGORY, FINISH_SORT_KEYS, sortFinishOptions, copiedPlanner, hasBonusGoal, layoutOf, MAX_SELECTED, normalizedFinishSort, normalizedPlanner, normalizedProgress, parsePlannerExport, plannerExport, routePosition, routeWeaponsMatch, samePosition, statMaximum, statRollValues, streamSteps, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
 
 const STORAGE_KEY = "gogma-weapon-planner-v1";
 const esc = (text) => String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -21,6 +21,7 @@ function restoredCache(stored, targets) {
     completed: stored?.completed,
     matches: stored?.matches && typeof stored.matches === "object" ? stored.matches : {},
     signature: typeof stored?.signature === "string" ? stored.signature : "",
+    finishSort: { bonus: normalizedFinishSort(stored?.finishSort?.bonus), skill: normalizedFinishSort(stored?.finishSort?.skill) },
   };
   // Saved data is optional. Ignore an incompatible/corrupt stored route.
   for (const mode of ["acceptable", "preferred"]) {
@@ -363,14 +364,31 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     if (!list) return canChooseFinish(r, step) ? `<button type="button" class="text-button pl-finish-toggle" data-pl-action="finishes">${html("Other finishes (no extra rolls)")}</button>` : "";
     if (list.loading) return `<p class="pl-fine">${html("Checking other finishes for {name}…", { name: nameOf(target) })}</p>`;
     const prefix = step.stream === "bonus" ? "G" : "S";
-    const items = list.options.map((option, index) => {
+    const keys = sortKeys(step.stream, target);
+    const levels = cache.finishSort[step.stream].filter((level) => keys.includes(level.key));
+    const sortName = (key) => key === "top" ? pl("Top desired") : key === "direct" ? pl("No Reset needed") : key === "finish" ? pl("Roll position") : statName(key, target);
+    const sorter = `<div class="pl-sort"><span class="pl-fine">${html("Sort by")}</span>${levels.map((level, index) => `<span class="pl-sort-level"><select data-pl-sort-key="${index}" aria-label="${html("Sort level {n}", { n: index + 1 })}">${keys.filter((key) => key === level.key || !levels.some((v) => v.key === key)).map((key) => `<option value="${key}"${key === level.key ? " selected" : ""}>${esc(sortName(key))}</option>`).join("")}</select><select data-pl-sort-dir="${index}" aria-label="${html("Sort direction {n}", { n: index + 1 })}"><option value="desc"${level.dir === "desc" ? " selected" : ""}>${html("High first")} ↓</option><option value="asc"${level.dir === "asc" ? " selected" : ""}>${html("Low first")} ↑</option></select><button type="button" class="text-button" data-pl-action="sort-remove" data-index="${index}" aria-label="${html("Remove sort level {n}", { n: index + 1 })}">✕</button></span>`).join("")}${levels.length < keys.length ? `<button type="button" class="text-button pl-sort-add" data-pl-action="sort-add" aria-label="${html("Add sort level")}">＋</button>` : ""}</div>`;
+    const items = sortFinishOptions(list.options, levels).map(({ option, index }) => {
       const where = option.finish === 0 ? pl("Already met (no rolls)") : `${prefix}${option.finish} · ${actionName(option.action)}${option.acquire ? ` · ${pl("Reset at {at} first", { at: `${prefix}${option.acquire}` })}` : ""}`;
       const result = option.raw === null ? "" : resultMarkup(option, step, target);
       return `<button type="button" class="pl-finish-option${option.current ? " is-current" : ""}" data-pl-pin="${index}"${option.current || !canChooseFinish(r, step) ? " disabled" : ""}><span class="pl-finish-where">${option.top ? `<span class="pl-gold">★</span> ` : ""}${esc(where)}${option.current ? ` <span class="pl-badge pl-neutral">${html("Current")}</span>` : ""}</span><span class="pl-finish-result">${result}</span>${option.moves.length ? `<span class="pl-fine">${html("Also changes: {names}", { names: option.moves.map((id) => nameOf(r.targets.find((v) => v.id === id))).join(", ") })}</span>` : ""}</button>`;
     }).join("");
     const others = list.options.filter((option) => !option.current).length;
     const summary = others ? pl("{n} other finishes keep the route at {rolls} rolls.", { n: others, rolls: r[step.stream].horizon }) : pl("No other finish fits without extra rolls.");
-    return `<section class="pl-finishes"><div class="pl-finishes-heading"><h4>${html("Other finishes (no extra rolls)")}</h4><button type="button" class="text-button" data-pl-action="close-finishes">${html("Close")}</button></div><p class="pl-fine">${esc(summary)}${list.unchecked ? ` ${esc(pl("{n} finishes were not checked: search limit reached.", { n: list.unchecked }))}` : ""}</p><div class="pl-finish-list">${items}</div></section>`;
+    return `<section class="pl-finishes"><div class="pl-finishes-heading"><h4>${html("Other finishes (no extra rolls)")}</h4><button type="button" class="text-button" data-pl-action="close-finishes">${html("Close")}</button></div><p class="pl-fine">${esc(summary)}${list.unchecked ? ` ${esc(pl("{n} finishes were not checked: search limit reached.", { n: list.unchecked }))}` : ""}</p>${sorter}<div class="pl-finish-list">${items}</div></section>`;
+  }
+  const sortKeys = (stream, target) => stream === "bonus" ? FINISH_SORT_KEYS.filter((key) => !["top", "direct", "finish"].includes(key) ? availableStats(target).includes(key) : true) : ["top", "finish"];
+  // Re-renders the guide without losing the list's scroll position.
+  function updateFinishSort(change) {
+    const r = route(); const step = r?.steps[inspected];
+    if (!step || !finishList) return;
+    const keys = sortKeys(step.stream, r.targets.find((v) => v.id === step.targetId));
+    const levels = cache.finishSort[step.stream].filter((level) => keys.includes(level.key));
+    change(levels, keys);
+    cache.finishSort[step.stream] = levels;
+    const scrollTop = q(".pl-finish-list")?.scrollTop ?? 0;
+    persist(); renderGuide();
+    const list = q(".pl-finish-list"); if (list) list.scrollTop = scrollTop;
   }
   function helperWorker(message, onResult) {
     stopWorker();
@@ -508,6 +526,8 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     else if (action === "export") exportPlan();
     else if (action === "finishes") showFinishes();
     else if (action === "close-finishes") { finishList = null; renderGuide(); }
+    else if (action === "sort-add") updateFinishSort((levels, keys) => { const key = keys.find((v) => !levels.some((level) => level.key === v)); if (key) levels.push({ key, dir: key === "finish" ? "asc" : "desc" }); });
+    else if (action === "sort-remove") updateFinishSort((levels) => levels.splice(Number(button.dataset.index), 1));
     else if (action === "import") q("#pl-import-file").click();
     else if (action === "add") openAddForm();
     else if (action === "cancel-add") q("#pl-add-form").hidden = true;
@@ -557,6 +577,8 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       invalidate(); renderWeapons();
     } else if (input.matches("[data-copy-goals]")) { copyGoals(input.value); input.value = ""; }
     else if (input.matches("[data-pl-done]")) markDone(Number(input.dataset.plDone));
+    else if (input.matches("[data-pl-sort-key]")) updateFinishSort((levels) => { levels[Number(input.dataset.plSortKey)].key = input.value; });
+    else if (input.matches("[data-pl-sort-dir]")) updateFinishSort((levels) => { levels[Number(input.dataset.plSortDir)].dir = input.value; });
     else if (input.matches("#pl-import-file")) { const [file] = input.files; input.value = ""; if (file) void importPlan(file); }
     else if (input.closest("#pl-limits")) { cache.limits[input.name] = Number(input.value); invalidate(); }
   });
