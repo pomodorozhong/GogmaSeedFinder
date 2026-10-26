@@ -273,6 +273,65 @@ test("optional weapons left out because the search budget ran out are marked unc
   assert.deepEqual(selection.dropped.map((v) => `${v.id}:${v.reason}`), ["b:unchecked", "c:unchecked"]);
 });
 
+test("truncated bonus candidates do not prove a conflict or permit dropping a required goal", async () => {
+  const weapons = [target("required"), target("other")];
+  for (const t of weapons) {
+    t.planner.skillEnabled = false;
+    t.keepCategories = [0, 0, 0, 3, 3];
+    t.planner.acceptable = { stats: { attack: 24 }, maxStats: {}, skills: [] };
+    t.planner.preferred = { stats: {}, maxStats: {}, skills: [] };
+  }
+  const req = request(weapons, 4, 0); req.origin.baseSeed = 7;
+  // Both can Keep at G2/G3. A cap of one retains only their direct G4
+  // finish, so its collision cannot prove the full problem infeasible.
+  for (const optional of [true, false]) {
+    weapons[1].planner.optional = optional;
+    const limited = await planWeapons(req, provider(req), () => {}, { candidateCap: 1 });
+    for (const route of Object.values(limited)) {
+      assert.equal(route.proven, false);
+      if (optional) {
+        assert.ok(route.complete);
+        assert.equal(route.total, 4);
+        assert.deepEqual(route.dropped, [{ id: "other", reason: "unchecked", optional: true }]);
+      } else {
+        assert.equal(route.complete, false);
+        assert.equal(route.bonus.status, "incomplete");
+        assert.deepEqual(route.dropped, []);
+      }
+    }
+  }
+  for (const route of Object.values(await planWeapons(req, provider(req)))) {
+    assert.ok(route.complete && route.proven);
+    assert.equal(route.total, 3);
+    assert.deepEqual(route.dropped, []);
+  }
+});
+
+test("truncated bonus candidates do not prove an empty optional goal unreachable", async () => {
+  const req = { targets: ["a", "b"].map((id) => ({ id, planner: { optional: id === "b" } })), limits: { bonus: 1, skill: 0 } };
+  const pool = {
+    complete: false,
+    bonus: [{ id: "a", choices: [{ finish: 1, action: "reset" }] }, { id: "b", choices: [] }],
+    skill: ["a", "b"].map((id) => ({ id, choices: [{ finish: 0, action: "already" }] })),
+  };
+  const selection = await selectTargets(req, pool, ["a", "b"]);
+  assert.deepEqual([...selection.kept], ["a"]);
+  assert.deepEqual(selection.dropped, [{ id: "b", reason: "unchecked", optional: true }]);
+  assert.ok(selection.exhausted);
+});
+
+test("a complete skill stream proves conflicts despite truncated bonus candidates", async () => {
+  const req = { targets: ["a", "b"].map((id) => ({ id, planner: { optional: id === "b" } })), limits: { bonus: 1, skill: 1 } };
+  const pool = {
+    complete: false,
+    ...Object.fromEntries(["bonus", "skill"].map((stream) => [stream, ["a", "b"].map((id) => ({ id, choices: [{ finish: 1, action: stream === "bonus" ? "reset" : "skill" }] }))])),
+  };
+  const selection = await selectTargets(req, pool, ["a", "b"]);
+  assert.deepEqual([...selection.kept], ["a"]);
+  assert.deepEqual(selection.dropped, [{ id: "b", reason: "conflict", optional: true }]);
+  assert.equal(selection.exhausted, false);
+});
+
 test("competing weapons produce a route for each choice of which one to finish", async () => {
   const origin = { baseSeed: 86_315_169, bonusCounter: 480, skillCounter: 188 };
   const rolls = predict_skill_rolls(origin.baseSeed, 3, 1, origin.skillCounter, 54, 40);

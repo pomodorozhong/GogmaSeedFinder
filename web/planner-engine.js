@@ -283,31 +283,39 @@ export async function selectTargets(request, pool, order, options = {}) {
   let exhausted = false;
   const streams = ["bonus", "skill"].map((stream) => ({
     limit: request.limits[stream],
+    complete: stream === "skill" || pool.complete !== false,
     byId: new Map(pool[stream].map((target) => [target.id, target])),
     budget: { nodes: 0, max: options.maxNodes ?? 200_000, work: 0, maxWork: options.maxWork ?? 300_000_000 },
   }));
   const unreachable = new Set(order.filter((id) => streams.some(({ byId }) => !byId.get(id).choices.length)));
-  for (const id of order) if (optional.has(id) && unreachable.has(id)) dropped.set(id, "unreachable");
+  for (const id of order) if (optional.has(id) && unreachable.has(id)) {
+    const proven = streams.some(({ byId, complete }) => complete && !byId.get(id).choices.length);
+    dropped.set(id, proven ? "unreachable" : "unchecked");
+    if (!proven) exhausted = true;
+  }
   const kept = [...order.filter((id) => !optional.has(id)), ...order.filter((id) => optional.has(id) && !dropped.has(id))];
   // A stream with an unreachable required weapon is reported as missing, so
   // it cannot exclude anything.
   const active = streams.filter(({ byId }) => kept.every((id) => byId.get(id).choices.length));
   const fits = (ids) => {
-    for (const { byId, limit, budget } of active) {
+    let uncertain = false;
+    for (const { byId, limit, budget, complete } of active) {
       const trial = eventSchedule(ids.map((id) => byId.get(id)), limit, budget);
-      if (trial.exhausted) return null;
-      if (!trial.choices) return false;
+      if (trial.exhausted || (!trial.choices && !complete)) uncertain = true;
+      else if (!trial.choices) return false;
     }
-    return true;
+    // A complete stream can prove a conflict even when the other stream is
+    // uncertain. Failure in truncated candidates alone proves nothing.
+    return uncertain ? null : true;
   };
   const all = fits(kept);
   const fit = all ? [...kept] : [];
   for (let i = 0; !all && i < kept.length; i += 1) {
     const trial = all === null ? null : fits([...fit, kept[i]]);
     if (trial === null) {
-      // Out of budget: keep the remaining required weapons for the final
-      // search to judge, and drop the remaining optional ones unchecked —
-      // they may well have fit.
+      // Candidate collection or scheduling left feasibility uncertain. Keep
+      // required weapons for the final search and leave optional ones
+      // unchecked, since they may still fit.
       exhausted = true;
       for (const id of kept.slice(i)) if (optional.has(id)) dropped.set(id, "unchecked"); else fit.push(id);
       break;

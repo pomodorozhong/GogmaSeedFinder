@@ -66,9 +66,11 @@ weapons use. Required weapons always take priority over optional ones; within
 each group, weapons earlier in the list keep their place. A left-out weapon is
 removed from both streams, so each weapon is checked against both streams
 together before it is left out; the route names it with the reason. If the
-search budget runs out before an optional weapon is checked, it is left out as
-"not checked" rather than reported as a conflict, since it may have fit. A required
-weapon that cannot reach its goal at all still makes the route incomplete.
+candidate or scheduling budget runs out before an optional weapon is checked,
+it is left out as "not checked" rather than reported as a conflict, since it
+may have fit. A required weapon whose feasibility remains uncertain is retained
+for the final search; a required goal without a verified feasible schedule
+keeps the route incomplete.
 
 When weapons compete for the same positions, the planner also builds up to four
 alternative routes, each giving priority to one displaced weapon, and offers
