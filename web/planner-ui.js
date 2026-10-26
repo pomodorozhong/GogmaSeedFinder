@@ -59,6 +59,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   let pointerFrame = null;
   // Other finishes for one weapon, tied to the route object they were found for.
   let finishList = null;
+  let sortMenuOpen = false;
   const nameOf = (target) => target.label || localizedTargetName(weapons.find(([id]) => id === target.weaponType)?.[1] ?? "", attributes.find(([id]) => id === target.attributeForce)?.[1] ?? "");
   const prepared = () => getTargets().filter((target) => cache.selected.includes(target.id)).map((target) => ({ ...target, planner: normalizedPlanner(target) }));
   const signature = () => JSON.stringify(prepared().map((target) => ({ id: target.id, label: target.label, weaponType: target.weaponType, attributeForce: target.attributeForce, planner: { optional: target.planner.optional, bonusEnabled: target.planner.bonusEnabled, skillEnabled: target.planner.skillEnabled, acceptable: target.planner.acceptable, preferred: target.planner.preferred, elementValues: target.planner.elementValues } })));
@@ -367,7 +368,14 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const keys = sortKeys(step.stream, target);
     const levels = cache.finishSort[step.stream].filter((level) => keys.includes(level.key));
     const sortName = (key) => key === "top" ? pl("Top desired") : key === "direct" ? pl("No Reset needed") : key === "finish" ? pl("Roll position") : statName(key, target);
-    const sorter = `<div class="pl-sort"><span class="pl-fine">${html("Sort by")}</span>${levels.map((level, index) => `<span class="pl-sort-level"><select data-pl-sort-key="${index}" aria-label="${html("Sort level {n}", { n: index + 1 })}">${keys.filter((key) => key === level.key || !levels.some((v) => v.key === key)).map((key) => `<option value="${key}"${key === level.key ? " selected" : ""}>${esc(sortName(key))}</option>`).join("")}</select><select data-pl-sort-dir="${index}" aria-label="${html("Sort direction {n}", { n: index + 1 })}"><option value="desc"${level.dir === "desc" ? " selected" : ""}>${html("High first")} ↓</option><option value="asc"${level.dir === "asc" ? " selected" : ""}>${html("Low first")} ↑</option></select><button type="button" class="text-button" data-pl-action="sort-remove" data-index="${index}" aria-label="${html("Remove sort level {n}", { n: index + 1 })}">✕</button></span>`).join("")}${levels.length < keys.length ? `<button type="button" class="text-button pl-sort-add" data-pl-action="sort-add" aria-label="${html("Add sort level")}">＋</button>` : ""}</div>`;
+    // One row of sort chips; "+ Sort" opens a menu of the unused fields.
+    const unused = keys.filter((key) => !levels.some((level) => level.key === key));
+    const chip = (level, index) => {
+      const direction = pl(level.dir === "desc" ? "High first" : "Low first");
+      return `<span class="pl-sort-chip"><button type="button" data-pl-action="sort-flip" data-index="${index}" title="${esc(direction)}" aria-label="${html("Sort level {n}: {name}, {direction}. Click to reverse.", { n: index + 1, name: sortName(level.key), direction })}">${esc(sortName(level.key))} ${level.dir === "desc" ? "↓" : "↑"}</button><button type="button" class="pl-sort-remove" data-pl-action="sort-remove" data-index="${index}" aria-label="${html("Remove sort level {n}", { n: index + 1 })}">×</button></span>`;
+    };
+    const menu = sortMenuOpen && unused.length ? `<div class="pl-sort-menu" role="menu">${unused.map((key) => `<button type="button" role="menuitem" data-pl-action="sort-pick" data-key="${key}">${esc(sortName(key))}</button>`).join("")}</div>` : "";
+    const sorter = `<div class="pl-sort"><div class="pl-sort-row">${levels.map(chip).join("")}${unused.length ? `<button type="button" class="pl-sort-add" data-pl-action="sort-menu" aria-haspopup="menu" aria-expanded="${sortMenuOpen}">＋ ${html("Sort")}</button>` : ""}</div>${menu}</div>`;
     const items = sortFinishOptions(list.options, levels).map(({ option, index }) => {
       const where = option.finish === 0 ? pl("Already met (no rolls)") : `${prefix}${option.finish} · ${actionName(option.action)}${option.acquire ? ` · ${pl("Reset at {at} first", { at: `${prefix}${option.acquire}` })}` : ""}`;
       const result = option.raw === null ? "" : resultMarkup(option, step, target);
@@ -379,7 +387,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   }
   const sortKeys = (stream, target) => stream === "bonus" ? FINISH_SORT_KEYS.filter((key) => !["top", "direct", "finish"].includes(key) ? availableStats(target).includes(key) : true) : ["top", "finish"];
   // Re-renders the guide without losing the list's scroll position.
-  function updateFinishSort(change) {
+  function updateFinishSort(change, toEnd = false) {
     const r = route(); const step = r?.steps[inspected];
     if (!step || !finishList) return;
     const keys = sortKeys(step.stream, r.targets.find((v) => v.id === step.targetId));
@@ -387,8 +395,18 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     change(levels, keys);
     cache.finishSort[step.stream] = levels;
     const scrollTop = q(".pl-finish-list")?.scrollTop ?? 0;
+    const scrollLeft = q(".pl-sort-row")?.scrollLeft ?? 0;
     persist(); renderGuide();
     const list = q(".pl-finish-list"); if (list) list.scrollTop = scrollTop;
+    const row = q(".pl-sort-row"); if (row) row.scrollLeft = toEnd ? row.scrollWidth : scrollLeft;
+    placeSortMenu();
+  }
+  // The menu opens under "+ Sort", kept inside the panel.
+  function placeSortMenu() {
+    const menu = q(".pl-sort-menu"); const add = q(".pl-sort-add"); const sort = q(".pl-sort");
+    if (!menu || !add || !sort) return;
+    const left = add.getBoundingClientRect().left - sort.getBoundingClientRect().left;
+    menu.style.left = `${Math.max(0, Math.min(left, sort.clientWidth - menu.offsetWidth))}px`;
   }
   function helperWorker(message, onResult) {
     stopWorker();
@@ -526,8 +544,11 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     else if (action === "export") exportPlan();
     else if (action === "finishes") showFinishes();
     else if (action === "close-finishes") { finishList = null; renderGuide(); }
-    else if (action === "sort-add") updateFinishSort((levels, keys) => { const key = keys.find((v) => !levels.some((level) => level.key === v)); if (key) levels.push({ key, dir: key === "finish" ? "asc" : "desc" }); });
+    else if (action === "sort-menu") { sortMenuOpen = !sortMenuOpen; updateFinishSort(() => {}); q(".pl-sort-menu button")?.focus(); }
+    else if (action === "sort-pick") { sortMenuOpen = false; updateFinishSort((levels, keys) => { if (keys.includes(button.dataset.key)) levels.push({ key: button.dataset.key, dir: button.dataset.key === "finish" ? "asc" : "desc" }); }, true); q(".pl-sort-add")?.focus(); }
+    else if (action === "sort-flip") updateFinishSort((levels) => { const level = levels[Number(button.dataset.index)]; level.dir = level.dir === "desc" ? "asc" : "desc"; });
     else if (action === "sort-remove") updateFinishSort((levels) => levels.splice(Number(button.dataset.index), 1));
+    else if (sortMenuOpen && !event.target.closest(".pl-sort-menu")) { sortMenuOpen = false; updateFinishSort(() => {}); }
     else if (action === "import") q("#pl-import-file").click();
     else if (action === "add") openAddForm();
     else if (action === "cancel-add") q("#pl-add-form").hidden = true;
@@ -564,6 +585,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     if (row && !event.target.closest("input")) { inspected = Number(row.dataset.plStep); renderResults(); }
   });
   root.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && sortMenuOpen) { sortMenuOpen = false; updateFinishSort(() => {}); q(".pl-sort-add")?.focus(); return; }
     if (event.target.matches("[data-pl-step]") && ["Enter", " "].includes(event.key)) { event.preventDefault(); inspected = Number(event.target.dataset.plStep); renderResults(); }
   });
   root.addEventListener("change", (event) => {
@@ -577,8 +599,6 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       invalidate(); renderWeapons();
     } else if (input.matches("[data-copy-goals]")) { copyGoals(input.value); input.value = ""; }
     else if (input.matches("[data-pl-done]")) markDone(Number(input.dataset.plDone));
-    else if (input.matches("[data-pl-sort-key]")) updateFinishSort((levels) => { levels[Number(input.dataset.plSortKey)].key = input.value; });
-    else if (input.matches("[data-pl-sort-dir]")) updateFinishSort((levels) => { levels[Number(input.dataset.plSortDir)].dir = input.value; });
     else if (input.matches("#pl-import-file")) { const [file] = input.files; input.value = ""; if (file) void importPlan(file); }
     else if (input.closest("#pl-limits")) { cache.limits[input.name] = Number(input.value); invalidate(); }
   });
