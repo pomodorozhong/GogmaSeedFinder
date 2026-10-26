@@ -295,6 +295,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       if (!r.proven) note += ` ${pl("The search reached its complexity budget. A shorter route may exist within these roll limits.")}`;
     }
     if (r.complete && r.dropped?.length) note = [pl("Left out of this route: {names}", { names: droppedNames(r) }), note].filter(Boolean).join(" · ");
+    if (r.alternativesComplete === false && totalDone() === 0) note = [note, pl("More alternative routes may exist within these roll limits.")].filter(Boolean).join(" · ");
     q("#pl-route-note").textContent = note;
     const choices = r.complete && r.alternatives?.length && totalDone() === 0 && ok ? [r, ...r.alternatives] : [];
     q("#pl-alternatives").hidden = !choices.length;

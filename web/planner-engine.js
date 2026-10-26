@@ -3,6 +3,7 @@ import { bonusGoalAlwaysMet, bonusTotals, hasGoal, layoutOf, matchesTier, rangeC
 const MODES = ["acceptable", "preferred"];
 const pause = () => new Promise((resolve) => setTimeout(resolve, 0));
 const layoutKey = (layout) => layout.join("");
+const schedulingBudget = (options) => ({ nodes: 0, max: options.maxNodes ?? 200_000, work: 0, maxWork: options.maxWork ?? 300_000_000 });
 const before = (positions, end) => {
   let lo = 0;
   let hi = positions.length;
@@ -195,7 +196,7 @@ function eventSchedule(targets, horizon, budget) {
 export async function optimizeStream(targets, limit, complete = true, options = {}) {
   const missing = targets.filter((target) => !target.choices.length).map((target) => target.id);
   if (missing.length) return { status: complete ? "missing" : "incomplete", missing, proven: complete, horizon: null, choices: [] };
-  const budget = { nodes: 0, max: options.maxNodes ?? 200_000, work: 0, maxWork: options.maxWork ?? 300_000_000 };
+  const budget = schedulingBudget(options);
   const first = eventSchedule(targets, limit, budget);
   if (!first.choices) return { status: first.exhausted || !complete ? "incomplete" : "missing", missing: [], proven: !first.exhausted && complete, horizon: null, choices: [] };
   let best = first.choices;
@@ -216,7 +217,7 @@ export async function optimizeStream(targets, limit, complete = true, options = 
   // Weapons are upgraded greedily in list order on a separate budget, which
   // never affects whether the minimum is proven.
   if (!exhausted) {
-    const upgradeBudget = { nodes: 0, max: options.maxNodes ?? 200_000, work: 0, maxWork: options.maxWork ?? 300_000_000 };
+    const upgradeBudget = schedulingBudget(options);
     let current = targets;
     const topOnly = (i) => current.map((t, j) => j === i ? { ...t, choices: t.choices.filter((c) => c.top) } : t);
     for (let i = 0; i < current.length; i += 1) {
@@ -284,7 +285,7 @@ export function replayRoute(request, mode, bonus, skill, provider) {
 // goal is never dropped, so the route reports it as missing instead.
 // Dropping a weapon removes it from both streams: half a weapon is not a goal,
 // so each weapon is tested against both streams before it is dropped.
-export async function selectTargets(request, pool, order, options = {}) {
+export async function selectTargets(request, pool, order, options = {}, budgets = null) {
   const optional = new Set(request.targets.filter((t) => t.planner.optional).map((t) => t.id));
   const dropped = new Map();
   let exhausted = false;
@@ -292,7 +293,7 @@ export async function selectTargets(request, pool, order, options = {}) {
     limit: request.limits[stream],
     complete: stream === "skill" || pool.complete !== false,
     byId: new Map(pool[stream].map((target) => [target.id, target])),
-    budget: { nodes: 0, max: options.maxNodes ?? 200_000, work: 0, maxWork: options.maxWork ?? 300_000_000 },
+    budget: budgets?.[stream] ?? schedulingBudget(options),
   }));
   const unreachable = new Set(order.filter((id) => streams.some(({ byId }) => !byId.get(id).choices.length)));
   for (const id of order) if (optional.has(id) && unreachable.has(id)) {
@@ -337,8 +338,8 @@ export async function selectTargets(request, pool, order, options = {}) {
   return { kept: new Set(fit), dropped: [...dropped].map(([id, reason]) => ({ id, reason, optional: optional.has(id) })), exhausted };
 }
 
-async function planRoute(request, pool, mode, order, provider, options) {
-  const selection = await selectTargets(request, pool, order, options);
+async function planRoute(request, pool, mode, order, provider, options, selection = null) {
+  selection ??= await selectTargets(request, pool, order, options);
   const only = (stream) => pool[stream].filter((target) => selection.kept.has(target.id));
   const bonus = await optimizeStream(only("bonus"), request.limits.bonus, pool.complete, options);
   const skill = await optimizeStream(only("skill"), request.limits.skill, true, options);
@@ -346,6 +347,45 @@ async function planRoute(request, pool, mode, order, provider, options) {
   route.dropped = selection.dropped;
   if (selection.exhausted) route.proven = false;
   return route;
+}
+
+async function findAlternativeRoutes(request, pool, mode, ids, primary, provider, options) {
+  const alternatives = [];
+  const queue = [{ prefix: [], dropped: primary.dropped }];
+  const prefixes = new Set(["[]"]);
+  const routeKey = (route) => JSON.stringify(route.dropped.map(({ id }) => id).sort());
+  const routes = new Set([routeKey(primary)]);
+  const budgets = Object.fromEntries(["bonus", "skill"].map((stream) => [stream, schedulingBudget(options)]));
+  let complete = primary.proven;
+  let attempts = 0;
+  for (let qi = 0; qi < queue.length; qi += 1) {
+    const node = queue[qi];
+    for (const { id } of node.dropped.filter((v) => v.reason === "conflict")) {
+      // Keep every earlier choice in this prefix. Repeatedly adding displaced
+      // weapons explores combinations of independent conflicts, not just swaps
+      // against the primary route. Canonical prefixes avoid permutation work.
+      const prefix = ids.filter((v) => v === id || node.prefix.includes(v));
+      const key = JSON.stringify(prefix);
+      if (prefixes.has(key)) continue;
+      if (alternatives.length >= 4 || attempts >= (options.maxAlternativeAttempts ?? 500)) return { alternatives, complete: false };
+      prefixes.add(key);
+      attempts += 1;
+      const order = [...prefix, ...ids.filter((v) => !prefix.includes(v))];
+      const selection = await selectTargets(request, pool, order, options, budgets);
+      if (selection.exhausted) return { alternatives, complete: false };
+      // Required weapons still take priority. An optional choice that cannot
+      // coexist with them cannot become an alternative by being promoted.
+      if (!prefix.every((v) => selection.kept.has(v))) continue;
+      queue.push({ prefix, dropped: selection.dropped });
+      const selectedKey = routeKey(selection);
+      if (routes.has(selectedKey)) continue;
+      routes.add(selectedKey);
+      const route = await planRoute(request, pool, mode, order, provider, options, selection);
+      if (!route.proven) complete = false;
+      if (route.complete) alternatives.push(route);
+    }
+  }
+  return { alternatives, complete };
 }
 
 export async function planWeapons(request, provider, report = () => {}, options = {}) {
@@ -357,14 +397,8 @@ export async function planWeapons(request, provider, report = () => {}, options 
     report({ phase: "optimize", mode });
     const pool = pools[mode];
     const primary = await planRoute(request, pool, mode, ids, provider, options);
-    // When weapons compete for the same rolls, offer the routes that give
-    // each displaced weapon priority so the player can choose.
-    const alternatives = [];
-    for (const { id } of primary.dropped.filter((v) => v.reason === "conflict").slice(0, 4)) {
-      const route = await planRoute(request, pool, mode, [id, ...ids.filter((v) => v !== id)], provider, options);
-      const key = (r) => r.dropped.map((v) => v.id).sort().join();
-      if (route.complete && key(route) !== key(primary) && !alternatives.some((r) => key(r) === key(route))) alternatives.push(route);
-    }
+    const { alternatives, complete } = await findAlternativeRoutes(request, pool, mode, ids, primary, provider, options);
+    for (const route of [primary, ...alternatives]) route.alternativesComplete = complete;
     primary.alternatives = alternatives;
     routes[mode] = primary;
     report({ phase: "route", mode, route: primary });

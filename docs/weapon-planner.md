@@ -74,9 +74,13 @@ may have fit. A required weapon whose feasibility remains uncertain is retained
 for the final search; a required goal without a verified feasible schedule
 keeps the route incomplete.
 
-When weapons compete for the same positions, the planner also builds up to four
-alternative routes, each giving priority to one displaced weapon, and offers
-them as a picker before the first step is saved.
+When weapons compete for the same positions, the planner explores combinations
+of displaced weapons and offers up to four distinct alternative routes in a
+picker before the first step is saved. Required weapons retain priority over
+optional weapons. Failed or duplicate attempts do not consume the four-route
+display limit. The picker warns when its display or search limits leave other
+alternatives unchecked; this does not change whether a displayed route's
+minimum is proven.
 
 ## Search and replay
 
@@ -109,6 +113,11 @@ collection retains at most 200,000 finishes per bonus tier and weapon. A feasibl
 route is marked **Best found** if either budget prevents proving the minimum;
 an unsuccessful incomplete search is not reported as proof that no route exists.
 Reaching a bound can hide a shorter route or a feasible additional weapon.
+Alternative discovery has a separate shared scheduling budget per stream and
+route mode, plus a limit of 500 priority combinations to check. It retains
+earlier choices while testing further displaced weapons, so independent
+conflicts can be combined in one alternative. Reaching its budget or the
+four-alternative display limit is reported separately from the minimum proof.
 Roll limits remain the user-facing search bounds. Cancellation terminates the
 worker; any completed alternative remains available.
 
@@ -160,7 +169,7 @@ acquisitions, duplicate weapons, optional weapons and alternative routes, free
 top-desired upgrades, zero limits, budget exhaustion, goal preservation, and real
 WASM replay. Regressions cover large candidate merges, uncertain exclusions
 after candidate truncation, zero Status minimums with unknown gains, partially
-known layouts, and zero-gain status slots.
+known layouts, zero-gain status slots, and combined conflict alternatives.
 Short-stream minimum proofs are also
 compared against independent exhaustive Reset/Keep/weapon action simulation.
 All planner copy has Japanese, English, and Traditional Chinese coverage.

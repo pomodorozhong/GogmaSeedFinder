@@ -93,6 +93,7 @@ export const PLANNER_TEXT = {
   "Search incomplete": ["探索未完了", "搜尋未完成"],
   "Increase the roll limits or relax your goals.": ["抽選上限を増やすか、目標を緩めてください。", "請提高抽選上限或放寬目標。"],
   "The search reached its complexity budget. A shorter route may exist within these roll limits.": ["計算量の上限に達しました。指定範囲内に、より短いルートが存在する可能性があります。", "搜尋已達計算量上限，此抽選範圍內可能仍有更短路線。"],
+  "More alternative routes may exist within these roll limits.": ["指定範囲内に、ほかの代替ルートが存在する可能性があります。", "此抽選範圍內可能還有其他替代路線。"],
   "Bonus goals not completed": ["ボーナス目標は未達成", "加成目標未能全部完成"],
   "Skill goals not completed": ["スキル目標は未達成", "技能目標未能全部完成"],
   "Conflicting roll positions": ["抽選位置の重複", "抽選位置衝突"],

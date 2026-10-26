@@ -470,6 +470,127 @@ test("competing weapons produce a route for each choice of which one to finish",
   assert.ok(route.alternatives[0].steps.every((step) => step.targetId === "second"));
 });
 
+function skillConflictRequest(entries, limit = 2) {
+  const req = request([], 0, limit);
+  const rolls = provider(req).skills(target("profile"), 0, limit);
+  req.targets = entries.map(([id, positions, optional = false]) => {
+    const t = target(id);
+    t.planner.bonusEnabled = false;
+    t.planner.optional = optional;
+    t.planner.acceptable.skills = positions.map((position) => ({ seriesIndex: Math.floor(rolls[position - 1] / 14), groupIndex: rolls[position - 1] % 14 }));
+    t.planner.preferred.skills = [];
+    return t;
+  });
+  return req;
+}
+
+const skillRouteIds = (route) => route.skill.choices.map((choice) => choice.id).sort().join(",");
+
+test("unsuccessful alternative attempts do not hide a later optional choice", async () => {
+  const req = skillConflictRequest([
+    ["required", [1]],
+    ...Array.from({ length: 4 }, (_, i) => [`blocked-${i}`, [1], true]),
+    ["first", [2], true], ["other", [2], true],
+  ]);
+  for (const route of Object.values(await planWeapons(req, provider(req)))) {
+    assert.equal(skillRouteIds(route), "first,required");
+    assert.deepEqual(route.alternatives.map(skillRouteIds), ["other,required"]);
+    assert.ok([route, ...route.alternatives].every((r) => r.complete && r.proven && r.total === 2));
+  }
+});
+
+test("independent conflicts include the combined alternative", async () => {
+  const req = skillConflictRequest([["a", [1]], ["b", [2]], ["c", [1]], ["d", [2]]]);
+  for (const route of Object.values(await planWeapons(req, provider(req)))) {
+    assert.deepEqual([route, ...route.alternatives].map(skillRouteIds).sort(), ["a,b", "a,d", "b,c", "c,d"]);
+    assert.ok([route, ...route.alternatives].every((r) => r.complete && r.proven && r.total === 2));
+  }
+});
+
+test("alternatives combine a bonus acquisition conflict with a skill conflict", async () => {
+  const weapons = [target("a", 3, 9), target("b"), target("c", 3, 9), target("d")];
+  const req = request(weapons, 2, 1);
+  req.origin.baseSeed = 55_944_111;
+  req.origin.bonusCounter = 3659;
+  const api = provider(req);
+  for (const t of weapons) {
+    t.planner.preferred = { stats: {}, maxStats: {}, skills: [] };
+    if (["a", "c"].includes(t.id)) {
+      t.planner.skillEnabled = false;
+      t.planner.elementValues = [20, 10];
+      t.planner.acceptable = { stats: { affinity: 8, element: 10 }, maxStats: { element: 10 }, skills: [] };
+    } else {
+      t.planner.bonusEnabled = false;
+      const skill = api.skills(t, 0, 1)[0];
+      t.planner.acceptable.skills = [{ seriesIndex: Math.floor(skill / 14), groupIndex: skill % 14 }];
+    }
+  }
+  for (const route of Object.values(await planWeapons(req, api))) {
+    const all = [route, ...route.alternatives];
+    assert.deepEqual(all.map(skillRouteIds).sort(), ["a,b", "a,d", "b,c", "c,d"]);
+    for (const r of all) {
+      assert.ok(r.complete && r.proven);
+      assert.equal(r.total, 3);
+      const finish = r.bonus.choices.find((choice) => choice.finish > 0);
+      assert.deepEqual([finish.action, finish.acquire, finish.finish], ["keep", 1, 2]);
+    }
+  }
+});
+
+test("alternative search and display limits do not change the proven route minimum", async () => {
+  const req = skillConflictRequest(Array.from({ length: 6 }, (_, i) => [`w${i}`, [1]]), 1);
+  for (const route of Object.values(await planWeapons(req, provider(req)))) {
+    assert.equal(route.alternatives.length, 4);
+    assert.equal(new Set([route, ...route.alternatives].map(skillRouteIds)).size, 5);
+    assert.ok([route, ...route.alternatives].every((r) => r.complete && r.proven && r.total === 1 && r.alternativesComplete === false));
+  }
+  for (const route of Object.values(await planWeapons(req, provider(req), () => {}, { maxAlternativeAttempts: 0 }))) {
+    assert.deepEqual(route.alternatives, []);
+    assert.equal(route.alternativesComplete, false);
+    assert.ok(route.complete && route.proven);
+    assert.equal(route.total, 1);
+  }
+});
+
+test("conflict alternatives agree with exhaustive small-stream weapon subsets", async () => {
+  for (let scenario = 0; scenario < 16; scenario += 1) {
+    const req = skillConflictRequest(Array.from({ length: 5 }, (_, i) => [
+      `w${i}`, (i + scenario) % 4 === 0 ? [1, 2] : [1 + (i + scenario) % 3], Boolean(scenario & (1 << i)),
+    ]), 3);
+    const api = provider(req);
+    const positions = req.targets.map((t) => Array.from(api.skills(t, 0, 3)).flatMap((raw, i) => matchesTier(raw, t, "skill", "acceptable") ? [i + 1] : []));
+    // Independently try every selected weapon subset and every distinct
+    // assignment of its skill positions. Required subsets must be maximal
+    // before optional weapons are considered.
+    const feasible = new Map();
+    const fits = (mask) => {
+      if (feasible.has(mask)) return feasible.get(mask);
+      const selected = positions.filter((_, i) => mask & (1 << i));
+      function assign(i, used) {
+        return i === selected.length || selected[i].some((position) => !(used & (1 << position)) && assign(i + 1, used | (1 << position)));
+      }
+      const result = assign(0, 0);
+      feasible.set(mask, result);
+      return result;
+    };
+    const required = req.targets.reduce((mask, t, i) => t.planner.optional ? mask : mask | (1 << i), 0);
+    const expected = new Set();
+    for (let mask = 0; mask < (1 << req.targets.length); mask += 1) {
+      if (!fits(mask)) continue;
+      if (req.targets.some((t, i) => !(mask & (1 << i)) && fits((t.planner.optional ? mask : mask & required) | (1 << i)))) continue;
+      expected.add(req.targets.filter((_, i) => mask & (1 << i)).map((t) => t.id).sort().join(","));
+    }
+    for (const route of Object.values(await planWeapons(req, api))) {
+      const actual = new Set([route, ...route.alternatives].map(skillRouteIds));
+      assert.equal(actual.size, Math.min(5, expected.size), `scenario ${scenario}`);
+      assert.ok([...actual].every((key) => expected.has(key)), `scenario ${scenario}: every offered set is valid and maximal`);
+      if (expected.size <= 5) assert.deepEqual(actual, expected, `scenario ${scenario}`);
+      else assert.equal(route.alternativesComplete, false);
+      if (expected.size < 5) assert.equal(route.alternativesComplete, true);
+    }
+  }
+});
+
 test("Any in a skill pair accepts one skill on its own", () => {
   const ebonyLord = 5 * 14 + 13;
   const otherLord = 18 * 14 + 13;
