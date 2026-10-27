@@ -438,22 +438,49 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const target = r.targets.find((v) => v.id === step.targetId);
     const matched = Math.max(0, Math.min(step.rolls.length, Number(cache.matches[inspected]) || 0));
     const prefix = step.stream === "bonus" ? "G" : "S";
-    const description = step.intent === "acquire" ? "Acquire this ordered layout for a later Keep Bonuses step." : step.intent === "finish" ? step.stream === "bonus" ? "Reach the stat minimums shown for this weapon." : "Reach one of this weapon’s chosen skill pairs." : "Advance the shared counter on this weapon to reach the next useful result.";
+    const description = step.intent === "acquire" ? "Acquire this ordered layout for a later Keep Bonuses step." : step.intent === "advance" ? "Advance the shared counter on this weapon to reach the next useful result." : "";
     const goalMode = step.intent === "finish" && step.rolls.at(-1).quality === "preferred" ? "preferred" : r.mode;
-    q("#pl-guide").innerHTML = `<button type="button" class="pl-guide-pointer" data-pl-action="show-row" aria-hidden="true" tabindex="-1"></button><div class="pl-guide-content"><div class="pl-guide-kicker"><span>${html(saved ? "Saved" : current ? "Current step" : "Preview")}</span><span>${html("Step {n} of {total}", { n: inspected + 1, total: r.steps.length })}</span></div><div class="pl-guide-heading"><div><h3>${esc(nameOf(target))}</h3><p class="pl-menu-action">${esc(actionName(step.action))}</p></div><span class="pl-repeat">× <strong>${step.rolls.length}</strong></span></div><div class="pl-guide-meta"><span>${html("Repeat {n} times", { n: step.rolls.length })}</span><strong>${prefix}${step.start}${step.end === step.start ? "" : `–${step.end}`}</strong></div><p class="pl-guide-purpose">${html(description)}</p>${step.stream === "skill" ? upgradeWarning(r, [step]) : ""}<p class="pl-guide-goal">${esc(step.intent === "acquire" ? step.rolls.at(-1).raw.map((id) => statName(({ 0: "attack", 1: "affinity", 2: "element", 3: target.weaponType >= 12 ? "ammo" : "sharpness" })[BONUS_CATEGORY[id]], target)).join(" → ") : step.stream === "bonus" ? bonusGoalText(target, goalMode) : pairText(goalFor(target, goalMode, "skill")))}</p>${finishMarkup(r, step, target)}<p class="pl-fine pl-accept-note">${html("Accept each result in this block. Use the exact weapon and menu action shown.")}</p>
-      <div class="pl-reference-heading"><h4>${html("Expected rolls")}</h4><span>${prefix}${step.start}${step.start === step.end ? "" : `–${step.end}`}</span></div><p class="pl-fine pl-reference-note">${html("Match your in-game result to find your place. Every draw in this block is shown.")}</p><div class="pl-reference-labels"><span>${html("Draw")}</span><span>${html("Expected result")}</span></div><div class="pl-expected-list">${step.rolls.map((roll, index) => {
+    q("#pl-guide").innerHTML = `<button type="button" class="pl-guide-pointer" data-pl-action="show-row" aria-hidden="true" tabindex="-1"></button><div class="pl-guide-content"><div class="pl-guide-kicker"><span>${html(saved ? "Saved" : current ? "Current step" : "Preview")}</span><span>${html("Step {n} of {total}", { n: inspected + 1, total: r.steps.length })}</span></div><div class="pl-guide-heading"><div><h3>${esc(nameOf(target))}</h3><p class="pl-menu-action">${esc(actionName(step.action))} <span>${prefix}${step.start}${step.end === step.start ? "" : `–${step.end}`}</span></p></div><span class="pl-repeat">× <strong>${step.rolls.length}</strong></span></div>${step.stream === "skill" ? upgradeWarning(r, [step]) : ""}<div class="pl-guide-goalblock"><span class="pl-guide-label">${html(step.intent === "acquire" ? "Layout" : "Goal")}</span>${step.intent === "acquire" ? `<ol class="pl-guide-slots" aria-label="${html("Layout")}">${step.rolls.at(-1).raw.map((id, index) => `<li><small>${index + 1}</small>${esc(statName(({ 0: "attack", 1: "affinity", 2: "element", 3: target.weaponType >= 12 ? "ammo" : "sharpness" })[BONUS_CATEGORY[id]], target))}</li>`).join("")}</ol>` : `<p class="pl-guide-goal">${esc(step.stream === "bonus" ? bonusGoalText(target, goalMode) : pairText(goalFor(target, goalMode, "skill")))}</p>`}${description ? `<p class="pl-guide-purpose">${html(description)}</p>` : ""}</div>${finishMarkup(r, step)}
+      <div class="pl-reference-heading"><h4>${html("Expected rolls")}</h4></div><p class="pl-fine pl-reference-note">${html("Use the exact weapon and action above. Match your in-game result to find your place.")}</p><div class="pl-expected-list">${step.rolls.map((roll, index) => {
         const tag = current && compatible() ? "button" : "div";
         return `<${tag}${tag === "button" ? ` type="button" data-pl-match="${index + 1}" aria-label="${html("Match draw {n}", { n: index + 1 })}" aria-pressed="${matched === index + 1}"` : ""} class="pl-expected-roll${index < matched && current ? " is-passed" : ""}${index + 1 === matched && current ? " is-matched" : ""}"><span class="pl-draw-number"><strong>${index + 1}</strong><small>${prefix}${roll.offset}</small></span><span class="pl-draw-result">${resultMarkup(roll, step, target)}${step.intent !== "advance" && index === step.rolls.length - 1 ? badge(step) : ""}</span>${current && matched === index + 1 ? '<span class="pl-match-check">✓</span>' : ""}</${tag}>`;
       }).join("")}</div>
-      <footer class="pl-guide-footer">${current ? `<div><strong>${html("{matched}/{total} matched · {remaining} remaining", { matched, total: step.rolls.length, remaining: step.rolls.length - matched })}</strong><button type="button" class="primary" data-pl-action="done"${!compatible() || worker ? " disabled" : ""}>${html("Done & saved")} →</button></div><p class="pl-fine">${html("Finish this block and save in game, then confirm here.")}</p><p class="pl-fine">${html("Matching a result only marks your place; it does not save a step or advance the counters.")}</p>` : totalDone() < r.steps.length ? `<button type="button" class="secondary" data-pl-action="current">← ${html("Back to current step")}</button>` : `<span class="pl-teal">✓ ${r.dropped?.length ? html("Route complete. Weapons left out: {names}", { names: shortNames(r) }) : html("Route complete. All chosen goals are met.")}</span>`}</footer><details class="pl-state-details"><summary>${html("Saved state details")}</summary><p>${html("Before")} <code>${esc(stateCode(stepState(r, step, "before")))}</code></p><p>${html("After")} <code>${esc(stateCode(stepState(r, step, "after")))}</code></p></details></div>`;
+      <footer class="pl-guide-footer">${current ? `<div><strong>${html("{matched}/{total} matched · {remaining} remaining", { matched, total: step.rolls.length, remaining: step.rolls.length - matched })}</strong><button type="button" class="primary" data-pl-action="done"${!compatible() || worker ? " disabled" : ""}>${html("Done & saved")} →</button></div><p class="pl-fine">${html("Finish this block and save in game, then confirm here. Matching a result only marks your place; it never saves a step or advances the counters.")}</p>` : totalDone() < r.steps.length ? `<button type="button" class="secondary" data-pl-action="current">← ${html("Back to current step")}</button>` : `<span class="pl-teal">✓ ${r.dropped?.length ? html("Route complete. Weapons left out: {names}", { names: shortNames(r) }) : html("Route complete. All chosen goals are met.")}</span>`}</footer><details class="pl-state-details"><summary>${html("Saved state details")}</summary><p>${html("Before")} <code>${esc(stateCode(stepState(r, step, "before")))}</code></p><p>${html("After")} <code>${esc(stateCode(stepState(r, step, "after")))}</code></p></details></div>`;
     schedulePointer();
   }
   // A weapon's finish can be swapped for any other that keeps the stream's
   // roll count, until a step in that stream is saved.
   const canChooseFinish = (r, step) => step.intent === "finish" && r.complete && !worker && compatible() && cache.completed[step.stream] === 0;
-  function finishMarkup(r, step, target) {
-    return canChooseFinish(r, step) ? `<button type="button" class="text-button pl-finish-toggle" data-pl-action="finishes">${html("Other finishes")}</button>` : "";
+  function finishMarkup(r, step) {
+    if (!canChooseFinish(r, step)) return "";
+    const summary = finishSummary(r, step);
+    if (!summary) requestFinishSummary(r, step);
+    const text = !summary || summary.pending ? pl("Checking other finishes…") : summary.others ? pl("{n} other finishes keep the route at {rolls} rolls.", { n: summary.others, rolls: r[step.stream].horizon }) : pl("No other finish fits without extra rolls.");
+    const prefix = step.stream === "bonus" ? "G" : "S";
+    return `<div class="pl-finish-card"><div class="pl-finish-card-top"><div><span class="pl-guide-label pl-gold">${html("Finish")}</span><div class="pl-finish-value">${prefix}${step.rolls.at(-1).offset} ${badge(step)}</div></div><button type="button" class="pl-finish-toggle" data-pl-action="finishes">${html("Change")}</button></div><p class="pl-finish-sub">${esc(text)}</p></div>`;
   }
+  // How many other finishes fit is worked out quietly in its own worker the
+  // first time a step is shown, then kept for that route.
+  const finishSummaries = new WeakMap();
+  let summaryWorker = null; let summaryPending = null;
+  const finishSummary = (r, step) => finishSummaries.get(r)?.get(`${step.stream}:${step.targetId}`);
+  function requestFinishSummary(r, step) {
+    if (summaryWorker) { summaryWorker.terminate(); summaryPending?.cache.delete(summaryPending.key); }
+    const cacheMap = finishSummaries.get(r) ?? new Map(); finishSummaries.set(r, cacheMap);
+    const key = `${step.stream}:${step.targetId}`; cacheMap.set(key, { pending: true });
+    const helper = new Worker(new URL("./planner-worker.js", import.meta.url), { type: "module" });
+    summaryWorker = helper; summaryPending = { cache: cacheMap, key };
+    const finish = () => { helper.terminate(); if (summaryWorker === helper) { summaryWorker = null; summaryPending = null; } };
+    helper.onmessage = ({ data }) => {
+      finish();
+      if (data.type === "error") { cacheMap.delete(key); return; }
+      cacheMap.set(key, { others: data.options.filter((option) => option.fits && !option.current).length });
+      if (route() === r && r.steps[inspected] === step) renderGuide();
+    };
+    helper.onerror = () => { finish(); cacheMap.delete(key); };
+    helper.postMessage({ kind: "finishes", route: r, stream: step.stream, targetId: step.targetId });
+  }
+
   // The list opens in a modal over the page, with the weapon's stat goals as
   // chips above the sort chips. Changing a goal rebuilds the route.
   function finishModalMarkup() {
