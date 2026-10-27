@@ -76,8 +76,10 @@
 .pl-goal-mini { display: grid; grid-template-columns: 13px minmax(0, 1fr); gap: 10px; padding: 7px 8px; border-radius: 10px; margin-top: 6px; font-size: 0.74rem; overflow-wrap: anywhere; }
 .pl-preferred { color: var(--gold-bright); background: var(--pl-gold-bg); }
 .pl-acceptable { color: var(--pl-teal); background: var(--pl-teal-bg); }
-.planner .pl-edit { padding: 8px 0 0; color: var(--muted); }
-.pl-weapon-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
+.pl-weapon-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.pl-weapon-actions { display: flex; gap: 8px; margin-left: auto; }
+.pl-weapon-actions .secondary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.pl-weapon-actions .pl-icon-button { width: 38px; padding: 0 !important; }
 .pl-empty { grid-column: 1 / -1; border: 1px dashed var(--line); border-radius: 12px; text-align: center; color: var(--muted); padding: 30px; }
 .pl-add-form { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr auto auto; gap: 12px; align-items: end; padding: 16px; border: 1px solid var(--line); border-radius: 12px; margin-bottom: 14px; }
 .pl-name-field { max-width: 380px; }
@@ -115,7 +117,6 @@
 .pl-feedback { margin-top: 14px; }
 .pl-feedback .pl-fine { margin-top: 4px; }
 .pl-feedback .error { margin: 10px 0; }
-.pl-legend { display: flex; gap: 14px; align-items: center; font-size: 0.74rem; }
 .pl-routes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .pl-routes.is-outdated .pl-route { opacity: .45; pointer-events: none; }
 .planner .pl-route { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 16px 18px; text-align: left; color: #eee8d7; }
@@ -136,7 +137,9 @@
 .pl-alternatives > p { color: var(--muted); }
 .pl-alternative { display: flex; align-items: center; gap: 10px; text-align: left; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: inherit; font: inherit; cursor: pointer; overflow-wrap: anywhere; }
 .pl-alternative[aria-pressed="true"] { border-color: #8d7947; }
-.pl-optional { display: flex; align-items: center; gap: 7px; margin-top: 10px; font-size: 0.74rem; color: var(--muted); }
+.pl-optional { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px 0 8px; border: 1px solid var(--line); border-radius: 999px; font-size: 0.78rem; color: var(--muted); cursor: pointer; }
+.pl-optional:has(input:checked) { border-color: var(--gold); background: rgba(240, 210, 124, 0.08); color: var(--gold-bright); }
+.pl-optional input[type="checkbox"] { width: 14px; height: 14px; margin: 0; }
 .pl-stream-table + .pl-stream-table { margin-top: 22px; }
 .pl-stream-title { display: flex; align-items: baseline; gap: 8px; padding: 12px 0; font-size: 0.82rem; font-weight: 600; }
 .pl-stream-title span { color: var(--muted); font-size: 0.74rem; font-weight: 400; }
@@ -249,7 +252,6 @@ button.pl-expected-roll:hover { background: #d6b35c10; }
 }
 @media (max-width: 600px) {
   .pl-section-heading { gap: 10px; align-items: flex-start; }
-  .pl-section-heading > .pl-legend { flex-direction: column; align-items: flex-start; gap: 3px; }
   .pl-weapon-grid { grid-template-columns: 1fr; }
   .pl-limit-fields { gap: 12px; }
   .pl-limit-fields label { flex: 1 1 40%; width: auto; }
@@ -299,3 +301,9 @@ button.pl-expected-roll:hover { background: #d6b35c10; }
 
 .pl-table-scroll, .pl-modal { scrollbar-color: #8e7a45 #20211c; }
 .pl-modal .section-heading { margin-bottom: 18px; }
+.pl-route-rules { display: grid; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.78rem; line-height: 1.55; }
+.pl-route-rules > span { display: block; padding-left: 14px; position: relative; }
+.pl-route-rules > span::before { content: ""; position: absolute; left: 2px; top: 0.62em; width: 4px; height: 4px; border-radius: 50%; background: var(--muted); }
+.planner .pl-route { display: flex; flex-direction: column; justify-content: flex-start; }
+.pl-route-rules { text-align: left; }
+.pl-route-bottom { margin-top: auto; }
