@@ -37,6 +37,7 @@ export const PLANNER_TEXT = {
   "Added": ["追加順", "新增順序"],
   "Sort: Added, {direction}. Click to reverse.": ["並び替え：追加順・{direction}。クリックで逆順にします。", "排序：新增順序・{direction}。點擊可反轉順序。"],
   "Step {n}": ["ステップ {n}", "步驟 {n}"],
+  "Show the current step in the table": ["現在のステップを表で表示", "在表格中顯示目前步驟"],
   "Other finishes": ["ほかの仕上げ方", "其他完成方式"],
   "Collides with {names}; they move to other finishes.": ["{names}と衝突します。そちらは別の仕上げ方に移ります。", "與{names}衝突；這些武器會改用其他完成方式。"],
   "Collides with {names}. Choosing it recalculates the whole route.": ["{names}と衝突します。選ぶとルート全体を再計算します。", "與{names}衝突。選擇後會重新計算整條路線。"],

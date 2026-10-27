@@ -420,7 +420,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const prefix = step.stream === "bonus" ? "G" : "S";
     const description = step.intent === "acquire" ? "Acquire this ordered layout for a later Keep Bonuses step." : step.intent === "finish" ? step.stream === "bonus" ? "Reach the stat minimums shown for this weapon." : "Reach one of this weapon’s chosen skill pairs." : "Advance the shared counter on this weapon to reach the next useful result.";
     const goalMode = step.intent === "finish" && step.rolls.at(-1).quality === "preferred" ? "preferred" : r.mode;
-    q("#pl-guide").innerHTML = `<span class="pl-guide-pointer" aria-hidden="true"></span><div class="pl-guide-content"><div class="pl-guide-kicker"><span>${html(saved ? "Saved" : current ? "Current step" : "Preview")}</span><span>${html("Step {n} of {total}", { n: inspected + 1, total: r.steps.length })}</span></div><div class="pl-guide-heading"><div><h3>${esc(nameOf(target))}</h3><p class="pl-menu-action">${esc(actionName(step.action))}</p></div><span class="pl-repeat">× <strong>${step.rolls.length}</strong></span></div><div class="pl-guide-meta"><span>${html("Repeat {n} times", { n: step.rolls.length })}</span><strong>${prefix}${step.start}${step.end === step.start ? "" : `–${step.end}`}</strong></div><p class="pl-guide-purpose">${html(description)}</p>${step.stream === "skill" ? upgradeWarning(r, [step]) : ""}<p class="pl-guide-goal">${esc(step.intent === "acquire" ? step.rolls.at(-1).raw.map((id) => statName(({ 0: "attack", 1: "affinity", 2: "element", 3: target.weaponType >= 12 ? "ammo" : "sharpness" })[BONUS_CATEGORY[id]], target)).join(" → ") : step.stream === "bonus" ? bonusGoalText(target, goalMode) : pairText(goalFor(target, goalMode, "skill")))}</p>${finishMarkup(r, step, target)}<p class="pl-fine pl-accept-note">${html("Accept each result in this block. Use the exact weapon and menu action shown.")}</p>
+    q("#pl-guide").innerHTML = `<button type="button" class="pl-guide-pointer" data-pl-action="show-row" aria-hidden="true" tabindex="-1"></button><div class="pl-guide-content"><div class="pl-guide-kicker"><span>${html(saved ? "Saved" : current ? "Current step" : "Preview")}</span><span>${html("Step {n} of {total}", { n: inspected + 1, total: r.steps.length })}</span></div><div class="pl-guide-heading"><div><h3>${esc(nameOf(target))}</h3><p class="pl-menu-action">${esc(actionName(step.action))}</p></div><span class="pl-repeat">× <strong>${step.rolls.length}</strong></span></div><div class="pl-guide-meta"><span>${html("Repeat {n} times", { n: step.rolls.length })}</span><strong>${prefix}${step.start}${step.end === step.start ? "" : `–${step.end}`}</strong></div><p class="pl-guide-purpose">${html(description)}</p>${step.stream === "skill" ? upgradeWarning(r, [step]) : ""}<p class="pl-guide-goal">${esc(step.intent === "acquire" ? step.rolls.at(-1).raw.map((id) => statName(({ 0: "attack", 1: "affinity", 2: "element", 3: target.weaponType >= 12 ? "ammo" : "sharpness" })[BONUS_CATEGORY[id]], target)).join(" → ") : step.stream === "bonus" ? bonusGoalText(target, goalMode) : pairText(goalFor(target, goalMode, "skill")))}</p>${finishMarkup(r, step, target)}<p class="pl-fine pl-accept-note">${html("Accept each result in this block. Use the exact weapon and menu action shown.")}</p>
       <div class="pl-reference-heading"><h4>${html("Expected rolls")}</h4><span>${prefix}${step.start}${step.start === step.end ? "" : `–${step.end}`}</span></div><p class="pl-fine pl-reference-note">${html("Match your in-game result to find your place. Every draw in this block is shown.")}</p><div class="pl-reference-labels"><span>${html("Draw")}</span><span>${html("Expected result")}</span></div><div class="pl-expected-list">${step.rolls.map((roll, index) => {
         const tag = current && compatible() ? "button" : "div";
         return `<${tag}${tag === "button" ? ` type="button" data-pl-match="${index + 1}" aria-label="${html("Match draw {n}", { n: index + 1 })}" aria-pressed="${matched === index + 1}"` : ""} class="pl-expected-roll${index < matched && current ? " is-passed" : ""}${index + 1 === matched && current ? " is-matched" : ""}"><span class="pl-draw-number"><strong>${index + 1}</strong><small>${prefix}${roll.offset}</small></span><span class="pl-draw-result">${resultMarkup(roll, step, target)}${step.intent !== "advance" && index === step.rolls.length - 1 ? badge(step) : ""}</span>${current && matched === index + 1 ? '<span class="pl-match-check">✓</span>' : ""}</${tag}>`;
@@ -630,11 +630,19 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       root.style.setProperty("--pl-sticky-top", `${(document.querySelector(".app-tabs")?.getBoundingClientRect().height ?? 80) + 12}px`);
       if (!row || !guide || q("#pl-workspace").hidden) return;
       const rr = row.getBoundingClientRect(); const gr = guide.getBoundingClientRect();
-      // The guide sticks while the table scrolls, so the arrow follows the row
-      // and dims when it clamps to an edge because the row is out of reach.
+      // The guide sticks while the table scrolls, so the arrow follows the row.
+      // When the row is out of reach the arrow clamps to the guide's top or
+      // bottom edge as an up/down button that scrolls back to it.
       const y = rr.top + rr.height / 2 - gr.top;
+      const edge = y < 18 ? "up" : y > gr.height - 18 ? "down" : "";
       guide.style.setProperty("--pl-pointer-y", `${Math.max(18, Math.min(gr.height - 18, y))}px`);
-      guide.querySelector(".pl-guide-pointer")?.classList.toggle("is-offscreen", y < 18 || y > gr.height - 18);
+      const pointer = guide.querySelector(".pl-guide-pointer");
+      if (!pointer) return;
+      pointer.classList.toggle("is-edge", Boolean(edge));
+      pointer.textContent = edge === "up" ? "▲" : edge === "down" ? "▼" : "";
+      pointer.tabIndex = edge ? 0 : -1;
+      if (edge) { pointer.removeAttribute("aria-hidden"); pointer.setAttribute("aria-label", pl("Show the current step in the table")); pointer.title = pl("Show the current step in the table"); }
+      else { pointer.setAttribute("aria-hidden", "true"); pointer.removeAttribute("aria-label"); pointer.removeAttribute("title"); }
     });
   }
   function stopWorker() {
@@ -731,6 +739,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     else if (action === "wsort-add") { cache.weaponSort = "newTop"; persist(); renderWeapons(); q("#pl-weapon-sort .pl-sort-chip button")?.focus(); }
     else if (action === "wsort-flip") { cache.weaponSort = cache.weaponSort === "newTop" ? "newBottom" : "newTop"; persist(); renderWeapons(); q("#pl-weapon-sort .pl-sort-chip button")?.focus(); }
     else if (action === "wsort-remove") { cache.weaponSort = ""; persist(); renderWeapons(); q("#pl-weapon-sort .pl-sort-add")?.focus(); }
+    else if (action === "show-row") q(`#pl-rows [data-pl-step="${inspected}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
     else if (action === "group-menu") { groupMenuOpen = !groupMenuOpen; renderGroupBar(); q("#pl-group .pl-sort-menu button")?.focus(); }
     else if (action === "group-pick") { groupMenuOpen = false; cache.weaponGroups = [...cache.weaponGroups, button.dataset.key]; persist(); renderWeapons(); q("#pl-group .pl-sort-add")?.focus(); }
     else if (action === "group-remove") { cache.weaponGroups = cache.weaponGroups.filter((_, index) => index !== Number(button.dataset.index)); persist(); renderWeapons(); }
