@@ -62,24 +62,35 @@
 .pl-section-heading { margin-bottom: 12px; }
 .pl-index { color: var(--gold); margin-right: 7px; font-weight: 400; }
 .pl-weapon-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.pl-weapon { padding: 15px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); min-width: 0; }
+.pl-weapon { display: flex; flex-direction: column; gap: 12px; padding: 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); min-width: 0; }
 .pl-weapon.is-selected { border-color: #8d7947; }
 .pl-weapon:not(.is-selected) { opacity: .65; }
-.pl-weapon-head { gap: 8px; align-items: flex-start; margin-bottom: 12px; }
+.pl-weapon-head { gap: 8px; align-items: flex-start; }
 .pl-weapon-head label { display: flex; align-items: flex-start; gap: 9px; min-width: 0; }
 .pl-weapon-head label span { min-width: 0; }
-.pl-weapon-head strong { font-size: 0.86rem; font-weight: 600; overflow-wrap: anywhere; }
+.pl-weapon-head strong { font-size: 0.92rem; font-weight: 600; overflow-wrap: anywhere; }
 .pl-weapon-head small { display: block; color: var(--muted); font-size: 0.74rem; margin-top: 2px; }
 .planner .pl-remove { padding: 0 3px; color: var(--muted); font-size: 1.25rem; line-height: 1; }
 .planner .pl-remove, .planner [data-pl-action="remove-pair"] { display: grid; flex: none; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); font-size: 1.05rem; line-height: 1; }
 .planner .pl-remove:hover, .planner [data-pl-action="remove-pair"]:hover { border-color: var(--gold); color: var(--gold-bright); }
-.pl-goal-mini { display: grid; grid-template-columns: 13px minmax(0, 1fr); gap: 10px; padding: 7px 8px; border-radius: 10px; margin-top: 6px; font-size: 0.74rem; overflow-wrap: anywhere; }
+.pl-weapon-goals { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; margin: 0; font-size: 0.8rem; line-height: 1.45; }
+.pl-weapon-goals dt { white-space: nowrap; }
+.pl-weapon-goals dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.pl-weapon-goals dd small { display: block; color: inherit; opacity: 0.8; font-size: 0.74rem; }
 .pl-preferred { color: var(--gold-bright); background: var(--pl-gold-bg); }
 .pl-acceptable { color: var(--pl-teal); background: var(--pl-teal-bg); }
-.pl-weapon-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
-.pl-weapon-actions { display: flex; gap: 8px; margin-left: auto; }
-.pl-weapon-actions .secondary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
-.pl-weapon-actions .pl-icon-button { width: 38px; padding: 0 !important; }
+.pl-weapon-goals .pl-preferred, .pl-weapon-goals .pl-acceptable { background: none; }
+.planner .status-pill, .planner [data-pl-action="add"] { flex: none; white-space: nowrap; }
+.pl-weapon-tools { display: flex; gap: 2px; flex: none; }
+.planner .pl-tool { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 8px; background: none; color: var(--muted); cursor: pointer; }
+.planner .pl-tool:hover, .planner .pl-tool[aria-expanded="true"] { background: #20211c; color: var(--gold-bright); }
+.pl-optional-tag { font-style: normal; font-size: 0.7rem; font-weight: 500; color: var(--gold-bright); border: 1px solid #5c5030; border-radius: 4px; padding: 0 5px; margin-left: 6px; vertical-align: 1px; }
+.pl-menu { position: relative; }
+.pl-menu-list { position: absolute; right: 0; top: 32px; z-index: 5; min-width: 270px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: #20211c; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6); }
+.pl-menu-list button { white-space: nowrap; display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: 6px; background: none; color: inherit; font-size: 0.84rem; text-align: left; cursor: pointer; }
+.pl-menu-list button:hover { background: var(--surface); }
+.pl-menu-list hr { margin: 4px 0; border: 0; border-top: 1px solid var(--line); }
+.pl-menu-check { display: inline-block; width: 14px; text-align: center; color: var(--gold-bright); }
 .pl-empty { grid-column: 1 / -1; border: 1px dashed var(--line); border-radius: 12px; text-align: center; color: var(--muted); padding: 30px; }
 .pl-add-form { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr auto auto; gap: 12px; align-items: end; padding: 16px; border: 1px solid var(--line); border-radius: 12px; margin-bottom: 14px; }
 .pl-name-field { max-width: 380px; }
@@ -137,9 +148,6 @@
 .pl-alternatives > p { color: var(--muted); }
 .pl-alternative { display: flex; align-items: center; gap: 10px; text-align: left; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: inherit; font: inherit; cursor: pointer; overflow-wrap: anywhere; }
 .pl-alternative[aria-pressed="true"] { border-color: #8d7947; }
-.pl-optional { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px 0 8px; border: 1px solid var(--line); border-radius: 999px; font-size: 0.78rem; color: var(--muted); cursor: pointer; }
-.pl-optional:has(input:checked) { border-color: var(--gold); background: rgba(240, 210, 124, 0.08); color: var(--gold-bright); }
-.pl-optional input[type="checkbox"] { width: 14px; height: 14px; margin: 0; }
 .pl-stream-table + .pl-stream-table { margin-top: 22px; }
 .pl-stream-title { display: flex; align-items: baseline; gap: 8px; padding: 12px 0; font-size: 0.82rem; font-weight: 600; }
 .pl-stream-title span { color: var(--muted); font-size: 0.74rem; font-weight: 400; }
@@ -265,13 +273,13 @@ button.pl-expected-roll:hover { background: #d6b35c10; }
   .pl-goal-table td { padding-right: 6px; }
   .pl-combo { grid-template-columns: minmax(0, 1fr) 8px minmax(0, 1fr) 18px; gap: 3px; }
 }
-.pl-modal { width: min(720px, calc(100% - 24px)); max-height: calc(100vh - 48px); padding: clamp(18px, 3vw, 28px); color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 28px 70px rgba(0, 0, 0, 0.5); }
+.pl-modal { --pl-pad: clamp(18px, 3vw, 28px); width: min(720px, calc(100% - 24px)); max-height: calc(100vh - 48px); padding: var(--pl-pad); color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 28px 70px rgba(0, 0, 0, 0.5); }
 .pl-modal-wide { width: min(900px, calc(100% - 24px)); }
 .pl-modal::backdrop { background: rgba(8, 9, 7, 0.72); }
 .pl-modal[open] { display: flex; flex-direction: column; }
 .pl-modal > * { flex: none; }
-.pl-modal .pl-finish-list { flex: 0 1 auto; max-height: none; min-height: 0; overflow-y: auto; }
-.pl-goal-edit { display: grid; gap: 8px; margin: 4px 0 10px; padding-bottom: 10px; border-bottom: 1px solid #2c3026; }
+.pl-modal .pl-finish-list { max-height: none; overflow: visible; }
+.pl-goal-edit { display: grid; gap: 8px; margin: 4px 0 0; padding-bottom: 16px; border-bottom: 1px solid #2c3026; }
 .pl-goal-edit .pl-sort { margin-top: 0; }
 .pl-goal-tier { display: block; margin-bottom: 4px; font-size: 0.78rem; font-weight: 600; }
 .pl-goal-bounds { gap: 4px; padding: 0 0 0 10px; color: var(--chip-text); font-size: 0.78rem; white-space: nowrap; }
@@ -307,3 +315,25 @@ button.pl-expected-roll:hover { background: #d6b35c10; }
 .planner .pl-route { display: flex; flex-direction: column; justify-content: flex-start; }
 .pl-route-rules { text-align: left; }
 .pl-route-bottom { margin-top: auto; }
+
+/* Edit-goals modal: one font size and control height for every field. */
+.pl-modal input:not([type="checkbox"]), .pl-modal select { height: 38px; padding-top: 0; padding-bottom: 0; font-size: 0.86rem; }
+.pl-modal .pl-goal-bounds input { height: 20px; font-size: 0.78rem; }
+
+.pl-finish-section { margin-top: 18px; }
+/* The dialog scrolls as a whole. The fold line (zero height) and the Sort row stick to its top edge; sticky offsets start inside the padding. */
+.pl-finish-fold { position: sticky; top: calc(-1 * var(--pl-pad)); z-index: 7; height: 0; margin-inline: calc(-1 * var(--pl-pad)); }
+.pl-finish-fold[data-fold="finish"]:not(:nth-child(2)) { top: calc(40px - var(--pl-pad)); z-index: 6; }
+.pl-finish-fold-bar { position: absolute; inset: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 40px; padding-inline: var(--pl-pad); background: var(--surface); visibility: hidden; opacity: 0; transition: opacity 120ms ease, visibility 120ms; }
+.pl-modal.is-goal-folded .pl-finish-fold[data-fold="goal"] .pl-finish-fold-bar, .pl-modal.is-finish-folded .pl-finish-fold[data-fold="finish"] .pl-finish-fold-bar { visibility: visible; opacity: 1; }
+.pl-fold-toggle { padding: 4px 0; border: 0; background: none; color: inherit; font-size: 0.95rem; font-weight: 600; cursor: pointer; }
+.pl-fold-toggle:hover { text-decoration: underline; }
+/* Round close button, sticky at the dialog's top right. */
+.pl-close-wrap { position: sticky; top: calc(10px - var(--pl-pad)); z-index: 9; height: 0; display: flex; justify-content: flex-end; margin-inline: calc(12px - var(--pl-pad)); }
+.pl-close { flex: none; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--raise, #20211c); color: var(--muted); font-size: 1.25rem; line-height: 1; cursor: pointer; }
+.pl-close:hover { border-color: var(--gold); color: var(--gold-bright); }
+.pl-finish-bar::after { content: ""; position: absolute; inset: 100% 0 auto; height: 14px; background: linear-gradient(var(--surface), transparent); pointer-events: none; }
+.pl-finish-bar { position: sticky; top: calc(var(--rows, 1) * 40px - var(--pl-pad)); z-index: 5; margin-inline: calc(-1 * var(--pl-pad)); padding: 12px var(--pl-pad) 10px; background: var(--surface); }
+.pl-finish-bar .pl-sort { margin-top: 0; }
+.pl-finish-section h3, .pl-goal-edit h3 { margin: 0 0 4px; font-size: 0.95rem; }
+.pl-finish-section .pl-fine { margin: 0; }

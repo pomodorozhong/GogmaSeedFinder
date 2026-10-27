@@ -189,13 +189,13 @@ and options cut off by the search budget are reported as not checked.
 
 The list's default sort follows the weapon's bonus goal: top desired first,
 then each stat with a minimum from high to low (top-desired tier first), then
-each stat with a maximum above 0 from low to high, then roll position. A stat
-either goal excludes (max 0) is left out; skill lists sort by top desired,
-then roll position. Sort levels show as chips in one row: **＋ Sort** opens a
-menu of the unused fields (any stat, top desired, "No Reset needed", roll
-position) and adds a chip (before a trailing roll-position chip, which would
-otherwise leave it no effect), clicking a chip reverses its order, and ×
-removes it. A changed sort is remembered for that weapon in this browser.
+each stat with a maximum above 0 from low to high. A stat either goal excludes
+(max 0) is left out; skill lists sort by top desired. Roll position is not a
+sort option: it always applies last, so finishes that tie on every sort level
+appear in order of their earliest roll. Sort levels show as chips in one row:
+**＋ Sort** opens a menu of the unused fields (any stat, top desired, "No Reset
+needed") and adds a chip, clicking a chip reverses its order, and × removes it.
+A changed sort is remembered for that weapon in this browser.
 
 ## Moving a plan to another computer
 

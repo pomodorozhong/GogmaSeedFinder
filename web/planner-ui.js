@@ -3,7 +3,9 @@ import { pl } from "./planner-text.js";
 import { availableStats, BONUS_CATEGORY, FINISH_SORT_KEYS, goalFinishSort, sortFinishOptions, copiedPlanner, hasBonusGoal, layoutOf, MAX_SELECTED, normalizedFinishSort, normalizedPlanner, normalizedProgress, parsePlannerExport, plannerExport, routePosition, routeWeaponsMatch, samePosition, statMaximum, statRollValues, streamSteps, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
 
 const STORAGE_KEY = "gogma-weapon-planner-v1";
+const FOLD_ROW = 40;
 const ICON_EDIT = `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 2.5l3 3L5 14H2v-3z"/></svg>`;
+const ICON_MORE = `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="currentColor"><circle cx="3.5" cy="8" r="1.1"/><circle cx="8" cy="8" r="1.1"/><circle cx="12.5" cy="8" r="1.1"/></svg>`;
 const ICON_COPY = `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></svg>`;
 const esc = (text) => String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const html = (source, values) => esc(pl(source, values));
@@ -71,6 +73,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   // edited (not stored until applied), and the finish list to reopen once a
   // goal change has rebuilt the route.
   let goalMenu = null;
+  let weaponMenu = null;
   let goalEdit = null;
   let goalError = "";
   let reopenFinishes = null;
@@ -105,6 +108,12 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   const goalSummary = (target, mode) => {
     const p = target.planner;
     return [p.bonusEnabled ? bonusGoalText(target, mode) || pl("Any stats") : pl("Bonus goals off"), p.skillEnabled ? pairText(goalFor(target, mode, "skill")) || pl("Any skills") : pl("Skill goals off")].join(" / ");
+  };
+  const goalRows = (target, mode, icon, label) => {
+    const p = target.planner;
+    const lines = [p.bonusEnabled ? bonusGoalText(target, mode) || pl("Any stats") : "", p.skillEnabled ? pairText(goalFor(target, mode, "skill")) || pl("Any skills") : ""].filter(Boolean);
+    const [first = pl("Off"), ...rest] = lines;
+    return `<dt class="pl-${mode}">${icon} ${html(label)}</dt><dd class="pl-${mode}">${esc(first)}${rest.map((line) => `<small>${esc(line)}</small>`).join("")}</dd>`;
   };
   const options = (items, selected, unknown = false) => `${unknown ? `<option value="">${html("Unknown")}</option>` : ""}${items.map(([value, label]) => `<option value="${value}"${value === selected ? " selected" : ""}>${esc(t(label))}</option>`).join("")}`;
   const comboOptions = (labels, selected, unknown = false) => options(labels.map((label, index) => [index, label]), selected, unknown);
@@ -142,7 +151,12 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   const weaponCard = (raw) => {
       const target = { ...raw, planner: normalizedPlanner(raw) };
       const checked = cache.selected.includes(target.id);
-      return `<article class="pl-weapon${checked ? " is-selected" : ""}"><div class="pl-weapon-head"><label><input type="checkbox" data-pl-select="${esc(target.id)}"${checked ? " checked" : ""}><span><strong>${esc(nameOf(target))}</strong><small>${esc(localizedTargetName(weapons.find(([id]) => id === target.weaponType)[1], attributes.find(([id]) => id === target.attributeForce)[1]))}</small></span></label><button type="button" class="text-button pl-remove" data-pl-action="remove" data-id="${esc(target.id)}" aria-label="${html("Remove weapon")}: ${esc(nameOf(target))}" title="${html("Remove weapon")}">×</button></div><div class="pl-goal-mini pl-preferred"><span>★</span><span>${esc(goalSummary(target, "preferred"))}</span></div><div class="pl-goal-mini pl-acceptable"><span>✓</span><span>${esc(goalSummary(target, "acceptable"))}</span></div><div class="pl-weapon-foot"><label class="pl-optional" title="${html("Optional: leave out if it cannot fit")}"><input type="checkbox" data-pl-optional="${esc(target.id)}"${target.planner.optional ? " checked" : ""}>${html("Optional")}</label><div class="pl-weapon-actions"><button class="secondary small-button pl-icon-button" type="button" data-pl-action="duplicate" data-id="${esc(target.id)}" aria-label="${html("Duplicate")}: ${esc(nameOf(target))}" title="${html("Duplicate")}">${ICON_COPY}</button><button class="secondary small-button" type="button" data-pl-action="edit" data-id="${esc(target.id)}">${ICON_EDIT}${html("Edit goals")}</button></div></div></article>`;
+      const typeName = localizedTargetName(weapons.find(([id]) => id === target.weaponType)[1], attributes.find(([id]) => id === target.attributeForce)[1]);
+      const label = esc(nameOf(target));
+      const open = weaponMenu === target.id;
+      const optional = target.planner.optional;
+      const item = (action, text, extra = "") => `<button type="button" role="menuitem" data-pl-action="${action}" data-id="${esc(target.id)}"${extra}>${text}</button>`;
+      return `<article class="pl-weapon${checked ? " is-selected" : ""}"><div class="pl-weapon-head"><label><input type="checkbox" data-pl-select="${esc(target.id)}"${checked ? " checked" : ""}><span><strong>${label}</strong>${optional ? `<em class="pl-optional-tag">${html("Optional")}</em>` : ""}${nameOf(target) === typeName ? "" : `<small>${esc(typeName)}</small>`}</span></label><div class="pl-weapon-tools"><button type="button" class="pl-tool" data-pl-action="edit" data-id="${esc(target.id)}" aria-label="${html("Edit goals")}: ${label}" title="${html("Edit goals")}">${ICON_EDIT}</button><div class="pl-menu"><button type="button" class="pl-tool" data-pl-action="weapon-menu" data-id="${esc(target.id)}" aria-haspopup="menu" aria-expanded="${open}" aria-label="${html("More actions")}: ${label}" title="${html("More actions")}">${ICON_MORE}</button>${open ? `<div class="pl-menu-list" role="menu">${item("optional", `<span class="pl-menu-check">${optional ? "✓" : ""}</span>${html("Optional: leave out if it cannot fit")}`, ` role="menuitemcheckbox" aria-checked="${optional}"`)}<hr>${item("duplicate", `${ICON_COPY}${html("Duplicate")}`)}${item("remove", `<span class="pl-menu-check">×</span>${html("Remove weapon")}`)}</div>` : ""}</div></div></div><dl class="pl-weapon-goals">${goalRows(target, "preferred", "★", "Top")}${goalRows(target, "acceptable", "✓", "OK")}</dl></article>`;
     };
   // Weapons can be grouped by chips above the grid; each level nests inside
   // the one before it, and a group lists weapons in their saved order.
@@ -208,13 +222,13 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const bonusOptions = bonuses.filter(([id]) => availableStats(target).includes(({ 0: "attack", 1: "affinity", 2: "element", 3: target.weaponType >= 12 ? "ammo" : "sharpness" })[BONUS_CATEGORY[id]])).map(([id]) => [id, bonusName(target.weaponType, id)]);
     const sources = getTargets().filter((v) => v.id !== id);
     const categories = [...new Set(bonusOptions.map(([id]) => BONUS_CATEGORY[id]))].map((category) => [category, statName(({ 0: "attack", 1: "affinity", 2: "element", 3: target.weaponType >= 12 ? "ammo" : "sharpness" })[category], target)]);
-    q("#pl-editor").innerHTML = `<form id="pl-goal-form" class="pl-editor"><div class="section-heading"><div><p class="step">${html("Weapon planner")}</p><h2>${html("Edit weapon goals")}</h2><p class="pl-muted">${esc(nameOf(target))}</p></div><button class="secondary small-button" type="button" data-pl-action="cancel-edit">${html("Cancel")}</button></div><label class="pl-name-field">${html("Weapon name")}<input name="label" value="${esc(target.label)}" maxlength="24" placeholder="${html("Optional name")}"></label>${sources.length ? `<label class="pl-name-field">${html("Copy goals from")}<select data-copy-goals><option value="">${html("Choose a weapon")}</option>${sources.map((v) => `<option value="${esc(v.id)}">${esc(nameOf(v))}</option>`).join("")}</select></label>` : ""}
-      <div class="pl-editor-section"><label class="pl-toggle"><input name="bonusEnabled" type="checkbox"${p.bonusEnabled ? " checked" : ""}>${html("Use bonus goals")}</label><p class="pl-fine">${html("Blank stats are ignored. Attack uses unbloated raw; affinity uses percentage points. These are gains from the five slots, not final weapon stats.")} ${html("Leave min or max blank for no bound on that side. Max 0 means no slot of that stat.")}</p><div class="pl-goal-table-wrap"><table class="pl-goal-table"><thead><tr><th>${html("Stat")}</th><th class="pl-teal">✓ ${html("Acceptable")} <small>${html("min – max")}</small></th><th class="pl-gold">★ ${html("Top desired")} <small>${html("min – max")}</small></th></tr></thead><tbody>${availableStats(target).map((key) => {
+    q("#pl-editor").innerHTML = `<form id="pl-goal-form" class="pl-editor"><div class="pl-close-wrap"><button type="button" class="pl-close" data-pl-action="cancel-edit" aria-label="${html("Cancel")}" title="${html("Cancel")}">×</button></div><div class="section-heading"><div><p class="step">${html("Weapon planner")}</p><h2>${html("Edit weapon goals")}</h2><p class="pl-muted">${esc(nameOf(target))}</p></div></div><label class="pl-name-field">${html("Weapon name")}<input name="label" value="${esc(target.label)}" maxlength="24" placeholder="${html("Optional name")}"></label>${sources.length ? `<label class="pl-name-field">${html("Copy goals from")}<select data-copy-goals><option value="">${html("Choose a weapon")}</option>${sources.map((v) => `<option value="${esc(v.id)}">${esc(nameOf(v))}</option>`).join("")}</select></label>` : ""}
+      <div class="pl-editor-section"><label class="pl-toggle"><input name="bonusEnabled" type="checkbox"${p.bonusEnabled ? " checked" : ""}>${html("Use bonus goals")}</label><p class="pl-fine">${html("Blank stats are ignored. Attack uses unbloated raw; affinity uses percentage points. These are gains from the five slots, not final weapon stats.")} ${html("Leave min or max blank for no bound on that side. Max 0 means no slot of that stat.")}</p><div class="pl-goal-table-wrap"><table class="pl-goal-table"><thead><tr><th>${html("Stat")}</th><th class="pl-gold">★ ${html("Top desired")} <small>${html("min – max")}</small></th><th class="pl-teal">✓ ${html("Acceptable")} <small>${html("min – max")}</small></th></tr></thead><tbody>${availableStats(target).map((key) => {
         const limit = statusStat(key, target) ? 9999 : statMaximum(key, target);
         const box = (tier, bound) => `<input type="number" min="0" max="${limit}" step="1" data-stat="${key}" data-tier="${tier}" data-bound="${bound}" value="${p[tier][bound === "min" ? "stats" : "maxStats"][key] ?? ""}" placeholder="${html(bound === "min" ? "Min" : "Max")}" aria-label="${esc(`${tierName(tier)} · ${statName(key, target)} · ${pl(bound === "min" ? "Min" : "Max")}`)}">`;
-        return `<tr><th>${esc(statName(key, target))}${key === "affinity" ? " (%)" : ""}${rollHint(key, target)}</th>${["acceptable", "preferred"].map((tier) => `<td><div class="pl-range">${box(tier, "min")}<span aria-hidden="true">–</span>${box(tier, "max")}</div></td>`).join("")}</tr>`;
+        return `<tr><th>${esc(statName(key, target))}${key === "affinity" ? " (%)" : ""}${rollHint(key, target)}</th>${["preferred", "acceptable"].map((tier) => `<td><div class="pl-range">${box(tier, "min")}<span aria-hidden="true">–</span>${box(tier, "max")}</div></td>`).join("")}</tr>`;
       }).join("")}</tbody></table></div></div>
-      <div class="pl-editor-section"><label class="pl-toggle"><input name="skillEnabled" type="checkbox"${p.skillEnabled ? " checked" : ""}>${html("Use skill goals")}</label><p class="pl-fine">${html("A match for any pair in a column meets that goal. Top desired results also count as acceptable.")} ${html("Each reroll gives one series skill and one group skill; a pair matches only when both match. Choose Any to accept a skill on its own.")}</p><div class="pl-skill-goals">${["acceptable", "preferred"].map((mode) => `<section><h4 class="${mode === "preferred" ? "pl-gold" : "pl-teal"}">${mode === "preferred" ? "★" : "✓"} ${esc(tierName(mode))}</h4><div data-pairs="${mode}">${p[mode].skills.map(comboRow).join("")}</div><button type="button" class="text-button" data-pl-action="add-pair" data-tier="${mode}">＋ ${html("Add combination")}</button></section>`).join("")}</div></div>
+      <div class="pl-editor-section"><label class="pl-toggle"><input name="skillEnabled" type="checkbox"${p.skillEnabled ? " checked" : ""}>${html("Use skill goals")}</label><p class="pl-fine">${html("A match for any pair in a column meets that goal. Top desired results also count as acceptable.")} ${html("Each reroll gives one series skill and one group skill; a pair matches only when both match. Choose Any to accept a skill on its own.")}</p><div class="pl-skill-goals">${["preferred", "acceptable"].map((mode) => `<section><h4 class="${mode === "preferred" ? "pl-gold" : "pl-teal"}">${mode === "preferred" ? "★" : "✓"} ${esc(tierName(mode))}</h4><div data-pairs="${mode}">${p[mode].skills.map(comboRow).join("")}</div><button type="button" class="text-button" data-pl-action="add-pair" data-tier="${mode}">＋ ${html("Add combination")}</button></section>`).join("")}</div></div>
       <details class="pl-current-details"><summary>${html("Current weapon (optional)")}</summary><p class="pl-fine">${html("Enter your current bonuses to check goals already met. Known categories also allow Keep Bonuses and can prove goals met by every possible tier combination.")}</p><h4>${html("Current bonuses in game order")}</h4><div class="pl-five-slots">${Array.from({ length: 5 }, (_, index) => `<label>${html("Slot {n}", { n: index + 1 })}<select data-current-bonus="${index}">${options(bonusOptions, p.currentBonuses?.[index], true)}</select></label>`).join("")}</div><h4>${html("Or known categories in game order")}</h4><div class="pl-five-slots">${Array.from({ length: 5 }, (_, index) => `<label>${html("Slot {n}", { n: index + 1 })}<select data-current-category="${index}">${options(categories, target.keepCategories?.[index], true)}</select></label>`).join("")}</div><h4>${html("Current skills")}</h4><div class="pl-current-pair"><select name="currentSeries" aria-label="${html("Series skill")}">${comboOptions(series, p.currentSkill === null ? null : Math.floor(p.currentSkill / 14), true)}</select><span>＋</span><select name="currentGroup" aria-label="${html("Group skill")}">${comboOptions(groups, p.currentSkill === null ? null : p.currentSkill % 14, true)}</select></div></details>
       ${target.attributeForce >= 6 && target.weaponType < 12 ? `<div class="pl-status-values"><h4>${html("Status boost values")}</h4><p class="pl-fine">${html("Enter the II and EX gains shown on this weapon to use a status minimum.")}</p>${[0, 1].map((index) => `<label>${index === 0 ? "II" : "EX"}<input name="element${index}" type="number" min="0" max="9999" step="1" value="${p.elementValues[index] ?? ""}"></label>`).join("")}</div>` : ""}<p id="pl-editor-error" class="error" role="alert" hidden></p><div class="pl-editor-footer"><button class="secondary" type="submit">${html("Save goals")}</button><button class="text-button" type="button" data-pl-action="cancel-edit">${html("Cancel")}</button></div></form>`;
     q("#pl-goal-form").addEventListener("submit", submitGoals);
@@ -452,7 +466,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const prefix = step.stream === "bonus" ? "G" : "S";
     const keys = sortKeys(step.stream, target);
     const levels = finishSortFor(step.stream, target).filter((level) => keys.includes(level.key));
-    const sortName = (key) => key === "top" ? pl("Top desired") : key === "direct" ? pl("No Reset needed") : key === "finish" ? pl("Roll position") : statName(key, target);
+    const sortName = (key) => key === "top" ? pl("Top desired") : key === "direct" ? pl("No Reset needed") : statName(key, target);
     // One row of sort chips; "+ Sort" opens a menu of the unused fields.
     const unused = keys.filter((key) => !levels.some((level) => level.key === key));
     const chip = (level, index) => {
@@ -475,7 +489,12 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const others = list.options.filter((option) => option.fits && !option.current).length;
     const collisions = list.options.filter((option) => !option.fits).length;
     const summary = [others ? pl("{n} other finishes keep the route at {rolls} rolls.", { n: others, rolls: r[step.stream].horizon }) : pl("No other finish fits without extra rolls."), collisions ? pl("{n} more collide with the current route and need a full recalculation.", { n: collisions }) : ""].filter(Boolean).join(" ");
-    return `${head(`<button type="button" class="secondary small-button" data-pl-action="close-finishes">${html("Close")}</button>`)}${goalMarkup(r, step, target)}<p class="pl-fine">${esc(summary)}${list.unchecked ? ` ${esc(pl("{n} finishes were not checked: search limit reached.", { n: list.unchecked }))}` : ""}</p>${sorter}<div class="pl-finish-list">${items}</div>`;
+    // Two header rows stick above the list once their sections scroll away; a round close button floats top right.
+    const hasGoal = step.stream === "bonus" && totalDone() === 0;
+    const closeButton = `<div class="pl-close-wrap"><button type="button" class="pl-close" data-pl-action="close-finishes" aria-label="${html("Close")}" title="${html("Close")}">×</button></div>`;
+    const foldRow = (section, title) => `<div class="pl-finish-fold" data-fold="${section}"><div class="pl-finish-fold-bar"><button type="button" class="pl-fold-toggle" data-pl-action="finish-goto" data-section="${section}">${html(title)}</button></div></div>`;
+    const folds = `${hasGoal ? foldRow("goal", "Goal") : ""}${foldRow("finish", "Choose a finish")}`;
+    return `${closeButton}${folds}${head("")}${goalMarkup(r, step, target)}<div class="pl-finish-section"><h3>${html("Choose a finish")}</h3><p class="pl-fine">${esc(summary)}${list.unchecked ? ` ${esc(pl("{n} finishes were not checked: search limit reached.", { n: list.unchecked }))}` : ""}</p></div><div class="pl-finish-bar" style="--rows: ${hasGoal ? 2 : 1}">${sorter}</div><div class="pl-finish-list">${items}</div>`;
   }
   // Goal chips: one row per tier. A chip shows a stat's min/max; clicking it
   // opens its bounds, and "+ Goal" adds a stat. Bonus goals only, and only
@@ -488,7 +507,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     if (step.stream !== "bonus") return "";
     if (totalDone() > 0) return `<p class="pl-fine">${html("Goals can't change after a step is saved. Build new guides from your saved position instead.")}</p>`;
     const planner = normalizedPlanner(getTargets().find((v) => v.id === target.id) ?? target);
-    const rows = ["acceptable", "preferred"].map((name) => {
+    const rows = ["preferred", "acceptable"].map((name) => {
       const tier = planner[name];
       const keys = availableStats(target);
       const set = keys.filter((key) => key in tier.stats || key in tier.maxStats);
@@ -503,7 +522,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       const label = name === "preferred" ? `<span class="pl-gold">★ ${html("Top desired")}</span>` : `<span class="pl-teal">✓ ${html("Acceptable")}</span>`;
       return `<div class="pl-sort is-${name}"><span class="pl-goal-tier">${label}</span><div class="pl-sort-row">${set.map(chip).join("")}${adding}${unused.length && !adding ? `<button type="button" class="pl-sort-add" data-pl-action="goal-menu" data-tier="${name}" aria-haspopup="menu" aria-expanded="${Boolean(open)}">＋ ${html("Goal")}</button>` : ""}</div>${menu}</div>`;
     }).join("");
-    return `<div class="pl-goal-edit"><span class="pl-sort-label">${html("Goal")}</span>${rows}<p class="pl-fine">${html("Changing a goal recalculates the whole route.")}</p>${goalError ? `<p class="error" role="alert">${esc(goalError)}</p>` : ""}</div>`;
+    return `<div class="pl-goal-edit"><h3>${html("Goal")}</h3>${rows}<p class="pl-fine">${html("Changing a goal recalculates the whole route.")}</p>${goalError ? `<p class="error" role="alert">${esc(goalError)}</p>` : ""}</div>`;
   }
   // Stores one stat's bounds (null removes it), then rebuilds the route and
   // comes back to this weapon's finishes.
@@ -542,14 +561,14 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const dialog = q("#pl-finishes-modal");
     if (finishList?.route && finishList.route !== route()) finishList = null;
     if (!finishList) { if (dialog.open) dialog.close(); dialog.replaceChildren(); goalMenu = null; goalEdit = null; goalError = ""; return; }
-    const scroll = q(".pl-finish-list")?.scrollTop ?? 0;
+    const scroll = dialog.scrollTop;
     dialog.innerHTML = finishModalMarkup();
     if (!dialog.open) dialog.showModal();
-    const list = q(".pl-finish-list"); if (list) list.scrollTop = scroll;
+    dialog.scrollTop = scroll; updateFinishFold();
     placeSortMenu();
   }
   const finishSortFor = (stream, target) => cache.finishSort[`${stream}:${target.id}`] ?? goalFinishSort(target, stream);
-  const sortKeys = (stream, target) => stream === "bonus" ? FINISH_SORT_KEYS.filter((key) => !["top", "direct", "finish"].includes(key) ? availableStats(target).includes(key) : true) : ["top", "finish"];
+  const sortKeys = (stream, target) => stream === "bonus" ? FINISH_SORT_KEYS.filter((key) => !["top", "direct"].includes(key) ? availableStats(target).includes(key) : true) : ["top"];
   // Re-renders the guide without losing the list's scroll position.
   function updateFinishSort(change, toEnd = false) {
     const r = route(); const step = r?.steps[inspected];
@@ -564,12 +583,21 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const key = `${step.stream}:${target.id}`;
     if (JSON.stringify(levels) === JSON.stringify(goalFinishSort(target, step.stream))) delete cache.finishSort[key];
     else if (JSON.stringify(levels) !== before) cache.finishSort[key] = levels;
-    const scrollTop = q(".pl-finish-list")?.scrollTop ?? 0;
+    const scrollTop = q("#pl-finishes-modal").scrollTop;
     const scrollLeft = q(".pl-sort-row")?.scrollLeft ?? 0;
     persist(); renderGuide(); renderFinishModal();
-    const list = q(".pl-finish-list"); if (list) list.scrollTop = scrollTop;
+    q("#pl-finishes-modal").scrollTop = scrollTop; updateFinishFold();
     const row = q(".pl-sort-row"); if (row) row.scrollLeft = toEnd ? row.scrollWidth : scrollLeft;
     placeSortMenu();
+  }
+  // Once the Sort row sticks, the goal and heading above it have scrolled
+  // away; a one-line header takes their place and scrolls back on click.
+  function updateFinishFold() {
+    const dialog = q("#pl-finishes-modal"); const base = dialog.getBoundingClientRect().top + 1;
+    const goal = q(".pl-goal-edit h3"); const finish = q(".pl-finish-section h3");
+    const passed = (heading, rowsAbove) => Boolean(heading) && dialog.scrollTop > 0 && heading.getBoundingClientRect().top - base <= rowsAbove * FOLD_ROW + 4;
+    dialog.classList.toggle("is-goal-folded", passed(goal, 0));
+    dialog.classList.toggle("is-finish-folded", passed(finish, goal ? 1 : 0));
   }
   // The menu opens under "+ Sort", kept inside the panel.
   function placeSortMenu() {
@@ -735,6 +763,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   root.addEventListener("click", (event) => {
     const button = event.target.closest("[data-pl-action]");
     const action = button?.dataset.plAction;
+    if (weaponMenu && !event.target.closest(".pl-menu")) { weaponMenu = null; renderWeapons(); }
     if (action === "state") openState();
     else if (action === "export") exportPlan();
     else if (action === "finishes") showFinishes();
@@ -754,13 +783,10 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     else if (action === "sort-menu") { sortMenuOpen = !sortMenuOpen; updateFinishSort(() => {}); q(".pl-sort-menu button")?.focus(); }
     else if (action === "sort-pick") {
       sortMenuOpen = false;
-      // Roll positions rarely tie, so a level after a trailing roll-position
-      // chip would do nothing; insert it before that chip instead.
       updateFinishSort((levels, keys) => {
         const key = button.dataset.key;
         if (!keys.includes(key)) return;
-        const at = key !== "finish" && levels.at(-1)?.key === "finish" ? levels.length - 1 : levels.length;
-        levels.splice(at, 0, { key, dir: key === "finish" ? "asc" : "desc" });
+        levels.push({ key, dir: "desc" });
       }, true);
       q(".pl-sort-add")?.focus();
     }
@@ -770,14 +796,25 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     else if (goalMenu && !event.target.closest(".pl-sort-menu")) { goalMenu = null; renderFinishModal(); }
     else if (action === "import") q("#pl-import-file").click();
     else if (action === "add") openAddForm();
+    else if (action === "finish-goto") {
+      const dialog = q("#pl-finishes-modal"); const section = button.dataset.section === "goal" ? null : q(".pl-finish-section");
+      const above = q(".pl-goal-edit h3") ? FOLD_ROW : 0;
+      dialog.scrollTo({ top: section ? dialog.scrollTop + section.getBoundingClientRect().top - dialog.getBoundingClientRect().top - above - 14 : 0, behavior: "smooth" });
+    }
     else if (action === "cancel-add") q("#pl-add-form").hidden = true;
-    else if (action === "edit") renderEditor(button.dataset.id);
+    else if (action === "weapon-menu") { weaponMenu = weaponMenu === button.dataset.id ? null : button.dataset.id; renderWeapons(); q(".pl-menu-list button")?.focus(); }
+    else if (action === "optional") {
+      const id = button.dataset.id; weaponMenu = null;
+      setTargets(getTargets().map((v) => v.id === id ? { ...v, planner: { ...normalizedPlanner(v), optional: !normalizedPlanner(v).optional } } : v));
+      invalidate(); renderWeapons();
+    } else if (action === "edit") { weaponMenu = null; renderEditor(button.dataset.id); }
     else if (action === "cancel-edit") { editing = null; closeEditor(); }
     else if (action === "duplicate") {
+      weaponMenu = null; renderWeapons();
       const source = getTargets().find((target) => target.id === button.dataset.id);
       if (source) openAddForm(source);
     } else if (action === "remove") {
-      const id = button.dataset.id; cache.selected = cache.selected.filter((v) => v !== id);
+      const id = button.dataset.id; weaponMenu = null; cache.selected = cache.selected.filter((v) => v !== id);
       setTargets(getTargets().filter((target) => target.id !== id));
       if (editing === id) { editing = null; closeEditor(); }
       invalidate(); renderWeapons();
@@ -815,6 +852,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   const finishesDialog = q("#pl-finishes-modal");
   // Escape or a backdrop click closes the modal like Close does; an open menu
   // takes the first Escape.
+  finishesDialog.addEventListener("scroll", updateFinishFold, { passive: true });
   finishesDialog.addEventListener("cancel", (event) => { if (goalMenu || sortMenuOpen) event.preventDefault(); });
   finishesDialog.addEventListener("close", () => { if (!finishesDialog.open && finishList && !finishList.recalculating) { if (finishList.loading) stopWorker(); finishList = null; renderResults(); } });
   // A press outside the dialog's box dismisses it, like Close.
@@ -822,6 +860,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   finishesDialog.addEventListener("mousedown", (event) => { if (outside(finishesDialog, event)) finishesDialog.close(); });
   q("#pl-editor").addEventListener("mousedown", (event) => { if (outside(q("#pl-editor"), event)) q("#pl-editor").close(); });
   root.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && weaponMenu) { const id = weaponMenu; weaponMenu = null; renderWeapons(); q(`[data-pl-action="weapon-menu"][data-id="${id}"]`)?.focus(); return; }
     if (event.key === "Escape" && groupMenuOpen) { groupMenuOpen = false; renderGroupBar(); q("#pl-group .pl-sort-add")?.focus(); return; }
     if (event.key === "Escape" && goalMenu) { event.preventDefault(); goalMenu = null; renderFinishModal(); return; }
     if (event.key === "Escape" && sortMenuOpen) { sortMenuOpen = false; updateFinishSort(() => {}); q(".pl-sort-add")?.focus(); return; }
@@ -832,9 +871,6 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     if (input.matches("[data-pl-select]")) {
       if (input.checked && cache.selected.length >= MAX_SELECTED) { input.checked = false; setError(errorText("targets")); return; }
       cache.selected = input.checked ? [...cache.selected, input.dataset.plSelect] : cache.selected.filter((id) => id !== input.dataset.plSelect);
-      invalidate(); renderWeapons();
-    } else if (input.matches("[data-pl-optional]")) {
-      setTargets(getTargets().map((v) => v.id === input.dataset.plOptional ? { ...v, planner: { ...normalizedPlanner(v), optional: input.checked } } : v));
       invalidate(); renderWeapons();
     } else if (input.matches("[data-copy-goals]")) { copyGoals(input.value); input.value = ""; }
     else if (input.matches("[data-pl-done]")) markDone(Number(input.dataset.plDone));
