@@ -269,3 +269,10 @@ button.pl-expected-roll:hover { background: #d6b35c10; }
 .pl-goal-bounds { gap: 4px; padding: 0 0 0 10px; color: var(--chip-text); font-size: 0.78rem; white-space: nowrap; }
 .pl-goal-bounds input { width: 56px; height: 20px; min-height: 0; padding: 0 6px; border-radius: 999px; font-size: 0.78rem; }
 .pl-goal-bounds .pl-goal-apply { padding: 0 4px; }
+.pl-group-bar { margin: 0 0 12px; }
+.pl-group-name { padding: 0 4px 0 10px; color: var(--chip-text); font-size: 0.78rem; white-space: nowrap; }
+.pl-group + .pl-group { margin-top: 18px; }
+.pl-group .pl-group { margin-left: 12px; }
+.pl-group-heading { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px !important; font-size: 0.86rem; font-weight: 600; }
+.pl-group-heading small { color: var(--muted); font-weight: 400; }
+#pl-weapons > .pl-group > .pl-group-heading { padding-bottom: 6px; border-bottom: 1px solid var(--line); font-size: 1rem; }
