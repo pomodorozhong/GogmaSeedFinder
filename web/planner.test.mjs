@@ -933,6 +933,26 @@ test("other finishes keep the roll count, and a chosen finish survives choosing 
   assert.deepEqual(Object.keys(again.pins.bonus).sort(), ["b", "c"]);
 });
 
+test("changing another weapon's goal preserves a compatible manual finish", async () => {
+  const weapons = [target("a"), target("b", 3, 2), target("c", 0, 5)];
+  for (const weapon of weapons) weapon.planner.skillEnabled = false;
+  const req = request(weapons, 120, 0);
+  const api = provider(req);
+  const route = (await planWeapons(req, api)).acceptable;
+  const options = await finishOptions(route, "bonus", "b", api);
+  const selected = options.options.find((option) => option.fits && !option.current && option.action === "reset");
+  assert.ok(selected, "a different Reset finish is available for b");
+  const manuallyPicked = pinFinish(route, "bonus", "b", selected, api);
+  const changed = structuredClone(req);
+  changed.targets[0].planner.acceptable.stats.attack = 35;
+  const replanned = await planWeapons(changed, provider(changed), () => {}, { preservePinsByMode: { acceptable: manuallyPicked.pins } });
+  assert.ok(replanned.acceptable.complete);
+  const finish = replanned.acceptable.bonus.choices.find((choice) => choice.id === "b");
+  assert.equal(`${finish.action}:${finish.finish}:${finish.layout?.join("") ?? ""}`, selected.key);
+  assert.deepEqual(replanned.acceptable.pins.bonus, { b: selected.key });
+  assert.deepEqual(replanned.acceptable.released, []);
+});
+
 test("a finish that collides is listed, and choosing it recalculates the stream around it", async () => {
   const weapons = [target("a"), target("b", 3, 2), target("c", 0, 5)];
   for (const weapon of weapons) weapon.planner.skillEnabled = false;

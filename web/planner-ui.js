@@ -582,7 +582,8 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     }
     goalError = ""; goalEdit = null; goalMenu = null;
     setTargets(getTargets().map((v) => v.id === target.id ? target : v));
-    reopenFinishes = { stream: finishList.stream, targetId: target.id };
+    const preservePinsByMode = Object.fromEntries(Object.entries(cache.routes).map(([mode, currentRoute]) => [mode, currentRoute.pins ?? {}]));
+    reopenFinishes = { stream: finishList.stream, targetId: target.id, preservePinsByMode };
     finishList = { loading: true, recalculating: true, stream: finishList.stream, targetId: target.id };
     renderWeapons(); invalidate();
     q("#pl-limits").requestSubmit();
@@ -726,6 +727,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   }
   function build(event) {
     event.preventDefault(); setError();
+    const preservePinsByMode = reopenFinishes?.preservePinsByMode;
     if (editing) { q("#pl-goal-form").requestSubmit(); if (editing) return; }
     cache.limits = { bonus: Number(q('#pl-limits [name="bonus"]').value), skill: Number(q('#pl-limits [name="skill"]').value) };
     const request = { origin: getState(), targets: prepared(), limits: { ...cache.limits } };
@@ -746,14 +748,17 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
         else if (data.phase === "optimize") setStatus(pl("Finding the shortest {mode} route…", { mode: tierName(data.mode) }));
         else if (data.phase === "route") { cache.routes[data.mode] = data.route; persist(); renderResults(); }
       } else if (data.type === "done") {
-        cache.routes = data.routes; stopWorker(); persist(); renderResults(); setStatus(pl("Guides ready. Choose a route below."));
+        cache.routes = data.routes; stopWorker(); persist(); renderResults();
+        const released = [...new Set(Object.values(data.routes).flatMap((route) => route.released ?? []))]
+          .map((id) => request.targets.find((target) => target.id === id)).filter(Boolean).map(nameOf);
+        setStatus(released.length ? pl("Some manual finishes could not be kept after the goal change: {names}.", { names: [...new Set(released)].join(", ") }) : pl("Guides ready. Choose a route below."));
         if (reopenFinishes) reopenAfterBuild();
       } else if (data.type === "error") {
         stopWorker(); reopenFinishes = null; finishList = null; setError(errorText(data.message)); renderResults();
       }
     };
     worker.onerror = (error) => { if (worker !== searchWorker) return; stopWorker(); reopenFinishes = null; finishList = null; setError(pl("Unable to calculate the guide. {detail}", { detail: error.message })); renderResults(); };
-    worker.postMessage({ request });
+    worker.postMessage({ request, preservePinsByMode });
   }
   function exportPlan() {
     const state = getState();

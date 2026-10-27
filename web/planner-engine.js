@@ -526,13 +526,84 @@ export async function planWeapons(request, provider, report = () => {}, options 
   const ids = request.targets.map((t) => t.id);
   for (const mode of MODES) {
     report({ phase: "optimize", mode });
-    const pool = pools[mode];
-    const primary = await planRoute(request, pool, mode, ids, provider, options);
+    const basePool = pools[mode];
+    const requestedPins = options.preservePinsByMode?.[mode] ?? {};
+    let released = new Set();
+    let activePins = Object.fromEntries(["bonus", "skill"].map((stream) => [stream, { ...(requestedPins[stream] ?? {}) }]));
+    const restrictPool = (pins) => {
+      const validPins = Object.fromEntries(["bonus", "skill"].map((stream) => [stream, {}]));
+      const nextPool = { ...basePool };
+      for (const stream of ["bonus", "skill"]) {
+        const byId = new Map(basePool[stream].map((target) => [target.id, target]));
+        for (const [id, key] of Object.entries(pins?.[stream] ?? {})) {
+          const target = byId.get(id);
+          if (!target) continue;
+          const choice = target.choices.find((candidate) => choiceKey(candidate) === key);
+          if (choice) validPins[stream][id] = key;
+          else released.add(id);
+        }
+        nextPool[stream] = basePool[stream].map((target) => {
+          const key = validPins[stream][target.id];
+          return key ? { ...target, choices: target.choices.filter((choice) => choiceKey(choice) === key) } : target;
+        });
+      }
+      return { pool: nextPool, pins: validPins };
+    };
+    const solve = async () => {
+      const restricted = restrictPool(activePins);
+      activePins = restricted.pins;
+      return { pool: restricted.pool, route: await planRoute(request, restricted.pool, mode, ids, provider, options) };
+    };
+    let solved = await solve();
+    if (!solved.route.complete && Object.values(activePins).some((pins) => Object.keys(pins).length)) {
+      // Keep manual choices when they still allow a complete route. If they
+      // alone make the route impossible, release only enough choices to find
+      // a complete route again.
+      const unpinned = await planRoute(request, basePool, mode, ids, provider, options);
+      if (unpinned.complete) {
+        while (!solved.route.complete && Object.values(activePins).some((pins) => Object.keys(pins).length)) {
+          const failedStreams = ["bonus", "skill"].filter((stream) => solved.route[stream].status !== "complete");
+          const candidates = failedStreams.flatMap((stream) => Object.keys(activePins[stream]).map((id) => [stream, id]));
+          const fallback = ["bonus", "skill"].flatMap((stream) => Object.keys(activePins[stream]).map((id) => [stream, id]));
+          const [stream, id] = (candidates.length ? candidates : fallback).at(-1);
+          delete activePins[stream][id];
+          released.add(id);
+          solved = await solve();
+        }
+      }
+    }
+    // An optional pinned weapon can be omitted if it no longer fits. Free its
+    // old finish and retry so another finish can still include that weapon.
+    while (true) {
+      const missingPins = ["bonus", "skill"].flatMap((stream) => Object.entries(activePins[stream])
+        .filter(([id, key]) => !solved.route[stream].choices.some((choice) => choice.id === id && choiceKey(choice) === key))
+        .map(([id]) => [stream, id]));
+      if (!missingPins.length) break;
+      for (const [stream, id] of missingPins) { delete activePins[stream][id]; released.add(id); }
+      solved = await solve();
+    }
+    const pool = solved.pool;
+    const primary = solved.route;
     const { alternatives, complete } = await findAlternativeRoutes(request, pool, mode, ids, primary, provider, options);
-    for (const route of [primary, ...alternatives]) route.alternativesComplete = complete;
-    primary.alternatives = alternatives;
-    routes[mode] = primary;
-    report({ phase: "route", mode, route: primary });
+    const annotatePins = (route) => {
+      const pins = { bonus: {}, skill: {} };
+      const routeReleased = new Set(released);
+      for (const stream of ["bonus", "skill"]) {
+        const choices = new Map(route[stream].choices.map((choice) => [choice.id, choice]));
+        for (const [id, key] of Object.entries(activePins[stream])) {
+          const choice = choices.get(id);
+          if (choice && choiceKey(choice) === key) pins[stream][id] = key;
+          else routeReleased.add(id);
+        }
+      }
+      return { ...route, pins, released: [...routeReleased] };
+    };
+    const annotatedAlternatives = alternatives.map(annotatePins);
+    const annotatedPrimary = annotatePins(primary);
+    for (const route of [annotatedPrimary, ...annotatedAlternatives]) route.alternativesComplete = complete;
+    annotatedPrimary.alternatives = annotatedAlternatives;
+    routes[mode] = annotatedPrimary;
+    report({ phase: "route", mode, route: annotatedPrimary });
     await pause();
   }
   return routes;

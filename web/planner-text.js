@@ -59,6 +59,7 @@ export const PLANNER_TEXT = {
   "Recalculating the {stream} route…": ["{stream}のルートを再計算中…", "正在重新計算{stream}路線…"],
   "Route recalculated around the chosen finish: {n} rolls (was {was}).": ["選んだ仕上げ方に合わせてルートを再計算しました：{n}回（変更前{was}回）。", "已依選擇的完成方式重新計算路線：{n}次（原為{was}次）。"],
   "Released earlier choices: {names}": ["解除した選択：{names}", "已解除的選擇：{names}"],
+  "Some manual finishes could not be kept after the goal change: {names}.": ["目標の変更後も維持できなかった手動の完成方法：{names}。", "變更目標後無法保留以下手動選擇的完成方式：{names}。"],
   "No Reset needed": ["再付与なし", "不需重新賦予"],
   "Sort": ["並び替え", "排序"],
   "Sort level {n}: {name}, {direction}. Click to reverse.": ["並び替え{n}：{name}・{direction}。クリックで逆順にします。", "排序{n}：{name}・{direction}。點擊可反轉順序。"],

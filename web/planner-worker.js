@@ -19,7 +19,7 @@ self.onmessage = async ({ data }) => {
       self.postMessage({ type: "pinned", route: pinFinish(data.route, data.stream, data.targetId, data.option, providerFor(data.route.origin)) });
     } else {
       const request = data.request;
-      const routes = await planWeapons(request, providerFor(request.origin), (progress) => self.postMessage({ type: "progress", ...progress }));
+      const routes = await planWeapons(request, providerFor(request.origin), (progress) => self.postMessage({ type: "progress", ...progress }), { preservePinsByMode: data.preservePinsByMode });
       self.postMessage({ type: "done", routes });
     }
   } catch (error) {
