@@ -186,9 +186,12 @@ identical result listed once. Each option is marked by how it fits:
 
 A fitting choice keeps the roll count, the minimum proof, and every
 top-desired and earlier chosen finish. The other stream never changes.
-Finishes can be changed only before any step in that stream is saved;
-building new guides discards the choices. Each option is searched separately,
-and options cut off by the search budget are reported as not checked.
+Finishes can be changed only before any step in that stream is saved. Changing
+a goal from this list rebuilds each available route while keeping compatible
+manual finishes; picks that no longer meet their goals or cannot fit the route
+are released and named. Running **Build guides** manually starts fresh and
+discards those picks. Each option is searched separately, and options cut off
+by the search budget are reported as not checked.
 
 The list's default sort follows the weapon's bonus goal: top desired first,
 then each stat with a minimum from high to low (top-desired tier first), then
