@@ -630,7 +630,11 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       root.style.setProperty("--pl-sticky-top", `${(document.querySelector(".app-tabs")?.getBoundingClientRect().height ?? 80) + 12}px`);
       if (!row || !guide || q("#pl-workspace").hidden) return;
       const rr = row.getBoundingClientRect(); const gr = guide.getBoundingClientRect();
-      guide.style.setProperty("--pl-pointer-y", `${Math.max(18, Math.min(gr.height - 18, rr.top + rr.height / 2 - gr.top))}px`);
+      // The guide sticks while the table scrolls, so the arrow follows the row
+      // and dims when it clamps to an edge because the row is out of reach.
+      const y = rr.top + rr.height / 2 - gr.top;
+      guide.style.setProperty("--pl-pointer-y", `${Math.max(18, Math.min(gr.height - 18, y))}px`);
+      guide.querySelector(".pl-guide-pointer")?.classList.toggle("is-offscreen", y < 18 || y > gr.height - 18);
     });
   }
   function stopWorker() {
@@ -852,6 +856,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   const observer = new ResizeObserver(() => { if (!aligned) alignTables(); schedulePointer(); });
   observer.observe(q("#pl-workspace")); observer.observe(q("#pl-guide")); observer.observe(q("#pl-rows"));
   window.addEventListener("resize", schedulePointer);
+  window.addEventListener("scroll", schedulePointer, { passive: true });
   window.addEventListener("gogma-state-change", sync);
   document.fonts?.ready.then(schedulePointer);
   sync(); persist();
