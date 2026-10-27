@@ -109,7 +109,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     <div class="pl-state-strip"><span>${html("Saved position")}</span><code id="pl-position"></code><button class="text-button" type="button" data-pl-action="state">${html("Set current state")}</button><span class="pl-transfer"><button class="text-button" type="button" data-pl-action="export">${html("Export plan")}</button><button class="text-button" type="button" data-pl-action="import">${html("Import plan")}</button><input id="pl-import-file" type="file" accept=".json,application/json" hidden></span></div>
     <section class="pl-section" aria-labelledby="pl-weapons-title"><div class="pl-section-heading"><div><h3 id="pl-weapons-title"><span class="pl-index">01</span> ${html("Your weapons")}</h3><p class="pl-muted">${html("Select up to {max} weapons. Each copy is planned separately.", { max: MAX_SELECTED })}</p></div><button class="secondary small-button" type="button" data-pl-action="add">＋ ${html("Add weapon")}</button></div>
       <form id="pl-add-form" class="pl-add-form" hidden><label>${html("Weapon name")}<input name="label" maxlength="24" placeholder="${html("Optional name")}"></label><label>${html("Weapon type")}<select name="weaponType">${options(weapons, 3)}</select></label><label>${html("Element / status")}<select name="attributeForce">${options(attributes, 1)}</select></label><label>${html("Copy goals from")}<select name="copyFrom"></select></label><button class="secondary small-button" type="submit">${html("Add weapon")}</button><button class="text-button" type="button" data-pl-action="cancel-add">${html("Cancel")}</button></form>
-      <div id="pl-weapons" class="pl-weapon-grid"></div><div id="pl-editor"></div>
+      <div id="pl-weapons" class="pl-weapon-grid"></div><dialog id="pl-editor" class="pl-modal pl-modal-wide" aria-label="${html("Edit weapon goals")}"></dialog>
     </section>
     <form id="pl-limits" class="pl-limits"><div class="pl-limit-copy"><h3><span class="pl-index">02</span> ${html("Search limits")}</h3><p class="pl-muted">${html("Two independent roll windows from your saved position.")}</p></div><label>${html("Bonus rolls")}<input name="bonus" type="number" min="0" max="10000" step="1" value="${esc(cache.limits.bonus)}" required></label><label>${html("Skill rolls")}<input name="skill" type="number" min="0" max="10000" step="1" value="${esc(cache.limits.skill)}" required></label><button id="pl-build" class="primary" type="submit">${html("Build guides")}</button><button id="pl-cancel" class="secondary" type="button" data-pl-action="cancel" hidden>${html("Cancel search")}</button></form>
     <div class="pl-feedback"><p id="pl-status" class="pl-muted" role="status">${html("Ready to plan.")}</p><p id="pl-error" class="error" role="alert" hidden></p><p class="pl-fine">${html("No roll data is changed until you confirm a step as done and saved in game.")}</p></div>
@@ -172,8 +172,13 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       <details class="pl-current-details"><summary>${html("Current weapon (optional)")}</summary><p class="pl-fine">${html("Enter your current bonuses to check goals already met. Known categories also allow Keep Bonuses and can prove goals met by every possible tier combination.")}</p><h4>${html("Current bonuses in game order")}</h4><div class="pl-five-slots">${Array.from({ length: 5 }, (_, index) => `<label>${html("Slot {n}", { n: index + 1 })}<select data-current-bonus="${index}">${options(bonusOptions, p.currentBonuses?.[index], true)}</select></label>`).join("")}</div><h4>${html("Or known categories in game order")}</h4><div class="pl-five-slots">${Array.from({ length: 5 }, (_, index) => `<label>${html("Slot {n}", { n: index + 1 })}<select data-current-category="${index}">${options(categories, target.keepCategories?.[index], true)}</select></label>`).join("")}</div><h4>${html("Current skills")}</h4><div class="pl-current-pair"><select name="currentSeries" aria-label="${html("Series skill")}">${comboOptions(series, p.currentSkill === null ? null : Math.floor(p.currentSkill / 14), true)}</select><span>＋</span><select name="currentGroup" aria-label="${html("Group skill")}">${comboOptions(groups, p.currentSkill === null ? null : p.currentSkill % 14, true)}</select></div></details>
       ${target.attributeForce >= 6 && target.weaponType < 12 ? `<div class="pl-status-values"><h4>${html("Status boost values")}</h4><p class="pl-fine">${html("Enter the II and EX gains shown on this weapon to use a status minimum.")}</p>${[0, 1].map((index) => `<label>${index === 0 ? "II" : "EX"}<input name="element${index}" type="number" min="0" max="9999" step="1" value="${p.elementValues[index] ?? ""}"></label>`).join("")}</div>` : ""}<p id="pl-editor-error" class="error" role="alert" hidden></p><div class="pl-editor-footer"><button class="secondary" type="submit">${html("Save goals")}</button><button class="text-button" type="button" data-pl-action="cancel-edit">${html("Cancel")}</button></div></form>`;
     q("#pl-goal-form").addEventListener("submit", submitGoals);
+    if (!q("#pl-editor").open) q("#pl-editor").showModal();
     q("#pl-goal-form input").focus({ preventScroll: true });
-    q("#pl-goal-form").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+  function closeEditor() {
+    const dialog = q("#pl-editor");
+    if (dialog.open) dialog.close();
+    dialog.replaceChildren();
   }
   // Fills the open form only; nothing is stored until the goals are saved.
   function copyGoals(sourceId) {
@@ -240,7 +245,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       validatePlannerRequest({ origin: { baseSeed: 0, bonusCounter: 0, skillCounter: 0 }, targets: [target], limits: { bonus: 0, skill: 0 } });
       target.keepSource = "手入力";
       setTargets(getTargets().map((v) => v.id === editing ? target : v));
-      editing = null; q("#pl-editor").replaceChildren();
+      editing = null; closeEditor();
       invalidate(); renderWeapons();
     } catch (error) {
       const message = ["goals", "statusValues", "excluded", "minAboveMax", "targets", "limits", "state"].includes(error.message) ? errorText(error.message) : error.message;
@@ -628,7 +633,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     catch (error) { setError(error.message); return; }
     cache = restoredCache(data.planner, getTargets());
     cache.selected = cache.selected.filter((id) => getTargets().some((v) => v.id === id));
-    stale = false; editing = null; q("#pl-editor").replaceChildren();
+    stale = false; editing = null; closeEditor();
     q("#pl-limits").elements.bonus.value = cache.limits.bonus;
     q("#pl-limits").elements.skill.value = cache.limits.skill;
     inspected = route() ? nextCurrent(route()) : 0;
@@ -681,14 +686,14 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     else if (action === "add") openAddForm();
     else if (action === "cancel-add") q("#pl-add-form").hidden = true;
     else if (action === "edit") renderEditor(button.dataset.id);
-    else if (action === "cancel-edit") { editing = null; q("#pl-editor").replaceChildren(); }
+    else if (action === "cancel-edit") { editing = null; closeEditor(); }
     else if (action === "duplicate") {
       const source = getTargets().find((target) => target.id === button.dataset.id);
       if (source) openAddForm(source);
     } else if (action === "remove") {
       const id = button.dataset.id; cache.selected = cache.selected.filter((v) => v !== id);
       setTargets(getTargets().filter((target) => target.id !== id));
-      if (editing === id) { editing = null; q("#pl-editor").replaceChildren(); }
+      if (editing === id) { editing = null; closeEditor(); }
       invalidate(); renderWeapons();
     } else if (action === "add-pair") q(`[data-pairs="${button.dataset.tier}"]`).insertAdjacentHTML("beforeend", comboRow());
     else if (action === "remove-pair") button.closest(".pl-combo").remove();
@@ -719,6 +724,8 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const bound = (name) => form.elements[name].value === "" ? null : Number(form.elements[name].value);
     changeGoal(form.dataset.tier, form.dataset.key, bound("min"), bound("max"));
   });
+  // Escape cancels the goal editor; nothing is stored until it is saved.
+  q("#pl-editor").addEventListener("close", () => { if (!q("#pl-editor").open) { editing = null; q("#pl-editor").replaceChildren(); } });
   const finishesDialog = q("#pl-finishes-modal");
   // Escape or a backdrop click closes the modal like Close does; an open menu
   // takes the first Escape.
