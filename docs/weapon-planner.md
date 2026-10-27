@@ -4,9 +4,12 @@ The **Weapon planner** tab uses the existing WebAssembly predictions to build
 bonus and skill instructions for up to 100 independently selected weapons.
 Weapon profiles, including duplicate weapons, are shared with the advanced
 forecasting tabs. Existing profiles receive editable initial goals; these are
-starting points, not build recommendations. **Duplicate** opens the add form with
-a weapon's type, element and goals so the element can be changed first, and
-**Copy goals from** fills the goal editor from another weapon. A copy never
+starting points, not build recommendations. **Add weapon** opens the goal editor
+on a new, unsaved weapon with the weapon type and element chosen at its top (a
+different type or element restarts the goals); Cancel discards it. **Duplicate**
+opens the same editor with a weapon's type, element and goals so the element can
+be changed first, and **Copy goals from** fills the goal editor from another
+weapon. A copy never
 takes the source's current bonuses, skills or Keep layout; element goals carry
 over only when the gains match, since status gains are entered per weapon.
 

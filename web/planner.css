@@ -100,7 +100,6 @@
 .pl-menu-list hr { margin: 4px 0; border: 0; border-top: 1px solid var(--line); }
 .pl-menu-check { display: inline-block; width: 14px; text-align: center; color: var(--gold-bright); }
 .pl-empty { grid-column: 1 / -1; border: 1px dashed var(--line); border-radius: 12px; text-align: center; color: var(--muted); padding: 30px; }
-.pl-add-form { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr auto auto; gap: 12px; align-items: end; padding: 16px; border: 1px solid var(--line); border-radius: 12px; margin-bottom: 14px; }
 .pl-name-field { max-width: 380px; }
 .pl-name-field + .pl-name-field { display: block; margin-top: 12px; }
 .pl-editor-section { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
@@ -130,7 +129,7 @@
 .pl-current-pair { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; max-width: 650px; }
 .pl-status-values { padding-top: 15px; }
 .pl-status-values label { display: inline-grid; grid-template-columns: 25px 100px; margin: 10px 16px 0 0; align-items: center; }
-.pl-editor-footer { justify-content: flex-start; margin-top: 20px; }
+.pl-editor-footer { justify-content: flex-end; }
 .pl-limit-fields { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px; }
 .pl-limit-fields label { width: 112px; }
 .pl-feedback { margin-top: 14px; }
@@ -254,8 +253,6 @@ button.pl-expected-roll:hover { background: #d6b35c10; }
   .pl-weapon-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pl-workspace { grid-template-columns: minmax(300px, 1fr) minmax(0, 1.5fr); gap: 16px; }
   .pl-guide-content { padding: 15px 12px 12px; }
-  .pl-add-form { grid-template-columns: 1fr 1fr; }
-  .pl-add-form label:first-child { grid-column: 1 / -1; }
 }
 @media (max-width: 900px) {
   .pl-workspace { grid-template-columns: minmax(0, 1fr); }
@@ -302,7 +299,7 @@ button.pl-expected-roll:hover { background: #d6b35c10; }
 #pl-weapons > .pl-group > .pl-group-heading { padding-bottom: 6px; border-bottom: 1px solid var(--line); font-size: 1rem; }
 .pl-weapon-bars { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 0 0 12px; }
 .pl-weapon-bars .pl-group-bar { margin: 0; }
-.pl-limit-fields label, .pl-add-form label { display: grid; gap: 8px; color: #d6d3c5; font-size: 0.83rem; font-weight: 700; }
+.pl-limit-fields label, .pl-type-row label { display: grid; gap: 8px; color: #d6d3c5; font-size: 0.83rem; font-weight: 700; }
 .pl-limit-fields .primary, .pl-limit-fields .secondary { min-height: 48px; padding: 0 22px; border-radius: 10px; font-size: 1rem; font-weight: 800; }
 @media (max-width: 1040px) {
   .pl-workspace { grid-template-columns: minmax(0, 1fr); }
@@ -345,3 +342,50 @@ button.pl-expected-roll:hover { background: #d6b35c10; }
 .pl-finish-bar .pl-sort { margin-top: 0; }
 .pl-finish-section h3, .pl-goal-edit h3 { margin: 0 0 4px; font-size: 0.95rem; }
 .pl-finish-section .pl-fine { margin: 0; }
+
+/* Goal editor: each block is a titled section; the footer stays reachable. */
+.pl-editor-section { margin-top: 22px; padding-top: 20px; }
+.pl-editor-section > h3, .pl-section-head h3 { margin: 0 0 4px; font-size: 1rem; font-weight: 600; color: #f0ead9; }
+.pl-editor-first { margin-top: 18px; padding-top: 0; border-top: 0; }
+.pl-weapon-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 8px; }
+.pl-weapon-fields .pl-name-field, .pl-weapon-fields .pl-name-field + .pl-name-field { display: grid; gap: 6px; max-width: none; margin: 0; font-size: 0.83rem; font-weight: 700; color: #d6d3c5; }
+.pl-weapon-fields label { display: grid; gap: 6px; font-size: 0.83rem; font-weight: 700; color: #d6d3c5; }
+.pl-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.pl-section-head h3 { margin: 0; }
+.pl-switch { position: relative; display: inline-flex; flex: none; cursor: pointer; }
+.pl-switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.pl-switch-track { width: 38px; height: 22px; border-radius: 999px; background: #3a3d33; position: relative; transition: background 140ms ease; }
+.pl-switch-track::after { content: ""; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: left 140ms ease, background 140ms ease; }
+.pl-switch input:checked + .pl-switch-track { background: #6e5f36; }
+.pl-switch input:checked + .pl-switch-track::after { left: 19px; background: var(--gold-bright); }
+.pl-switch input:focus-visible + .pl-switch-track { outline: 2px solid var(--gold); outline-offset: 2px; }
+.pl-editor-section:has(.pl-switch input:not(:checked)) > :not(.pl-section-head) { opacity: 0.45; }
+.pl-editor-section > .pl-fine { margin: 0 0 12px; }
+.pl-current-details { margin-top: 22px; padding-top: 18px; }
+.pl-current-details summary { font-size: 1rem; font-weight: 600; color: #f0ead9; }
+.pl-editor-footer { position: sticky; bottom: calc(-1 * var(--pl-pad)); z-index: 4; margin: 22px calc(-1 * var(--pl-pad)) calc(-1 * var(--pl-pad)); padding: 14px var(--pl-pad); background: var(--surface); border-top: 1px solid var(--line); }
+@media (max-width: 600px) { .pl-weapon-fields { grid-template-columns: 1fr; } }
+
+.pl-weapon-fields .pl-name-field { grid-column: 1 / -1; }
+
+/* Goals card: Bonus goals, Skill goals and the current weapon share one rounded rectangle, with the copy chip at its top right. */
+.pl-goals-card { margin-top: 26px; padding: 16px 18px 18px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255, 255, 255, 0.025); }
+.pl-goals-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; position: relative; }
+.pl-goals-head h3 { margin: 0; font-size: 1.05rem; font-weight: 600; color: #f0ead9; }
+.pl-copy-wrap { position: relative; }
+.pl-copy-chip { padding: 5px 13px; border: 1px dashed #6e5f36; border-radius: 999px; background: rgba(214, 179, 92, 0.08); color: var(--gold-bright); font-size: 0.78rem; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.pl-copy-chip:hover, .pl-copy-chip[aria-expanded="true"] { border-style: solid; background: rgba(214, 179, 92, 0.2); }
+.pl-copy-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 6; display: grid; width: 250px; max-height: 260px; overflow-y: auto; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: #262820; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6); }
+.pl-copy-menu[hidden] { display: none; }
+.pl-copy-title { padding: 5px 10px; color: var(--muted); font-size: 0.66rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.pl-copy-menu button { padding: 7px 10px; border: 0; border-radius: 6px; background: none; color: inherit; font-size: 0.82rem; text-align: left; cursor: pointer; }
+.pl-copy-menu button:hover, .pl-copy-menu button:focus-visible { background: var(--surface); }
+.pl-goals-card .pl-editor-section { margin-top: 16px; padding-top: 16px; }
+.pl-goals-card .pl-goals-head + .pl-editor-section { margin-top: 12px; padding-top: 0; border-top: 0; }
+.pl-goals-card .pl-section-head h3, .pl-goals-card .pl-current-details summary { font-size: 0.92rem; }
+.pl-goals-card .pl-current-details { margin-top: 16px; padding-top: 16px; }
+
+/* Current weapon: labels match the other fields in the modal. */
+.pl-current-details label, .pl-status-values label { gap: 6px; color: #d6d3c5; font-size: 0.83rem; font-weight: 700; }
+.pl-current-details h4, .pl-status-values h4 { font-size: 0.83rem; }
+.pl-editor-footer .primary { min-height: 40px; padding: 0 22px; font-size: 0.9rem; font-weight: 700; }
