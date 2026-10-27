@@ -426,16 +426,20 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     if (step.stream !== "bonus") return "";
     if (totalDone() > 0) return `<p class="pl-fine">${html("Goals can't change after a step is saved. Build new guides from your saved position instead.")}</p>`;
     const planner = normalizedPlanner(getTargets().find((v) => v.id === target.id) ?? target);
-    const rows = ["preferred", "acceptable"].map((name) => {
+    const rows = ["acceptable", "preferred"].map((name) => {
       const tier = planner[name];
       const keys = availableStats(target);
       const set = keys.filter((key) => key in tier.stats || key in tier.maxStats);
       const unused = keys.filter((key) => !set.includes(key));
-      const chip = (key) => `<span class="pl-sort-chip"><button type="button" data-pl-action="goal-edit" data-tier="${name}" data-key="${key}" aria-label="${html("Goal {name}: {range}. Click to edit.", { name: statName(key, target), range: goalRange(key, tier) })}">${esc(statName(key, target))} ${esc(goalRange(key, tier))}</button><button type="button" class="pl-sort-remove" data-pl-action="goal-remove" data-tier="${name}" data-key="${key}" aria-label="${html("Remove goal {name}", { name: statName(key, target) })}">×</button></span>`;
+      const chip = (key) => goalEdit?.tier === name && goalEdit.key === key ? bounds(key) : `<span class="pl-sort-chip"><button type="button" data-pl-action="goal-edit" data-tier="${name}" data-key="${key}" aria-label="${html("Goal {name}: {range}. Click to edit.", { name: statName(key, target), range: goalRange(key, tier) })}">${esc(statName(key, target))} ${esc(goalRange(key, tier))}</button><button type="button" class="pl-sort-remove" data-pl-action="goal-remove" data-tier="${name}" data-key="${key}" aria-label="${html("Remove goal {name}", { name: statName(key, target) })}">×</button></span>`;
       const open = goalMenu === name && unused.length;
       const menu = open ? `<div class="pl-sort-menu" role="menu">${unused.map((key) => `<button type="button" role="menuitem" data-pl-action="goal-add" data-tier="${name}" data-key="${key}">${esc(statName(key, target))}</button>`).join("")}</div>` : "";
-      const editor = goalEdit?.tier === name ? `<form class="pl-goal-bounds" data-pl-goal-form data-tier="${name}" data-key="${goalEdit.key}"><strong>${esc(statName(goalEdit.key, target))}</strong><label>${html("Min")}<input name="min" type="number" min="0" step="1" value="${tier.stats[goalEdit.key] ?? ""}"></label><label>${html("Max")}<input name="max" type="number" min="0" step="1" value="${tier.maxStats[goalEdit.key] ?? ""}"></label><button type="submit" class="primary">${html("Apply")}</button><button type="button" class="text-button" data-pl-action="goal-cancel">${html("Cancel")}</button></form>` : "";
-      return `<div class="pl-sort"><span class="pl-goal-tier">${html(name === "preferred" ? "Top desired" : "Acceptable")}</span><div class="pl-sort-row">${set.map(chip).join("")}${unused.length ? `<button type="button" class="pl-sort-add" data-pl-action="goal-menu" data-tier="${name}" aria-haspopup="menu" aria-expanded="${Boolean(open)}">＋ ${html("Goal")}</button>` : ""}</div>${menu}${editor}</div>`;
+      // Editing a stat swaps its chip for one holding the min/max boxes; a
+      // stat being added gets that chip at the end of the row.
+      const bounds = (key) => `<form class="pl-sort-chip pl-goal-bounds" data-pl-goal-form data-tier="${name}" data-key="${key}"><span>${esc(statName(key, target))}</span><input name="min" type="number" min="0" step="1" value="${tier.stats[key] ?? ""}" placeholder="${html("Min")}" aria-label="${html("Min")}"><span aria-hidden="true">–</span><input name="max" type="number" min="0" step="1" value="${tier.maxStats[key] ?? ""}" placeholder="${html("Max")}" aria-label="${html("Max")}"><button type="submit" class="pl-goal-apply" aria-label="${html("Apply")}" title="${html("Apply")}">✓</button><button type="button" class="pl-sort-remove" data-pl-action="goal-cancel" aria-label="${html("Cancel")}" title="${html("Cancel")}">×</button></form>`;
+      const adding = goalEdit?.tier === name && !set.includes(goalEdit.key) ? bounds(goalEdit.key) : "";
+      const label = name === "preferred" ? `<span class="pl-gold">★ ${html("Top desired")}</span>` : `<span class="pl-teal">✓ ${html("Acceptable")}</span>`;
+      return `<div class="pl-sort is-${name}"><span class="pl-goal-tier">${label}</span><div class="pl-sort-row">${set.map(chip).join("")}${adding}${unused.length && !adding ? `<button type="button" class="pl-sort-add" data-pl-action="goal-menu" data-tier="${name}" aria-haspopup="menu" aria-expanded="${Boolean(open)}">＋ ${html("Goal")}</button>` : ""}</div>${menu}</div>`;
     }).join("");
     return `<div class="pl-goal-edit"><span class="pl-sort-label">${html("Goal")}</span>${rows}<p class="pl-fine">${html("Changing a goal recalculates the whole route.")}</p>${goalError ? `<p class="error" role="alert">${esc(goalError)}</p>` : ""}</div>`;
   }
@@ -731,7 +735,10 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   // takes the first Escape.
   finishesDialog.addEventListener("cancel", (event) => { if (goalMenu || sortMenuOpen) event.preventDefault(); });
   finishesDialog.addEventListener("close", () => { if (!finishesDialog.open && finishList && !finishList.recalculating) { if (finishList.loading) stopWorker(); finishList = null; renderResults(); } });
-  finishesDialog.addEventListener("mousedown", (event) => { if (event.target === finishesDialog) finishesDialog.close(); });
+  // A press outside the dialog's box dismisses it, like Close.
+  const outside = (dialog, event) => { const box = dialog.getBoundingClientRect(); return event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom; };
+  finishesDialog.addEventListener("mousedown", (event) => { if (outside(finishesDialog, event)) finishesDialog.close(); });
+  q("#pl-editor").addEventListener("mousedown", (event) => { if (outside(q("#pl-editor"), event)) q("#pl-editor").close(); });
   root.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && goalMenu) { event.preventDefault(); goalMenu = null; renderFinishModal(); return; }
     if (event.key === "Escape" && sortMenuOpen) { sortMenuOpen = false; updateFinishSort(() => {}); q(".pl-sort-add")?.focus(); return; }

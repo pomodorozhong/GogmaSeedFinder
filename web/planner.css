@@ -263,7 +263,11 @@ button.pl-expected-roll:hover { background: #d6b35c10; }
 .pl-modal .pl-finish-list { flex: 0 1 auto; max-height: none; min-height: 0; overflow-y: auto; }
 .pl-goal-edit { display: grid; gap: 8px; margin: 4px 0 10px; padding-bottom: 10px; border-bottom: 1px solid #2c3026; }
 .pl-goal-edit .pl-sort { margin-top: 0; }
-.pl-goal-tier { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.74rem; }
-.pl-goal-bounds { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #1b1d18; }
-.pl-goal-bounds label { width: 96px; }
-.pl-goal-bounds input { height: 36px; }
+.pl-goal-tier { display: block; margin-bottom: 4px; font-size: 0.78rem; font-weight: 600; }
+.pl-goal-edit .is-acceptable .pl-sort-chip { border-color: var(--pl-teal); background: var(--pl-teal-bg); }
+.pl-goal-edit .is-acceptable .pl-sort-chip button, .pl-goal-edit .is-acceptable .pl-sort-add { color: var(--pl-teal); }
+.pl-goal-edit .is-acceptable .pl-sort-add { border-color: var(--pl-teal); }
+.pl-goal-bounds { gap: 4px; padding: 0 0 0 10px; color: var(--gold-bright); font-size: 0.78rem; white-space: nowrap; }
+.pl-goal-edit .is-acceptable .pl-goal-bounds { color: var(--pl-teal); }
+.pl-goal-bounds input { width: 56px; height: 20px; min-height: 0; padding: 0 6px; border-radius: 999px; font-size: 0.78rem; }
+.pl-goal-bounds .pl-goal-apply { padding: 0 4px; }
