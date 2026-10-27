@@ -117,7 +117,9 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     <form id="pl-limits" class="panel pl-limits"><div class="section-heading"><div><p class="step">${html("Step {n}", { n: "02" })}</p><h2>${html("Search limits")}</h2><p class="pl-muted">${html("Two independent roll windows from your saved position.")}</p></div></div><div class="pl-limit-fields"><label>${html("Bonus rolls")}<input name="bonus" type="number" min="0" max="10000" step="1" value="${esc(cache.limits.bonus)}" required></label><label>${html("Skill rolls")}<input name="skill" type="number" min="0" max="10000" step="1" value="${esc(cache.limits.skill)}" required></label><button id="pl-build" class="primary" type="submit">${html("Build guides")}</button><button id="pl-cancel" class="secondary" type="button" data-pl-action="cancel" hidden>${html("Cancel search")}</button></div>
     <div class="pl-feedback"><p id="pl-status" class="pl-muted" role="status">${html("Ready to plan.")}</p><p id="pl-error" class="error" role="alert" hidden></p><p class="pl-fine">${html("No roll data is changed until you confirm a step as done and saved in game.")}</p></div></form>
     <section id="pl-results" class="panel" hidden><div class="section-heading"><div><p class="step">${html("Step {n}", { n: "03" })}</p><h2>${html("Choose your route")}</h2></div><div class="pl-legend"><span class="pl-gold">★ ${html("Top desired")}</span><span class="pl-teal">✓ ${html("Acceptable")}</span></div></div><div id="pl-routes" class="pl-routes"></div><div id="pl-route-note"></div><div id="pl-alternatives" class="pl-alternatives" hidden></div>
-      <div id="pl-detail-heading" class="pl-section-heading pl-detail-heading"><div><h3>${html("Detailed route")}</h3><p id="pl-saved-count" class="pl-muted"></p></div></div><div id="pl-route-complete" class="pl-complete" hidden></div><div id="pl-workspace" class="pl-workspace"><aside id="pl-guide" class="pl-guide" aria-label="${html("Current step")}"></aside><div id="pl-rows" class="pl-table-area"></div></div>
+    </section>
+    <section id="pl-detail" class="panel pl-detail-panel" hidden>
+      <div id="pl-detail-heading" class="section-heading"><div><p class="step">${html("Step {n}", { n: "04" })}</p><h2>${html("Detailed route")}</h2><p id="pl-saved-count" class="pl-muted"></p></div></div><div id="pl-route-complete" class="pl-complete" hidden></div><div id="pl-workspace" class="pl-workspace"><aside id="pl-guide" class="pl-guide" aria-label="${html("Current step")}"></aside><div id="pl-rows" class="pl-table-area"></div></div>
     </section><p class="pl-fine pl-engine-note">${html("Planning uses the existing game RNG engine. Element deltas vary by weapon; status deltas can be entered in the weapon editor.")}</p><dialog id="pl-finishes-modal" class="pl-modal" aria-labelledby="pl-finishes-title"></dialog>`;
   const q = (selector) => root.querySelector(selector);
   const setError = (message = "") => { q("#pl-error").textContent = message; q("#pl-error").hidden = !message; };
@@ -331,7 +333,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   function renderRoutes() {
     const modes = ["acceptable", "preferred"];
     const hasRoutes = modes.some((mode) => cache.routes[mode]);
-    q("#pl-results").hidden = !hasRoutes;
+    q("#pl-results").hidden = !hasRoutes; q("#pl-detail").hidden = !hasRoutes;
     if (!hasRoutes) { q("#pl-rows").replaceChildren(); q("#pl-guide").replaceChildren(); return; }
     const r = route();
     // Goals, weapons or limits changed after the build (invalidate clears the

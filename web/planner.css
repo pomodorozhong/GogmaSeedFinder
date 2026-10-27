@@ -138,7 +138,9 @@
 .pl-stream-table + .pl-stream-table { margin-top: 18px; }
 .pl-stream-title { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; font-size: 0.82rem; font-weight: 600; }
 .pl-stream-title span { color: var(--muted); font-size: 0.74rem; font-weight: 400; }
-.pl-detail-heading { margin-top: 25px; }
+.pl-detail-panel { padding: clamp(14px, 2vw, 24px); }
+.pl-detail-panel:not(:has(> :not([hidden]))) { display: none; }
+.pl-detail-panel .section-heading { margin-bottom: 16px; }
 .pl-workspace { display: grid; grid-template-columns: minmax(340px, .95fr) minmax(0, 1.6fr); gap: 18px; align-items: stretch; }
 .pl-table-area { min-width: 0; align-self: start; }
 .pl-table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: #151712; }
@@ -272,3 +274,9 @@ button.pl-expected-roll:hover { background: #d6b35c10; }
 .pl-weapon-bars .pl-group-bar { margin: 0; }
 .pl-limit-fields label, .pl-add-form label { display: grid; gap: 8px; color: #d6d3c5; font-size: 0.83rem; font-weight: 700; }
 .pl-limit-fields .primary, .pl-limit-fields .secondary { min-height: 48px; padding: 0 22px; border-radius: 10px; font-size: 0.9rem; font-weight: 800; }
+@media (max-width: 1040px) {
+  .pl-workspace { grid-template-columns: minmax(0, 1fr); }
+  .pl-guide-pointer { display: none; }
+  .pl-guide-content { position: static; padding: 18px; }
+  .pl-expected-list { max-height: 260px; }
+}
