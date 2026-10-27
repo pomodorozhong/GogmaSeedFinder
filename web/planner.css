@@ -135,8 +135,8 @@
 .pl-alternative { display: flex; align-items: center; gap: 10px; text-align: left; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: inherit; font: inherit; cursor: pointer; overflow-wrap: anywhere; }
 .pl-alternative[aria-pressed="true"] { border-color: #8d7947; }
 .pl-optional { display: flex; align-items: center; gap: 7px; margin-top: 10px; font-size: 0.74rem; color: var(--muted); }
-.pl-stream-table + .pl-stream-table { margin-top: 18px; }
-.pl-stream-title { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; font-size: 0.82rem; font-weight: 600; }
+.pl-stream-table + .pl-stream-table { margin-top: 22px; }
+.pl-stream-title { display: flex; align-items: baseline; gap: 8px; padding: 12px 0; font-size: 0.82rem; font-weight: 600; }
 .pl-stream-title span { color: var(--muted); font-size: 0.74rem; font-weight: 400; }
 .pl-detail-panel { --pl-pad: clamp(22px, 5vw, 42px); }
 .pl-detail-panel:not(:has(> :not([hidden]))) { display: none; }
