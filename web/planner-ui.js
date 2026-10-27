@@ -393,7 +393,19 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       const warning = stream === "skill" ? upgradeWarning(r, rows.map(([step]) => step)) : "";
       return rows.length ? `<section class="pl-stream-table"><h4 class="pl-stream-title">${html(title)} <span>${stream === "bonus" ? "G" : "S"} · ${html("{done} of {total} steps saved", { done: cache.completed[stream], total: rows.length })}</span></h4>${warning}<div class="pl-table-scroll"><table class="pl-route-table"><thead><tr><th>${html("Saved")}</th><th>${html("Rolls")}</th><th>${html("Weapon & action")}</th><th>${html(result)}</th></tr></thead><tbody>${rows.map(([step, index]) => row(step, index)).join("")}</tbody></table></div></section>` : "";
     }).join("");
-    renderGuide(); schedulePointer();
+    alignTables(); renderGuide(); schedulePointer();
+  }
+  // Each table sizes its columns to its content; every column then takes the
+  // widest width either table needs so the two read as one grid.
+  let aligned = false;
+  function alignTables() {
+    const heads = [...root.querySelectorAll(".pl-route-table")].map((table) => [...table.querySelectorAll("thead th")]);
+    for (const row of heads) for (const th of row) th.style.width = "";
+    aligned = false;
+    if (heads.length < 2 || !heads.every((row) => row[0].getBoundingClientRect().width > 0)) return;
+    aligned = true;
+    const widths = heads[0].map((_, column) => Math.max(...heads.map((row) => row[column]?.getBoundingClientRect().width ?? 0)));
+    for (const row of heads) row.forEach((th, column) => { th.style.width = `${Math.ceil(widths[column])}px`; });
   }
   // The other stream's counter depends on how far that stream has been saved.
   const stepState = (r, step, side) => ({ ...routePosition(r, cache.completed), [`${step.stream}Counter`]: step[side][`${step.stream}Counter`] });
@@ -836,7 +848,8 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     q("#pl-position").textContent = stateCode(getState());
     renderWeapons(); renderResults(); schedulePointer();
   }
-  const observer = new ResizeObserver(schedulePointer);
+  // Tables measured while the tab was hidden are aligned once they show.
+  const observer = new ResizeObserver(() => { if (!aligned) alignTables(); schedulePointer(); });
   observer.observe(q("#pl-workspace")); observer.observe(q("#pl-guide")); observer.observe(q("#pl-rows"));
   window.addEventListener("resize", schedulePointer);
   window.addEventListener("gogma-state-change", sync);

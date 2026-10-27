@@ -147,7 +147,7 @@
 .pl-table-area { margin-right: calc(var(--pl-pad) * -1); }
 .pl-table-area .pl-table-scroll { padding-right: var(--pl-pad); }
 .pl-table-scroll { overflow-x: auto; }
-.pl-route-table { width: 100%; min-width: 760px; border: 1px solid var(--line); border-radius: 8px; border-collapse: separate; border-spacing: 0; background: #151712; table-layout: auto; }
+.pl-route-table { width: max-content; border: 1px solid var(--line); border-radius: 8px; border-collapse: separate; border-spacing: 0; background: #151712; table-layout: auto; }
 .pl-route-table thead th { background: #22251e; }
 .pl-route-table thead th:first-child { border-top-left-radius: 7px; }
 .pl-route-table thead th:last-child { border-top-right-radius: 7px; }
@@ -156,7 +156,6 @@
 .pl-route-table th { color: var(--muted); font-weight: 400; text-align: left; font-size: 0.68rem; padding: 12px 10px; }
 .pl-route-table th:first-child { width: 43px; padding-left: 9px; }
 .pl-route-table th:nth-child(-n+3), .pl-route-table td:nth-child(-n+3) { white-space: nowrap; }
-.pl-route-table th:nth-child(2), .pl-route-table th:nth-child(3) { width: 1%; }
 
 .pl-route-table td { padding: 15px 10px; border-top: 1px solid #34372e; vertical-align: top; overflow-wrap: anywhere; }
 .pl-route-table tbody tr { cursor: pointer; }
