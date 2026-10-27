@@ -49,16 +49,18 @@
 .pl-collision-note { font-size: 0.74rem; line-height: 1.4; }
 .pl-finish-option.is-moves .pl-collision-note { color: #e3a94f; }
 .pl-finish-option.is-collision .pl-collision-note { color: #ec7b72; }
-.pl-sort { position: relative; margin-top: 8px; }
+.pl-sort { --chip-text: #e4e1d3; --chip-line: #787a6c; --chip-bg: rgba(255, 255, 255, 0.06); position: relative; margin-top: 8px; }
+.pl-sort.is-preferred { --chip-text: var(--gold-bright); --chip-line: var(--gold); --chip-bg: rgba(240, 210, 124, 0.08); }
+.pl-sort.is-acceptable { --chip-text: var(--pl-teal); --chip-line: var(--pl-teal); --chip-bg: var(--pl-teal-bg); }
 .pl-sort-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.pl-sort-chip { display: inline-flex; flex: none; align-items: center; height: 26px; border: 1px solid var(--gold); border-radius: 999px; background: rgba(240, 210, 124, 0.08); }
-.pl-sort-chip button { height: 100%; min-height: 0; padding: 0 4px 0 10px; line-height: 1; color: var(--gold-bright); background: none; border: 0; font: inherit; font-size: 0.78rem; white-space: nowrap; cursor: pointer; }
+.pl-sort-chip { display: inline-flex; flex: none; align-items: center; height: 26px; border: 1px solid var(--chip-line); border-radius: 999px; background: var(--chip-bg); }
+.pl-sort-chip button { height: 100%; min-height: 0; padding: 0 4px 0 10px; line-height: 1; color: var(--chip-text); background: none; border: 0; font: inherit; font-size: 0.78rem; white-space: nowrap; cursor: pointer; }
 .pl-sort-chip .pl-sort-remove { padding: 0 9px 0 4px; color: var(--muted); }
-.pl-sort-chip .pl-sort-remove:hover { color: var(--gold-bright); }
-.pl-sort .pl-sort-add { display: inline-flex; flex: none; align-items: center; height: 26px; min-height: 0; padding: 0 10px; line-height: 1; color: var(--gold-bright); background: none; border: 1px dashed var(--gold); border-radius: 999px; font: inherit; font-size: 0.78rem; white-space: nowrap; cursor: pointer; }
+.pl-sort-chip .pl-sort-remove:hover { color: var(--chip-text); }
+.pl-sort .pl-sort-add { display: inline-flex; flex: none; align-items: center; height: 26px; min-height: 0; padding: 0 10px; line-height: 1; color: var(--chip-text); background: none; border: 1px dashed var(--chip-line); border-radius: 999px; font: inherit; font-size: 0.78rem; white-space: nowrap; cursor: pointer; }
 .pl-sort-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 5; display: grid; min-width: 140px; max-height: 240px; overflow-y: auto; padding: 4px; background: #1c1d18; border: 1px solid var(--line); border-radius: 7px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); }
 .pl-sort-menu button { min-height: 0; padding: 6px 10px; text-align: left; color: #ebe4ce; background: none; border: 0; border-radius: 5px; font: inherit; font-size: 0.78rem; cursor: pointer; }
-.pl-sort-menu button:hover, .pl-sort-menu button:focus-visible { background: rgba(240, 210, 124, 0.12); }
+.pl-sort-menu button:hover, .pl-sort-menu button:focus-visible { background: var(--chip-bg); }
 .pl-state-strip .pl-transfer button { margin-left: 0; }
 .pl-section { margin-top: 28px; }
 .pl-section-heading { margin-bottom: 12px; }
@@ -264,10 +266,6 @@ button.pl-expected-roll:hover { background: #d6b35c10; }
 .pl-goal-edit { display: grid; gap: 8px; margin: 4px 0 10px; padding-bottom: 10px; border-bottom: 1px solid #2c3026; }
 .pl-goal-edit .pl-sort { margin-top: 0; }
 .pl-goal-tier { display: block; margin-bottom: 4px; font-size: 0.78rem; font-weight: 600; }
-.pl-goal-edit .is-acceptable .pl-sort-chip { border-color: var(--pl-teal); background: var(--pl-teal-bg); }
-.pl-goal-edit .is-acceptable .pl-sort-chip button, .pl-goal-edit .is-acceptable .pl-sort-add { color: var(--pl-teal); }
-.pl-goal-edit .is-acceptable .pl-sort-add { border-color: var(--pl-teal); }
-.pl-goal-bounds { gap: 4px; padding: 0 0 0 10px; color: var(--gold-bright); font-size: 0.78rem; white-space: nowrap; }
-.pl-goal-edit .is-acceptable .pl-goal-bounds { color: var(--pl-teal); }
+.pl-goal-bounds { gap: 4px; padding: 0 0 0 10px; color: var(--chip-text); font-size: 0.78rem; white-space: nowrap; }
 .pl-goal-bounds input { width: 56px; height: 20px; min-height: 0; padding: 0 6px; border-radius: 999px; font-size: 0.78rem; }
 .pl-goal-bounds .pl-goal-apply { padding: 0 4px; }
