@@ -65,7 +65,6 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   let finishList = null;
   let sortMenuOpen = false;
   let groupMenuOpen = false;
-  let weaponSortMenuOpen = false;
   // Goal chips in the finishes modal: a tier's "+ Goal" menu, the stat being
   // edited (not stored until applied), and the finish list to reopen once a
   // goal change has rebuilt the route.
@@ -168,14 +167,12 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     q("#pl-group").innerHTML = `<span class="pl-sort-label">${html("Group")}</span><div class="pl-sort-row">${levels.map(chip).join("")}${unused.length ? `<button type="button" class="pl-sort-add" data-pl-action="group-menu" aria-haspopup="menu" aria-expanded="${groupMenuOpen}">＋ ${html("Group")}</button>` : ""}</div>${menu}`;
   }
   // Weapons are saved oldest first, so "new on bottom" is the saved order.
-  const SORT_KEYS = ["newTop", "newBottom"];
   const weaponSortName = (key) => pl(key === "newTop" ? "New on top" : "New on bottom");
+  // One chip, like the finishes sort: click to flip, × to remove.
   function renderWeaponSortBar() {
     const key = cache.weaponSort;
-    const unused = SORT_KEYS.filter((value) => value !== key);
-    const chip = `<span class="pl-sort-chip"><span class="pl-group-name">${esc(weaponSortName(key))}</span><button type="button" class="pl-sort-remove" data-pl-action="wsort-remove" aria-label="${html("Remove sort")}">×</button></span>`;
-    const menu = weaponSortMenuOpen ? `<div class="pl-sort-menu" role="menu">${unused.map((value) => `<button type="button" role="menuitem" data-pl-action="wsort-pick" data-key="${value}">${esc(weaponSortName(value))}</button>`).join("")}</div>` : "";
-    q("#pl-weapon-sort").innerHTML = `<span class="pl-sort-label">${html("Sort")}</span><div class="pl-sort-row">${key ? chip : ""}${key ? "" : `<button type="button" class="pl-sort-add" data-pl-action="wsort-menu" aria-haspopup="menu" aria-expanded="${weaponSortMenuOpen}">＋ ${html("Sort")}</button>`}</div>${key ? "" : menu}`;
+    const chip = `<span class="pl-sort-chip"><button type="button" data-pl-action="wsort-flip" title="${esc(weaponSortName(key))}" aria-label="${html("Sort: Added, {direction}. Click to reverse.", { direction: weaponSortName(key) })}">${html("Added")} ${key === "newTop" ? "↓" : "↑"}</button><button type="button" class="pl-sort-remove" data-pl-action="wsort-remove" aria-label="${html("Remove sort")}">×</button></span>`;
+    q("#pl-weapon-sort").innerHTML = `<span class="pl-sort-label">${html("Sort")}</span><div class="pl-sort-row">${key ? chip : `<button type="button" class="pl-sort-add" data-pl-action="wsort-add">＋ ${html("Sort")}</button>`}</div>`;
   }
   function renderWeapons() {
     const list = cache.weaponSort === "newTop" ? getTargets().slice().reverse() : getTargets();
@@ -713,10 +710,9 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     else if (action === "goal-menu") { goalMenu = goalMenu === button.dataset.tier ? null : button.dataset.tier; goalEdit = null; renderFinishModal(); q(".pl-sort-menu button")?.focus(); }
     else if (action === "goal-add" || action === "goal-edit") { goalEdit = { tier: button.dataset.tier, key: button.dataset.key }; goalMenu = null; goalError = ""; renderFinishModal(); q("[data-pl-goal-form] input")?.focus(); }
     else if (action === "goal-remove") changeGoal(button.dataset.tier, button.dataset.key, null, null);
-    else if (action === "wsort-menu") { weaponSortMenuOpen = !weaponSortMenuOpen; renderWeaponSortBar(); q("#pl-weapon-sort .pl-sort-menu button")?.focus(); }
-    else if (action === "wsort-pick") { weaponSortMenuOpen = false; cache.weaponSort = button.dataset.key; persist(); renderWeapons(); q("#pl-weapon-sort .pl-sort-remove")?.focus(); }
+    else if (action === "wsort-add") { cache.weaponSort = "newTop"; persist(); renderWeapons(); q("#pl-weapon-sort .pl-sort-chip button")?.focus(); }
+    else if (action === "wsort-flip") { cache.weaponSort = cache.weaponSort === "newTop" ? "newBottom" : "newTop"; persist(); renderWeapons(); q("#pl-weapon-sort .pl-sort-chip button")?.focus(); }
     else if (action === "wsort-remove") { cache.weaponSort = ""; persist(); renderWeapons(); q("#pl-weapon-sort .pl-sort-add")?.focus(); }
-    else if (weaponSortMenuOpen && !event.target.closest("#pl-weapon-sort .pl-sort-menu")) { weaponSortMenuOpen = false; renderWeaponSortBar(); }
     else if (action === "group-menu") { groupMenuOpen = !groupMenuOpen; renderGroupBar(); q("#pl-group .pl-sort-menu button")?.focus(); }
     else if (action === "group-pick") { groupMenuOpen = false; cache.weaponGroups = [...cache.weaponGroups, button.dataset.key]; persist(); renderWeapons(); q("#pl-group .pl-sort-add")?.focus(); }
     else if (action === "group-remove") { cache.weaponGroups = cache.weaponGroups.filter((_, index) => index !== Number(button.dataset.index)); persist(); renderWeapons(); }
@@ -793,7 +789,6 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   finishesDialog.addEventListener("mousedown", (event) => { if (outside(finishesDialog, event)) finishesDialog.close(); });
   q("#pl-editor").addEventListener("mousedown", (event) => { if (outside(q("#pl-editor"), event)) q("#pl-editor").close(); });
   root.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && weaponSortMenuOpen) { weaponSortMenuOpen = false; renderWeaponSortBar(); q("#pl-weapon-sort .pl-sort-add")?.focus(); return; }
     if (event.key === "Escape" && groupMenuOpen) { groupMenuOpen = false; renderGroupBar(); q("#pl-group .pl-sort-add")?.focus(); return; }
     if (event.key === "Escape" && goalMenu) { event.preventDefault(); goalMenu = null; renderFinishModal(); return; }
     if (event.key === "Escape" && sortMenuOpen) { sortMenuOpen = false; updateFinishSort(() => {}); q(".pl-sort-add")?.focus(); return; }

@@ -34,6 +34,8 @@ export const PLANNER_TEXT = {
   "New on top": ["新しいものを上に", "新增的在上"],
   "New on bottom": ["新しいものを下に", "新增的在下"],
   "Remove sort": ["並び替えを解除", "移除排序"],
+  "Added": ["追加順", "新增順序"],
+  "Sort: Added, {direction}. Click to reverse.": ["並び替え：追加順・{direction}。クリックで逆順にします。", "排序：新增順序・{direction}。點擊可反轉順序。"],
   "Other finishes": ["ほかの仕上げ方", "其他完成方式"],
   "Collides with {names}; they move to other finishes.": ["{names}と衝突します。そちらは別の仕上げ方に移ります。", "與{names}衝突；這些武器會改用其他完成方式。"],
   "Collides with {names}. Choosing it recalculates the whole route.": ["{names}と衝突します。選ぶとルート全体を再計算します。", "與{names}衝突。選擇後會重新計算整條路線。"],
