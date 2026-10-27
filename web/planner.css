@@ -138,13 +138,16 @@
 .pl-stream-table + .pl-stream-table { margin-top: 18px; }
 .pl-stream-title { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; font-size: 0.82rem; font-weight: 600; }
 .pl-stream-title span { color: var(--muted); font-size: 0.74rem; font-weight: 400; }
-.pl-detail-panel { padding: clamp(14px, 2vw, 24px); }
+.pl-detail-panel { --pl-pad: clamp(22px, 5vw, 42px); }
 .pl-detail-panel:not(:has(> :not([hidden]))) { display: none; }
-.pl-detail-panel .section-heading { margin-bottom: 16px; }
 .pl-workspace { display: grid; grid-template-columns: minmax(340px, .95fr) minmax(0, 1.6fr); gap: 18px; align-items: stretch; }
 .pl-table-area { min-width: 0; align-self: start; }
+/* The table runs out to the panel's right edge and scrolls sideways, so its
+   columns keep their width instead of being squeezed beside the guide. */
+.pl-table-area { margin-right: calc(var(--pl-pad) * -1); }
+.pl-table-area .pl-table-scroll { border-right: 0; border-radius: 8px 0 0 8px; }
 .pl-table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: #151712; }
-.pl-route-table { width: 100%; min-width: 570px; border-collapse: collapse; table-layout: fixed; }
+.pl-route-table { width: 100%; min-width: 860px; border-collapse: collapse; table-layout: fixed; }
 .pl-route-table thead { background: #22251e; }
 .pl-route-table th { color: var(--muted); font-weight: 400; text-align: left; font-size: 0.68rem; padding: 12px 10px; }
 .pl-route-table th:first-child { width: 43px; padding-left: 9px; }
@@ -279,4 +282,7 @@ button.pl-expected-roll:hover { background: #d6b35c10; }
   .pl-guide-pointer { display: none; }
   .pl-guide-content { position: static; padding: 18px; }
   .pl-expected-list { max-height: 260px; }
+  .pl-table-area { margin-inline: calc(var(--pl-pad) * -1); }
+  .pl-table-area .pl-stream-title { padding-inline: var(--pl-pad); }
+  .pl-table-area .pl-table-scroll { border-left: 0; border-radius: 0; }
 }
