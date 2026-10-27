@@ -23,10 +23,7 @@
 .planner .pl-fine { color: var(--muted); font-size: 0.74rem; line-height: 1.6; }
 .pl-gold { color: var(--gold-bright); }
 .pl-teal { color: var(--pl-teal); }
-.pl-page-heading, .pl-section-heading, .pl-weapon-head, .pl-editor-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.pl-page-heading { align-items: flex-end; margin: 0 0 24px; }
-.pl-page-heading .step { margin-bottom: 8px; }
-.pl-storage { color: var(--pl-teal); font-size: 0.74rem; padding-top: 14px; max-width: 240px; text-align: right; }
+.pl-section-heading, .pl-weapon-head, .pl-editor-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .pl-state-strip { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; padding: 10px 14px; background: #22241e; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); font-size: 0.78rem; }
 .pl-state-strip code { color: #ebe4ce; font-size: 0.78rem; overflow-wrap: anywhere; }
 .pl-state-strip button { margin-left: auto; }
@@ -62,7 +59,6 @@
 .pl-sort-menu button { min-height: 0; padding: 6px 10px; text-align: left; color: #ebe4ce; background: none; border: 0; border-radius: 5px; font: inherit; font-size: 0.78rem; cursor: pointer; }
 .pl-sort-menu button:hover, .pl-sort-menu button:focus-visible { background: var(--chip-bg); }
 .pl-state-strip .pl-transfer button { margin-left: 0; }
-.pl-section { margin-top: 28px; }
 .pl-section-heading { margin-bottom: 12px; }
 .pl-index { color: var(--gold); margin-right: 7px; font-weight: 400; }
 .pl-weapon-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
@@ -112,10 +108,9 @@
 .pl-status-values { padding-top: 15px; }
 .pl-status-values label { display: inline-grid; grid-template-columns: 25px 100px; margin: 10px 16px 0 0; align-items: center; }
 .pl-editor-footer { justify-content: flex-start; margin-top: 20px; }
-.pl-limits { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px; padding: 17px 18px; margin-top: 24px; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; }
-.pl-limit-copy { flex: 1; min-width: 250px; padding-bottom: 3px; }
-.pl-limits label { width: 112px; }
-.pl-feedback { margin-top: 10px; }
+.pl-limit-fields { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px; }
+.pl-limit-fields label { width: 112px; }
+.pl-feedback { margin-top: 14px; }
 .pl-feedback .pl-fine { margin-top: 4px; }
 .pl-feedback .error { margin: 10px 0; }
 .pl-legend { display: flex; gap: 14px; align-items: center; font-size: 0.74rem; }
@@ -238,15 +233,12 @@ button.pl-expected-roll:hover { background: #d6b35c10; }
   .pl-five-slots { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 600px) {
-  .pl-page-heading { flex-direction: column; gap: 6px; }
-  .pl-storage { text-align: left; max-width: none; padding: 0; }
   .pl-section-heading { gap: 10px; align-items: flex-start; }
   .pl-section-heading > .pl-legend { flex-direction: column; align-items: flex-start; gap: 3px; }
   .pl-weapon-grid { grid-template-columns: 1fr; }
-  .pl-limits { gap: 12px; padding: 15px; }
-  .pl-limit-copy { flex: 1 1 100%; min-width: 0; }
-  .pl-limits label { flex: 1 1 40%; width: auto; }
-  .pl-limits .primary { flex: 1 1 100%; }
+  .pl-limit-fields { gap: 12px; }
+  .pl-limit-fields label { flex: 1 1 40%; width: auto; }
+  .pl-limit-fields .primary { flex: 1 1 100%; }
   .pl-routes { grid-template-columns: minmax(0, 1fr); }
   .pl-state-strip { gap: 6px 12px; }
   .pl-state-strip code { width: 100%; }
@@ -278,3 +270,5 @@ button.pl-expected-roll:hover { background: #d6b35c10; }
 #pl-weapons > .pl-group > .pl-group-heading { padding-bottom: 6px; border-bottom: 1px solid var(--line); font-size: 1rem; }
 .pl-weapon-bars { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 0 0 12px; }
 .pl-weapon-bars .pl-group-bar { margin: 0; }
+.pl-limit-fields label, .pl-add-form label { display: grid; gap: 8px; color: #d6d3c5; font-size: 0.83rem; font-weight: 700; }
+.pl-limit-fields .primary, .pl-limit-fields .secondary { min-height: 48px; padding: 0 22px; border-radius: 10px; font-size: 0.9rem; font-weight: 800; }
