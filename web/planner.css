@@ -260,3 +260,14 @@ button.pl-expected-roll:hover { background: #d6b35c10; }
   .pl-goal-table td { padding-right: 6px; }
   .pl-combo { grid-template-columns: minmax(0, 1fr) 8px minmax(0, 1fr) 18px; gap: 3px; }
 }
+.pl-modal { width: min(720px, calc(100% - 24px)); max-height: calc(100vh - 48px); padding: 18px 20px; color: inherit; background: #11130e; border: 1px solid #2c3026; border-left: 3px solid var(--pl-teal); border-radius: 10px; box-shadow: 0 28px 70px rgba(0, 0, 0, 0.6); }
+.pl-modal::backdrop { background: rgba(8, 9, 7, 0.72); }
+.pl-modal[open] { display: flex; flex-direction: column; }
+.pl-modal .pl-finishes-heading { flex: none; }
+.pl-modal .pl-finish-list { max-height: none; min-height: 0; overflow-y: auto; }
+.pl-goal-edit { display: grid; gap: 8px; margin: 4px 0 10px; padding-bottom: 10px; border-bottom: 1px solid #2c3026; }
+.pl-goal-edit .pl-sort { margin-top: 0; }
+.pl-goal-tier { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.74rem; }
+.pl-goal-bounds { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #1b1d18; }
+.pl-goal-bounds label { width: 96px; }
+.pl-goal-bounds input { height: 36px; }

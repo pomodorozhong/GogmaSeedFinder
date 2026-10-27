@@ -62,6 +62,13 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   // Other finishes for one weapon, tied to the route object they were found for.
   let finishList = null;
   let sortMenuOpen = false;
+  // Goal chips in the finishes modal: a tier's "+ Goal" menu, the stat being
+  // edited (not stored until applied), and the finish list to reopen once a
+  // goal change has rebuilt the route.
+  let goalMenu = null;
+  let goalEdit = null;
+  let goalError = "";
+  let reopenFinishes = null;
   const nameOf = (target) => target.label || localizedTargetName(weapons.find(([id]) => id === target.weaponType)?.[1] ?? "", attributes.find(([id]) => id === target.attributeForce)?.[1] ?? "");
   const prepared = () => getTargets().filter((target) => cache.selected.includes(target.id)).map((target) => ({ ...target, planner: normalizedPlanner(target) }));
   const signature = () => JSON.stringify(prepared().map((target) => ({ id: target.id, label: target.label, weaponType: target.weaponType, attributeForce: target.attributeForce, planner: { optional: target.planner.optional, bonusEnabled: target.planner.bonusEnabled, skillEnabled: target.planner.skillEnabled, acceptable: target.planner.acceptable, preferred: target.planner.preferred, elementValues: target.planner.elementValues } })));
@@ -108,7 +115,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     <div class="pl-feedback"><p id="pl-status" class="pl-muted" role="status">${html("Ready to plan.")}</p><p id="pl-error" class="error" role="alert" hidden></p><p class="pl-fine">${html("No roll data is changed until you confirm a step as done and saved in game.")}</p></div>
     <section id="pl-results" class="pl-section" hidden><div class="pl-section-heading"><h3><span class="pl-index">03</span> ${html("Choose your route")}</h3><div class="pl-legend"><span class="pl-gold">★ ${html("Top desired")}</span><span class="pl-teal">✓ ${html("Acceptable")}</span></div></div><div id="pl-routes" class="pl-routes"></div><div id="pl-route-note"></div><div id="pl-alternatives" class="pl-alternatives" hidden></div>
       <div id="pl-detail-heading" class="pl-section-heading pl-detail-heading"><div><h3>${html("Detailed route")}</h3><p id="pl-saved-count" class="pl-muted"></p></div></div><div id="pl-route-complete" class="pl-complete" hidden></div><div id="pl-workspace" class="pl-workspace"><aside id="pl-guide" class="pl-guide" aria-label="${html("Current step")}"></aside><div id="pl-rows" class="pl-table-area"></div></div>
-    </section><p class="pl-fine pl-engine-note">${html("Planning uses the existing game RNG engine. Element deltas vary by weapon; status deltas can be entered in the weapon editor.")}</p>`;
+    </section><p class="pl-fine pl-engine-note">${html("Planning uses the existing game RNG engine. Element deltas vary by weapon; status deltas can be entered in the weapon editor.")}</p><dialog id="pl-finishes-modal" class="pl-modal" aria-labelledby="pl-finishes-title"></dialog>`;
   const q = (selector) => root.querySelector(selector);
   const setError = (message = "") => { q("#pl-error").textContent = message; q("#pl-error").hidden = !message; };
   const setStatus = (text) => { q("#pl-status").textContent = text; };
@@ -273,7 +280,8 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       : pl("A skill target is within S1–S{n}. Each weapon upgraded to Gogma uses one skill roll, so upgrading this route's {n} weapons can take it. Do skill targets in that range before upgrading.", { n: weapons });
     return `<p class="pl-route-note is-warning">${esc(text)}</p>`;
   }
-  function renderResults() {
+  function renderResults() { renderRoutes(); renderFinishModal(); }
+  function renderRoutes() {
     const modes = ["acceptable", "preferred"];
     const hasRoutes = modes.some((mode) => cache.routes[mode]);
     q("#pl-results").hidden = !hasRoutes;
@@ -363,9 +371,17 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   // roll count, until a step in that stream is saved.
   const canChooseFinish = (r, step) => step.intent === "finish" && r.complete && !worker && compatible() && cache.completed[step.stream] === 0;
   function finishMarkup(r, step, target) {
-    const list = finishList?.route === r && finishList.stream === step.stream && finishList.targetId === step.targetId ? finishList : null;
-    if (!list) return canChooseFinish(r, step) ? `<button type="button" class="text-button pl-finish-toggle" data-pl-action="finishes">${html("Other finishes")}</button>` : "";
-    if (list.loading) return `<p class="pl-fine">${html("Checking other finishes for {name}…", { name: nameOf(target) })}</p>`;
+    return canChooseFinish(r, step) ? `<button type="button" class="text-button pl-finish-toggle" data-pl-action="finishes">${html("Other finishes")}</button>` : "";
+  }
+  // The list opens in a modal over the page, with the weapon's stat goals as
+  // chips above the sort chips. Changing a goal rebuilds the route.
+  function finishModalMarkup() {
+    const list = finishList;
+    const r = route();
+    const target = r?.targets.find((v) => v.id === list.targetId) ?? getTargets().find((v) => v.id === list.targetId);
+    const head = (close) => `<div class="pl-finishes-heading"><h4 id="pl-finishes-title">${html("Other finishes")} · ${esc(nameOf(target))}</h4>${close}</div>`;
+    if (list.loading) return `${head(`<button type="button" class="text-button" data-pl-action="${list.recalculating ? "cancel" : "close-finishes"}">${html(list.recalculating ? "Cancel" : "Close")}</button>`)}<p class="pl-fine">${list.recalculating ? html("Recalculating the route for the new goal…") : html("Checking other finishes for {name}…", { name: nameOf(target) })}</p>`;
+    const step = r.steps.find((v) => v.targetId === list.targetId && v.stream === list.stream && v.intent === "finish");
     const prefix = step.stream === "bonus" ? "G" : "S";
     const keys = sortKeys(step.stream, target);
     const levels = finishSortFor(step.stream, target).filter((level) => keys.includes(level.key));
@@ -392,7 +408,74 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const others = list.options.filter((option) => option.fits && !option.current).length;
     const collisions = list.options.filter((option) => !option.fits).length;
     const summary = [others ? pl("{n} other finishes keep the route at {rolls} rolls.", { n: others, rolls: r[step.stream].horizon }) : pl("No other finish fits without extra rolls."), collisions ? pl("{n} more collide with the current route and need a full recalculation.", { n: collisions }) : ""].filter(Boolean).join(" ");
-    return `<section class="pl-finishes"><div class="pl-finishes-heading"><h4>${html("Other finishes")}</h4><button type="button" class="text-button" data-pl-action="close-finishes">${html("Close")}</button></div><p class="pl-fine">${esc(summary)}${list.unchecked ? ` ${esc(pl("{n} finishes were not checked: search limit reached.", { n: list.unchecked }))}` : ""}</p>${sorter}<div class="pl-finish-list">${items}</div></section>`;
+    return `${head(`<button type="button" class="text-button" data-pl-action="close-finishes">${html("Close")}</button>`)}${goalMarkup(r, step, target)}<p class="pl-fine">${esc(summary)}${list.unchecked ? ` ${esc(pl("{n} finishes were not checked: search limit reached.", { n: list.unchecked }))}` : ""}</p>${sorter}<div class="pl-finish-list">${items}</div>`;
+  }
+  // Goal chips: one row per tier. A chip shows a stat's min/max; clicking it
+  // opens its bounds, and "+ Goal" adds a stat. Bonus goals only, and only
+  // before any step is saved, since a goal change rebuilds the route.
+  const goalRange = (key, tier) => {
+    const min = tier.stats[key]; const max = tier.maxStats[key]; const unit = key === "affinity" ? "%" : "";
+    return min !== undefined && max !== undefined ? `${min}–${max}${unit}` : max !== undefined ? `≤ ${max}${unit}` : `≥ ${min}${unit}`;
+  };
+  function goalMarkup(r, step, target) {
+    if (step.stream !== "bonus") return "";
+    if (totalDone() > 0) return `<p class="pl-fine">${html("Goals can't change after a step is saved. Build new guides from your saved position instead.")}</p>`;
+    const planner = normalizedPlanner(getTargets().find((v) => v.id === target.id) ?? target);
+    const rows = ["preferred", "acceptable"].map((name) => {
+      const tier = planner[name];
+      const keys = availableStats(target);
+      const set = keys.filter((key) => key in tier.stats || key in tier.maxStats);
+      const unused = keys.filter((key) => !set.includes(key));
+      const chip = (key) => `<span class="pl-sort-chip"><button type="button" data-pl-action="goal-edit" data-tier="${name}" data-key="${key}" aria-label="${html("Goal {name}: {range}. Click to edit.", { name: statName(key, target), range: goalRange(key, tier) })}">${esc(statName(key, target))} ${esc(goalRange(key, tier))}</button><button type="button" class="pl-sort-remove" data-pl-action="goal-remove" data-tier="${name}" data-key="${key}" aria-label="${html("Remove goal {name}", { name: statName(key, target) })}">×</button></span>`;
+      const open = goalMenu === name && unused.length;
+      const menu = open ? `<div class="pl-sort-menu" role="menu">${unused.map((key) => `<button type="button" role="menuitem" data-pl-action="goal-add" data-tier="${name}" data-key="${key}">${esc(statName(key, target))}</button>`).join("")}</div>` : "";
+      const editor = goalEdit?.tier === name ? `<form class="pl-goal-bounds" data-pl-goal-form data-tier="${name}" data-key="${goalEdit.key}"><strong>${esc(statName(goalEdit.key, target))}</strong><label>${html("Min")}<input name="min" type="number" min="0" step="1" value="${tier.stats[goalEdit.key] ?? ""}"></label><label>${html("Max")}<input name="max" type="number" min="0" step="1" value="${tier.maxStats[goalEdit.key] ?? ""}"></label><button type="submit" class="primary">${html("Apply")}</button><button type="button" class="text-button" data-pl-action="goal-cancel">${html("Cancel")}</button></form>` : "";
+      return `<div class="pl-sort"><span class="pl-goal-tier">${html(name === "preferred" ? "Top desired" : "Acceptable")}</span><div class="pl-sort-row">${set.map(chip).join("")}${unused.length ? `<button type="button" class="pl-sort-add" data-pl-action="goal-menu" data-tier="${name}" aria-haspopup="menu" aria-expanded="${Boolean(open)}">＋ ${html("Goal")}</button>` : ""}</div>${menu}${editor}</div>`;
+    }).join("");
+    return `<div class="pl-goal-edit"><span class="pl-sort-label">${html("Goal")}</span>${rows}<p class="pl-fine">${html("Changing a goal recalculates the whole route.")}</p>${goalError ? `<p class="error" role="alert">${esc(goalError)}</p>` : ""}</div>`;
+  }
+  // Stores one stat's bounds (null removes it), then rebuilds the route and
+  // comes back to this weapon's finishes.
+  function changeGoal(tierName, key, min, max) {
+    const raw = getTargets().find((v) => v.id === finishList?.targetId);
+    if (!raw || totalDone() > 0 || worker) return;
+    const target = { ...raw, planner: normalizedPlanner(raw) };
+    const tier = target.planner[tierName];
+    delete tier.stats[key]; delete tier.maxStats[key];
+    if (min !== null) tier.stats[key] = min;
+    if (max !== null) tier.maxStats[key] = max;
+    try {
+      if (min !== null) { const limit = statusStat(key, target) ? 9999 : statMaximum(key, target); if (limit !== null && min > limit) throw new Error(pl("{stat} can gain at most +{max} from five slots.", { stat: statName(key, target), max: `${limit}${key === "affinity" ? "%" : ""}` })); }
+      validatePlannerRequest({ origin: { baseSeed: 0, bonusCounter: 0, skillCounter: 0 }, targets: [target], limits: { bonus: 0, skill: 0 } });
+    } catch (error) {
+      goalError = ["goals", "statusValues", "excluded", "minAboveMax", "targets", "limits", "state"].includes(error.message) ? errorText(error.message) : error.message;
+      renderFinishModal(); return;
+    }
+    goalError = ""; goalEdit = null; goalMenu = null;
+    setTargets(getTargets().map((v) => v.id === target.id ? target : v));
+    reopenFinishes = { stream: finishList.stream, targetId: target.id };
+    finishList = { loading: true, recalculating: true, stream: finishList.stream, targetId: target.id };
+    renderWeapons(); invalidate();
+    q("#pl-limits").requestSubmit();
+  }
+  // After a goal rebuild, lists the new route's finishes for the same weapon.
+  function reopenAfterBuild() {
+    const wanted = reopenFinishes; reopenFinishes = null;
+    const r = route();
+    const index = r?.steps.findIndex((step) => step.targetId === wanted.targetId && step.stream === wanted.stream && step.intent === "finish") ?? -1;
+    inspected = index;
+    if (index >= 0 && canChooseFinish(r, r.steps[index])) showFinishes();
+    else { finishList = null; renderResults(); }
+  }
+  function renderFinishModal() {
+    const dialog = q("#pl-finishes-modal");
+    if (finishList?.route && finishList.route !== route()) finishList = null;
+    if (!finishList) { if (dialog.open) dialog.close(); dialog.replaceChildren(); goalMenu = null; goalEdit = null; goalError = ""; return; }
+    const scroll = q(".pl-finish-list")?.scrollTop ?? 0;
+    dialog.innerHTML = finishModalMarkup();
+    if (!dialog.open) dialog.showModal();
+    const list = q(".pl-finish-list"); if (list) list.scrollTop = scroll;
+    placeSortMenu();
   }
   const finishSortFor = (stream, target) => cache.finishSort[`${stream}:${target.id}`] ?? goalFinishSort(target, stream);
   const sortKeys = (stream, target) => stream === "bonus" ? FINISH_SORT_KEYS.filter((key) => !["top", "direct", "finish"].includes(key) ? availableStats(target).includes(key) : true) : ["top", "finish"];
@@ -412,7 +495,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     else if (JSON.stringify(levels) !== before) cache.finishSort[key] = levels;
     const scrollTop = q(".pl-finish-list")?.scrollTop ?? 0;
     const scrollLeft = q(".pl-sort-row")?.scrollLeft ?? 0;
-    persist(); renderGuide();
+    persist(); renderGuide(); renderFinishModal();
     const list = q(".pl-finish-list"); if (list) list.scrollTop = scrollTop;
     const row = q(".pl-sort-row"); if (row) row.scrollLeft = toEnd ? row.scrollWidth : scrollLeft;
     placeSortMenu();
@@ -496,7 +579,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     if (editing) { q("#pl-goal-form").requestSubmit(); if (editing) return; }
     cache.limits = { bonus: Number(q('#pl-limits [name="bonus"]').value), skill: Number(q('#pl-limits [name="skill"]').value) };
     const request = { origin: getState(), targets: prepared(), limits: { ...cache.limits } };
-    try { validatePlannerRequest(request); } catch (error) { setError(errorText(error.message)); return; }
+    try { validatePlannerRequest(request); } catch (error) { setError(errorText(error.message)); if (reopenFinishes) { reopenFinishes = null; finishList = null; renderResults(); } return; }
     stopWorker();
     cache.routes = {}; cache.completed = { bonus: 0, skill: 0 }; cache.matches = {}; cache.mode = "acceptable"; inspected = 0; stale = false; cache.signature = signature();
     persist(); renderResults();
@@ -514,11 +597,12 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
         else if (data.phase === "route") { cache.routes[data.mode] = data.route; persist(); renderResults(); }
       } else if (data.type === "done") {
         cache.routes = data.routes; stopWorker(); persist(); renderResults(); setStatus(pl("Guides ready. Choose a route below."));
+        if (reopenFinishes) reopenAfterBuild();
       } else if (data.type === "error") {
-        stopWorker(); setError(errorText(data.message)); renderResults();
+        stopWorker(); reopenFinishes = null; finishList = null; setError(errorText(data.message)); renderResults();
       }
     };
-    worker.onerror = (error) => { if (worker !== searchWorker) return; stopWorker(); setError(pl("Unable to calculate the guide. {detail}", { detail: error.message })); renderResults(); };
+    worker.onerror = (error) => { if (worker !== searchWorker) return; stopWorker(); reopenFinishes = null; finishList = null; setError(pl("Unable to calculate the guide. {detail}", { detail: error.message })); renderResults(); };
     worker.postMessage({ request });
   }
   function exportPlan() {
@@ -571,7 +655,11 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     if (action === "state") openState();
     else if (action === "export") exportPlan();
     else if (action === "finishes") showFinishes();
-    else if (action === "close-finishes") { finishList = null; renderGuide(); }
+    else if (action === "close-finishes") { if (finishList?.loading) stopWorker(); finishList = null; renderResults(); }
+    else if (action === "goal-menu") { goalMenu = goalMenu === button.dataset.tier ? null : button.dataset.tier; goalEdit = null; renderFinishModal(); q(".pl-sort-menu button")?.focus(); }
+    else if (action === "goal-add" || action === "goal-edit") { goalEdit = { tier: button.dataset.tier, key: button.dataset.key }; goalMenu = null; goalError = ""; renderFinishModal(); q("[data-pl-goal-form] input")?.focus(); }
+    else if (action === "goal-remove") changeGoal(button.dataset.tier, button.dataset.key, null, null);
+    else if (action === "goal-cancel") { goalEdit = null; goalError = ""; renderFinishModal(); }
     else if (action === "sort-menu") { sortMenuOpen = !sortMenuOpen; updateFinishSort(() => {}); q(".pl-sort-menu button")?.focus(); }
     else if (action === "sort-pick") {
       sortMenuOpen = false;
@@ -588,6 +676,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     else if (action === "sort-flip") updateFinishSort((levels) => { const level = levels[Number(button.dataset.index)]; level.dir = level.dir === "desc" ? "asc" : "desc"; });
     else if (action === "sort-remove") updateFinishSort((levels) => levels.splice(Number(button.dataset.index), 1));
     else if (sortMenuOpen && !event.target.closest(".pl-sort-menu")) { sortMenuOpen = false; updateFinishSort(() => {}); }
+    else if (goalMenu && !event.target.closest(".pl-sort-menu")) { goalMenu = null; renderFinishModal(); }
     else if (action === "import") q("#pl-import-file").click();
     else if (action === "add") openAddForm();
     else if (action === "cancel-add") q("#pl-add-form").hidden = true;
@@ -603,7 +692,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       invalidate(); renderWeapons();
     } else if (action === "add-pair") q(`[data-pairs="${button.dataset.tier}"]`).insertAdjacentHTML("beforeend", comboRow());
     else if (action === "remove-pair") button.closest(".pl-combo").remove();
-    else if (action === "cancel") { stopWorker(); if (finishList?.loading) finishList = null; persist(); renderResults(); setStatus(pl("Search cancelled. Any completed route remains available.")); }
+    else if (action === "cancel") { stopWorker(); reopenFinishes = null; if (finishList?.loading) finishList = null; persist(); renderResults(); setStatus(pl("Search cancelled. Any completed route remains available.")); }
     else if (action === "done") markDone();
     else if (action === "current") { inspected = nextCurrent(route(), route().steps[inspected]?.stream); renderResults(); q(`#pl-rows [data-pl-step="${inspected}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
     const pin = event.target.closest("[data-pl-pin]");
@@ -623,7 +712,21 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const row = event.target.closest("[data-pl-step]");
     if (row && !event.target.closest("input")) { inspected = Number(row.dataset.plStep); renderResults(); }
   });
+  root.addEventListener("submit", (event) => {
+    const form = event.target.closest("[data-pl-goal-form]");
+    if (!form) return;
+    event.preventDefault();
+    const bound = (name) => form.elements[name].value === "" ? null : Number(form.elements[name].value);
+    changeGoal(form.dataset.tier, form.dataset.key, bound("min"), bound("max"));
+  });
+  const finishesDialog = q("#pl-finishes-modal");
+  // Escape or a backdrop click closes the modal like Close does; an open menu
+  // takes the first Escape.
+  finishesDialog.addEventListener("cancel", (event) => { if (goalMenu || sortMenuOpen) event.preventDefault(); });
+  finishesDialog.addEventListener("close", () => { if (!finishesDialog.open && finishList && !finishList.recalculating) { if (finishList.loading) stopWorker(); finishList = null; renderResults(); } });
+  finishesDialog.addEventListener("mousedown", (event) => { if (event.target === finishesDialog) finishesDialog.close(); });
   root.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && goalMenu) { event.preventDefault(); goalMenu = null; renderFinishModal(); return; }
     if (event.key === "Escape" && sortMenuOpen) { sortMenuOpen = false; updateFinishSort(() => {}); q(".pl-sort-add")?.focus(); return; }
     if (event.target.matches("[data-pl-step]") && ["Enter", " "].includes(event.key)) { event.preventDefault(); inspected = Number(event.target.dataset.plStep); renderResults(); }
   });
