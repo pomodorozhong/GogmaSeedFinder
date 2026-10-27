@@ -21,6 +21,7 @@ function restoredCache(stored, targets) {
     completed: stored?.completed,
     matches: stored?.matches && typeof stored.matches === "object" ? stored.matches : {},
     signature: typeof stored?.signature === "string" ? stored.signature : "",
+    weaponSort: ["newTop", "newBottom"].includes(stored?.weaponSort) ? stored.weaponSort : "",
     weaponGroups: Array.isArray(stored?.weaponGroups) ? [...new Set(stored.weaponGroups)].filter((key) => ["type", "element", "selected"].includes(key)) : [],
     // Custom finish sorts by "stream:weapon id"; others follow the weapon's goal.
     finishSort: Object.fromEntries(Object.entries(stored?.finishSort && typeof stored.finishSort === "object" ? stored.finishSort : {})
@@ -64,6 +65,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   let finishList = null;
   let sortMenuOpen = false;
   let groupMenuOpen = false;
+  let weaponSortMenuOpen = false;
   // Goal chips in the finishes modal: a tier's "+ Goal" menu, the stat being
   // edited (not stored until applied), and the finish list to reopen once a
   // goal change has rebuilt the route.
@@ -111,7 +113,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     <div class="pl-state-strip"><span>${html("Saved position")}</span><code id="pl-position"></code><button class="text-button" type="button" data-pl-action="state">${html("Set current state")}</button><span class="pl-transfer"><button class="text-button" type="button" data-pl-action="export">${html("Export plan")}</button><button class="text-button" type="button" data-pl-action="import">${html("Import plan")}</button><input id="pl-import-file" type="file" accept=".json,application/json" hidden></span></div>
     <section class="pl-section" aria-labelledby="pl-weapons-title"><div class="pl-section-heading"><div><h3 id="pl-weapons-title"><span class="pl-index">01</span> ${html("Your weapons")}</h3><p class="pl-muted">${html("Select up to {max} weapons. Each copy is planned separately.", { max: MAX_SELECTED })}</p></div><button class="secondary small-button" type="button" data-pl-action="add">＋ ${html("Add weapon")}</button></div>
       <form id="pl-add-form" class="pl-add-form" hidden><label>${html("Weapon name")}<input name="label" maxlength="24" placeholder="${html("Optional name")}"></label><label>${html("Weapon type")}<select name="weaponType">${options(weapons, 3)}</select></label><label>${html("Element / status")}<select name="attributeForce">${options(attributes, 1)}</select></label><label>${html("Copy goals from")}<select name="copyFrom"></select></label><button class="secondary small-button" type="submit">${html("Add weapon")}</button><button class="text-button" type="button" data-pl-action="cancel-add">${html("Cancel")}</button></form>
-      <div id="pl-group" class="pl-sort pl-group-bar"></div><div id="pl-weapons" class="pl-weapon-grid"></div><dialog id="pl-editor" class="pl-modal pl-modal-wide" aria-label="${html("Edit weapon goals")}"></dialog>
+      <div class="pl-weapon-bars"><div id="pl-group" class="pl-sort pl-group-bar"></div><div id="pl-weapon-sort" class="pl-sort pl-group-bar"></div></div><div id="pl-weapons" class="pl-weapon-grid"></div><dialog id="pl-editor" class="pl-modal pl-modal-wide" aria-label="${html("Edit weapon goals")}"></dialog>
     </section>
     <form id="pl-limits" class="pl-limits"><div class="pl-limit-copy"><h3><span class="pl-index">02</span> ${html("Search limits")}</h3><p class="pl-muted">${html("Two independent roll windows from your saved position.")}</p></div><label>${html("Bonus rolls")}<input name="bonus" type="number" min="0" max="10000" step="1" value="${esc(cache.limits.bonus)}" required></label><label>${html("Skill rolls")}<input name="skill" type="number" min="0" max="10000" step="1" value="${esc(cache.limits.skill)}" required></label><button id="pl-build" class="primary" type="submit">${html("Build guides")}</button><button id="pl-cancel" class="secondary" type="button" data-pl-action="cancel" hidden>${html("Cancel search")}</button></form>
     <div class="pl-feedback"><p id="pl-status" class="pl-muted" role="status">${html("Ready to plan.")}</p><p id="pl-error" class="error" role="alert" hidden></p><p class="pl-fine">${html("No roll data is changed until you confirm a step as done and saved in game.")}</p></div>
@@ -165,12 +167,22 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const menu = groupMenuOpen && unused.length ? `<div class="pl-sort-menu" role="menu">${unused.map((key) => `<button type="button" role="menuitem" data-pl-action="group-pick" data-key="${key}">${esc(groupName(key))}</button>`).join("")}</div>` : "";
     q("#pl-group").innerHTML = `<span class="pl-sort-label">${html("Group")}</span><div class="pl-sort-row">${levels.map(chip).join("")}${unused.length ? `<button type="button" class="pl-sort-add" data-pl-action="group-menu" aria-haspopup="menu" aria-expanded="${groupMenuOpen}">＋ ${html("Group")}</button>` : ""}</div>${menu}`;
   }
+  // Weapons are saved oldest first, so "new on bottom" is the saved order.
+  const SORT_KEYS = ["newTop", "newBottom"];
+  const weaponSortName = (key) => pl(key === "newTop" ? "New on top" : "New on bottom");
+  function renderWeaponSortBar() {
+    const key = cache.weaponSort;
+    const unused = SORT_KEYS.filter((value) => value !== key);
+    const chip = `<span class="pl-sort-chip"><span class="pl-group-name">${esc(weaponSortName(key))}</span><button type="button" class="pl-sort-remove" data-pl-action="wsort-remove" aria-label="${html("Remove sort")}">×</button></span>`;
+    const menu = weaponSortMenuOpen ? `<div class="pl-sort-menu" role="menu">${unused.map((value) => `<button type="button" role="menuitem" data-pl-action="wsort-pick" data-key="${value}">${esc(weaponSortName(value))}</button>`).join("")}</div>` : "";
+    q("#pl-weapon-sort").innerHTML = `<span class="pl-sort-label">${html("Sort")}</span><div class="pl-sort-row">${key ? chip : ""}${key ? "" : `<button type="button" class="pl-sort-add" data-pl-action="wsort-menu" aria-haspopup="menu" aria-expanded="${weaponSortMenuOpen}">＋ ${html("Sort")}</button>`}</div>${key ? "" : menu}`;
+  }
   function renderWeapons() {
-    const list = getTargets();
+    const list = cache.weaponSort === "newTop" ? getTargets().slice().reverse() : getTargets();
     const grouped = list.length > 0 && cache.weaponGroups.length > 0;
     q("#pl-weapons").classList.toggle("pl-weapon-grid", !grouped);
     q("#pl-weapons").innerHTML = !list.length ? `<div class="pl-empty">${html("Add your first weapon to start planning.")}</div>` : grouped ? groupedMarkup(list, cache.weaponGroups) : list.map(weaponCard).join("");
-    renderGroupBar();
+    renderGroupBar(); renderWeaponSortBar();
   }
   // "Any" (empty value) lets one half of a pair match every skill.
   const pairOptions = (labels, selected, anyLabel) => `<option value=""${selected === null ? " selected" : ""}>${html(anyLabel)}</option>${comboOptions(labels, selected)}`;
@@ -701,6 +713,10 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     else if (action === "goal-menu") { goalMenu = goalMenu === button.dataset.tier ? null : button.dataset.tier; goalEdit = null; renderFinishModal(); q(".pl-sort-menu button")?.focus(); }
     else if (action === "goal-add" || action === "goal-edit") { goalEdit = { tier: button.dataset.tier, key: button.dataset.key }; goalMenu = null; goalError = ""; renderFinishModal(); q("[data-pl-goal-form] input")?.focus(); }
     else if (action === "goal-remove") changeGoal(button.dataset.tier, button.dataset.key, null, null);
+    else if (action === "wsort-menu") { weaponSortMenuOpen = !weaponSortMenuOpen; renderWeaponSortBar(); q("#pl-weapon-sort .pl-sort-menu button")?.focus(); }
+    else if (action === "wsort-pick") { weaponSortMenuOpen = false; cache.weaponSort = button.dataset.key; persist(); renderWeapons(); q("#pl-weapon-sort .pl-sort-remove")?.focus(); }
+    else if (action === "wsort-remove") { cache.weaponSort = ""; persist(); renderWeapons(); q("#pl-weapon-sort .pl-sort-add")?.focus(); }
+    else if (weaponSortMenuOpen && !event.target.closest("#pl-weapon-sort .pl-sort-menu")) { weaponSortMenuOpen = false; renderWeaponSortBar(); }
     else if (action === "group-menu") { groupMenuOpen = !groupMenuOpen; renderGroupBar(); q("#pl-group .pl-sort-menu button")?.focus(); }
     else if (action === "group-pick") { groupMenuOpen = false; cache.weaponGroups = [...cache.weaponGroups, button.dataset.key]; persist(); renderWeapons(); q("#pl-group .pl-sort-add")?.focus(); }
     else if (action === "group-remove") { cache.weaponGroups = cache.weaponGroups.filter((_, index) => index !== Number(button.dataset.index)); persist(); renderWeapons(); }
@@ -777,6 +793,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   finishesDialog.addEventListener("mousedown", (event) => { if (outside(finishesDialog, event)) finishesDialog.close(); });
   q("#pl-editor").addEventListener("mousedown", (event) => { if (outside(q("#pl-editor"), event)) q("#pl-editor").close(); });
   root.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && weaponSortMenuOpen) { weaponSortMenuOpen = false; renderWeaponSortBar(); q("#pl-weapon-sort .pl-sort-add")?.focus(); return; }
     if (event.key === "Escape" && groupMenuOpen) { groupMenuOpen = false; renderGroupBar(); q("#pl-group .pl-sort-add")?.focus(); return; }
     if (event.key === "Escape" && goalMenu) { event.preventDefault(); goalMenu = null; renderFinishModal(); return; }
     if (event.key === "Escape" && sortMenuOpen) { sortMenuOpen = false; updateFinishSort(() => {}); q(".pl-sort-add")?.focus(); return; }

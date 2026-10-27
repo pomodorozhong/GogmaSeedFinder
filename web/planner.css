@@ -276,3 +276,5 @@ button.pl-expected-roll:hover { background: #d6b35c10; }
 .pl-group-heading { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px !important; font-size: 0.86rem; font-weight: 600; }
 .pl-group-heading small { color: var(--muted); font-weight: 400; }
 #pl-weapons > .pl-group > .pl-group-heading { padding-bottom: 6px; border-bottom: 1px solid var(--line); font-size: 1rem; }
+.pl-weapon-bars { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 0 0 12px; }
+.pl-weapon-bars .pl-group-bar { margin: 0; }
