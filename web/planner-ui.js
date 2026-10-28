@@ -478,12 +478,20 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     q("#pl-route-complete").textContent = done ? `✓ ${r.dropped?.length ? pl("Route complete. Weapons left out: {names}", { names: shortNames(r) }) : pl(r.steps.length ? "Route complete. All chosen goals are met." : "Your current weapons already meet this route’s goals.")}` : "";
     if (!r.complete || !r.steps.length) return;
     inspected = Math.max(0, Math.min(inspected, r.steps.length - 1));
+    // A weapon is done in a table once its last step there is saved; saved
+    // steps are always a prefix of their table.
+    const doneIn = (stream, id) => {
+      const last = streamSteps(r, stream).findLastIndex((step) => step.targetId === id);
+      return last >= 0 && last < cache.completed[stream];
+    };
     const row = (step, index) => {
       const target = r.targets.find((v) => v.id === step.targetId);
       const saved = isSaved(r, index);
       const current = isCurrent(r, index);
       const prefix = step.stream === "bonus" ? "G" : "S";
-      return `<tr data-pl-step="${index}" tabindex="0" class="${inspected === index ? "is-inspected " : ""}${current ? "is-current " : ""}${saved ? "is-saved" : ""}" aria-label="${esc(`${pl("Step {n} of {total}", { n: index + 1, total: r.steps.length })}: ${nameOf(target)}, ${actionName(step.action)}`)}"><td class="pl-saved-cell">${saved ? `<span class="pl-saved-check" aria-label="${html("Saved")}">✓</span>` : current ? `<input type="checkbox" data-pl-done="${index}" aria-label="${html("Done & saved")}"${!ok || worker ? " disabled" : ""}>` : ""}</td><td><strong class="pl-roll-range">${prefix}${step.start}${step.end !== step.start ? `–${step.end}` : ""}</strong><small>× ${step.rolls.length}</small></td><td><strong class="pl-table-weapon">${esc(nameOf(target))}</strong><span class="pl-table-action">${esc(actionName(step.action))}</span>${badge(step)}</td><td>${resultMarkup(step.rolls.at(-1), step, target)}</td></tr>`;
+      const other = step.stream === "bonus" ? "skill" : "bonus";
+      const otherDone = doneIn(other, step.targetId) ? (other === "bonus" ? pl("Bonus steps done") : pl("Skill steps done")) : "";
+      return `<tr data-pl-step="${index}" tabindex="0" class="${inspected === index ? "is-inspected " : ""}${current ? "is-current " : ""}${saved ? "is-saved" : ""}" aria-label="${esc(`${pl("Step {n} of {total}", { n: index + 1, total: r.steps.length })}: ${nameOf(target)}, ${actionName(step.action)}${otherDone ? `, ${otherDone}` : ""}`)}"><td class="pl-saved-cell">${saved ? `<span class="pl-saved-check" aria-label="${html("Saved")}">✓</span>` : current ? `<input type="checkbox" data-pl-done="${index}" aria-label="${html("Done & saved")}"${!ok || worker ? " disabled" : ""}>` : ""}</td><td><strong class="pl-roll-range">${prefix}${step.start}${step.end !== step.start ? `–${step.end}` : ""}</strong><small>× ${step.rolls.length}</small></td><td><strong class="pl-table-weapon">${esc(nameOf(target))}${otherDone ? ` <span class="pl-other-done" title="${esc(otherDone)}">✓ ${other === "bonus" ? "G" : "S"}</span>` : ""}</strong><span class="pl-table-action">${esc(actionName(step.action))}</span>${badge(step)}</td><td>${resultMarkup(step.rolls.at(-1), step, target)}</td></tr>`;
     };
     // Bonus (G) and skill (S) steps use separate counters, so each gets its own
     // table and its own progress; either can be saved first.

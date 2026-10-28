@@ -243,6 +243,8 @@ export const PLANNER_TEXT = {
   "The skill target is the very next skill roll (S1). Upgrading a weapon to Gogma also uses a skill roll, so do this step before upgrading any weapon, or the upgrade takes the target.": ["スキルの目標は次のスキル抽選（S1）です。武器をゴグマ武器に強化するときもスキル抽選を1回使うため、強化より先にこの手順を行ってください。先に強化すると目標の結果が強化した武器に付きます。", "技能目標就是下一次技能抽選（S1）。將武器強化為巨戟武器也會使用一次技能抽選，請在強化任何武器之前先完成此步驟，否則目標結果會落在強化的武器上。"],
   "A skill target is within S1–S{n}. Each weapon upgraded to Gogma uses one skill roll, so upgrading this route's {n} weapons can take it. Do skill targets in that range before upgrading.": ["S1〜S{n}にスキルの目標があります。武器をゴグマ武器に強化するたびにスキル抽選を1回使うため、このルートの{n}本を強化すると目標が使われる可能性があります。この範囲の目標は強化より先に行ってください。", "S1～S{n}內有技能目標。每把武器強化為巨戟武器都會使用一次技能抽選，強化此路線的{n}把武器可能會用掉目標。請在強化之前先完成此範圍內的技能目標。"],
   "Skill steps": ["スキルの手順", "技能步驟"],
+  "Bonus steps done": ["ボーナスの手順完了", "加成步驟已完成"],
+  "Skill steps done": ["スキルの手順完了", "技能步驟已完成"],
   "Bonus gains": ["上昇値の合計", "累積加成"],
   "Skills": ["スキル", "技能"],
   "Optional: leave out if it cannot fit": ["任意：間に合わなければ除外", "選擇性：排不進時略過"],
