@@ -412,7 +412,7 @@ export function parsePlannerExport(text) {
 // "direct" (no Reset needed first) are yes/no keys where "desc" puts yes
 // first; the earliest roll always breaks the remaining ties.
 export const FINISH_SORT_KEYS = ["top", "direct", ...STAT_KEYS];
-export const DEFAULT_FINISH_SORT = [{ key: "top", dir: "desc" }];
+export const DEFAULT_FINISH_SORT = [];
 
 export function normalizedFinishSort(levels) {
   if (!Array.isArray(levels)) return DEFAULT_FINISH_SORT.map((level) => ({ ...level }));
@@ -480,15 +480,15 @@ export function syncGoalFilters(filters, previous, next) {
   return [...filters.filter((filter) => !changed.has(filter.key)), ...next.filter((filter) => changed.has(filter.key)).map((filter) => ({ ...filter }))];
 }
 
-// A weapon's default finish sort follows its bonus goal: top desired first,
-// then each stat with a minimum (more is better, top-desired tier first),
+// A weapon's default finish sort follows its bonus goal: each stat with a
+// minimum (more is better, top-desired tier first),
 // then each stat with a maximum (less is better). The earliest roll always
 // breaks the remaining ties.
 // A stat a goal excludes (max 0) is ignored rather than sorted.
 export function goalFinishSort(target, stream) {
   if (stream !== "bonus" || !hasGoal(target, "bonus")) return DEFAULT_FINISH_SORT.map((level) => ({ ...level }));
   const tiers = [target.planner.preferred, target.planner.acceptable];
-  const levels = [{ key: "top", dir: "desc" }];
+  const levels = [];
   const add = (key, dir) => { if (!levels.some((level) => level.key === key)) levels.push({ key, dir }); };
   const excluded = (key) => tiers.some((tier) => tier.maxStats?.[key] === 0);
   for (const tier of tiers) for (const key of availableStats(target)) if (tier.stats?.[key] > 0 && !excluded(key)) add(key, "desc");

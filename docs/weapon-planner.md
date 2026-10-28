@@ -244,10 +244,11 @@ The browser lists 50 results at a time with **Show more finishes**. Equal
 results at different rolls or with different required layouts remain separate
 options because their scheduling constraints differ.
 
-The list's default sort follows the weapon's bonus goal: top desired first,
-then each stat with a minimum from high to low (top-desired tier first), then
+The list's default sort follows the weapon's bonus goal: each stat with a
+minimum from high to low (top-desired tier first), then
 each stat with a maximum above 0 from low to high. A stat either goal excludes
-(max 0) is left out; skill lists sort by top desired. Roll position is not a
+(max 0) is left out; skill lists start in roll order. Top desired is not a
+default level, but can be added from the menu. Roll position is not a
 sort option: it always applies last, so finishes that tie on every sort level
 appear in order of their earliest roll. Sort levels show as chips in one row:
 **＋ Sort** opens a menu of the unused fields (any stat, top desired, "No Reset
