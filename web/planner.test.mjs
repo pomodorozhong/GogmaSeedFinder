@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import { initSync, predict_gogma_rolls, predict_gogma_keep_rolls, predict_skill_rolls } from "./pkg/gogma_wasm_search.js";
-import { availableStats, BONUS_CATEGORY, DEFAULT_FINISH_SORT, goalFinishSort, sortFinishOptions, bonusGoalAlwaysMet, bonusTotals, canFillSlots, copiedPlanner, layoutOf, MAX_SELECTED, rangeCanMatch, matchesTier, normalizedFinishSort, normalizedPlanner, normalizedProgress, parsePlannerExport, plannerExport, routePosition, streamSteps, resultQuality, routeWeaponsMatch, skillGoalMatches, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
-import { finishOptions, optimizeStream, pinFinish, planWeapons, recalcWithFinish, selectTargets } from "./planner-engine.js";
+import { availableStats, BONUS_CATEGORY, DEFAULT_FINISH_SORT, finishOptionMatches, goalFinishSort, sortFinishOptions, bonusGoalAlwaysMet, bonusTotals, canFillSlots, copiedPlanner, layoutOf, MAX_SELECTED, migrateSavedFinishes, rangeCanMatch, matchesTier, normalizedFinishSort, normalizedPlanner, normalizedProgress, parsePlannerExport, plannerExport, routePosition, savedFinishChoice, savedFinishFromOption, savedFinishId, streamSteps, resultQuality, routeWeaponsMatch, skillGoalMatches, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { collectFinishOptions, finishOptions, optimizeStream, pinFinish, planWeapons, recalcWithFinish, selectTargets } from "./planner-engine.js";
 
 initSync({ module: await readFile(new URL("./pkg/gogma_wasm_search_bg.wasm", import.meta.url)) });
 const target = (id, weaponType = 3, attributeForce = 1) => {
@@ -951,6 +951,181 @@ test("changing another weapon's goal preserves a compatible manual finish", asyn
   assert.equal(`${finish.action}:${finish.finish}:${finish.layout?.join("") ?? ""}`, selected.key);
   assert.deepEqual(replanned.acceptable.pins.bonus, { b: selected.key });
   assert.deepEqual(replanned.acceptable.released, []);
+});
+
+const easyWeapon = (id) => {
+  const weapon = target(id);
+  weapon.planner.skillEnabled = false;
+  for (const mode of ["acceptable", "preferred"]) weapon.planner[mode] = { stats: { attack: 6 }, maxStats: {}, skills: [] };
+  return weapon;
+};
+const saveOptions = (weapon, stream, options, origin) => {
+  weapon.planner.savedFinishes ??= { bonus: [], skill: [] };
+  weapon.planner.savedFinishes[stream] = options.map((option) => savedFinishFromOption(weapon, stream, option, origin));
+  assert.ok(weapon.planner.savedFinishes[stream].every(Boolean));
+};
+const keyOf = (choice) => `${choice.action}:${choice.finish}:${choice.layout?.join("") ?? ""}`;
+
+test("saved collections survive normalization, export, and goal copying without sharing another weapon's picks", async () => {
+  const weapon = easyWeapon("a");
+  const req = request([weapon], 12, 0);
+  const options = (await collectFinishOptions(req, "bonus", weapon.id, provider(req))).options.filter((option) => option.action === "reset").slice(0, 2);
+  assert.equal(options.length, 2);
+  saveOptions(weapon, "bonus", options, req.origin);
+  const saved = structuredClone(weapon.planner.savedFinishes);
+  weapon.planner.savedFinishes.bonus.push(saved.bonus[0], { ...saved.bonus[0], baseSeed: -1 }, { ...saved.bonus[0], raw: [99] });
+  weapon.planner = normalizedPlanner(weapon);
+  assert.deepEqual(weapon.planner.savedFinishes, saved);
+  const exported = plannerExport(req.origin, [weapon], { routes: {}, selected: [weapon.id] });
+  assert.deepEqual(normalizedPlanner(parsePlannerExport(JSON.stringify(exported)).targets[0]).savedFinishes, saved);
+  const other = easyWeapon("b");
+  assert.deepEqual(copiedPlanner(weapon, other).savedFinishes, undefined);
+  saveOptions(other, "bonus", [options[1]], req.origin);
+  assert.deepEqual(copiedPlanner(weapon, other).savedFinishes, other.planner.savedFinishes);
+  const changed = { ...weapon, weaponType: 11, attributeForce: 0 };
+  assert.deepEqual(normalizedPlanner(changed).savedFinishes, saved, "even obsolete options remain stored for review");
+});
+
+test("rerouting chooses among saved alternatives and keeps them when editing goals or adding weapons", async () => {
+  const a = easyWeapon("a"); const b = easyWeapon("b");
+  const req = request([a, b], 16, 0);
+  const options = (await collectFinishOptions(req, "bonus", a.id, provider(req))).options.filter((option) => option.action === "reset");
+  const picks = [options[0], options.at(-1)];
+  for (const weapon of [a, b]) saveOptions(weapon, "bonus", picks, req.origin);
+  const saved = JSON.stringify(req.targets);
+  const first = (await planWeapons(req, provider(req))).acceptable;
+  assert.ok(first.complete);
+  assert.equal(new Set(first.bonus.choices.map((choice) => choice.finish)).size, 2, "the same two picks are alternatives, not two mandatory events");
+  for (const choice of first.bonus.choices) assert.ok(picks.some((pick) => pick.key === keyOf(choice)));
+  assert.equal(first.bonus.horizon, picks[1].finish);
+  assert.equal(JSON.stringify(req.targets), saved, "planning does not mutate the collection");
+  req.targets.push(easyWeapon("automatic"));
+  b.planner.acceptable.stats = { attack: 0 };
+  const rebuilt = (await planWeapons(req, provider(req))).acceptable;
+  assert.ok(rebuilt.complete);
+  assert.equal(rebuilt.bonus.choices.length, 3);
+  assert.ok(rebuilt.bonus.choices.find((choice) => choice.id === "automatic").finish > 0);
+  for (const id of ["a", "b"]) assert.ok(picks.some((pick) => pick.key === keyOf(rebuilt.bonus.choices.find((choice) => choice.id === id))));
+  assert.deepEqual(rebuilt.savedConflicts, []);
+  assert.deepEqual(a.planner.savedFinishes.bonus.map(savedFinishId), b.planner.savedFinishes.bonus.map(savedFinishId));
+});
+
+test("incompatible saved sets report a conflict instead of silently falling back or deleting picks", async () => {
+  const weapon = easyWeapon("a"); const req = request([weapon], 12, 0);
+  const option = (await collectFinishOptions(req, "bonus", weapon.id, provider(req))).options.find((value) => value.action === "reset");
+  saveOptions(weapon, "bonus", [option], req.origin);
+  const original = structuredClone(weapon.planner.savedFinishes);
+  const topOnly = structuredClone(req);
+  topOnly.targets[0].planner.preferred.stats = { attack: 48 };
+  const tiered = await planWeapons(topOnly, provider(topOnly));
+  assert.ok(tiered.acceptable.complete);
+  assert.equal(tiered.preferred.complete, false, "a top-desired route cannot substitute an unsaved result");
+  for (const change of [
+    (changed) => { changed.targets[0].planner.acceptable.stats = { attack: 100 }; changed.targets[0].planner.preferred.stats = { attack: 100 }; },
+    (changed) => { changed.origin.baseSeed += 1; },
+    (changed) => { changed.limits.bonus = option.finish - 1; },
+    (changed) => { changed.origin.bonusCounter += option.finish; },
+    (changed) => { changed.targets[0].planner.savedFinishes.bonus[0].raw = [15, 15, 12, 12, 6]; },
+  ]) {
+    const changed = structuredClone(req); change(changed);
+    const before = structuredClone(changed.targets[0].planner.savedFinishes);
+    const route = (await planWeapons(changed, provider(changed))).acceptable;
+    assert.equal(route.complete, false);
+    assert.deepEqual(route.savedConflicts, [{ id: weapon.id, stream: "bonus" }]);
+    assert.deepEqual(changed.targets[0].planner.savedFinishes, before);
+  }
+  assert.deepEqual(weapon.planner.savedFinishes, original);
+  weapon.planner.savedFinishes.bonus = [];
+  assert.ok((await planWeapons(req, provider(req))).acceptable.complete, "removing the last pick enables automatic results");
+});
+
+test("saved Keep options survive candidate dominance and remain constrained to the ordered layout", async () => {
+  const weapon = easyWeapon("keep"); const req = request([weapon], 20, 0);
+  const options = await collectFinishOptions(req, "bonus", weapon.id, provider(req));
+  const keep = options.options.find((option) => option.action === "keep" && option.acquire);
+  assert.ok(keep);
+  saveOptions(weapon, "bonus", [keep], req.origin);
+  const route = (await planWeapons(req, provider(req))).acceptable;
+  assert.ok(route.complete);
+  assert.equal(keyOf(route.bonus.choices[0]), keep.key);
+  assert.deepEqual(route.steps.find((step) => step.intent === "finish").rolls.at(-1).raw, keep.raw);
+});
+
+test("finish search ranges filter finish positions while retaining earlier Keep acquisitions", async () => {
+  const weapon = easyWeapon("range"); const req = request([weapon], 20, 0);
+  const found = await collectFinishOptions(req, "bonus", weapon.id, provider(req), () => {}, { from: 14 });
+  assert.ok(found.options.length);
+  assert.ok(found.options.every((option) => option.finish >= 14 && option.finish <= 20));
+  const keep = found.options.find((option) => option.action === "keep" && option.acquire < 14);
+  assert.ok(keep, "the Reset is allowed before the displayed finish range");
+  saveOptions(weapon, "bonus", [keep], req.origin);
+  const built = (await planWeapons(req, provider(req))).acceptable;
+  assert.ok(built.complete);
+  assert.equal(keyOf(built.bonus.choices[0]), keep.key);
+  for (const from of [0, 21, 1.5]) await assert.rejects(collectFinishOptions(req, "bonus", weapon.id, provider(req), () => {}, { from }), /range/);
+});
+
+test("finish filters combine bounds, actions and favorites without changing goals or saved picks", async () => {
+  const weapon = easyWeapon("filters"); const req = request([weapon], 20, 0);
+  const options = (await collectFinishOptions(req, "bonus", weapon.id, provider(req))).options;
+  const keep = options.find((option) => option.action === "keep" && option.totals.attack >= 24);
+  assert.ok(keep);
+  saveOptions(weapon, "bonus", [keep], req.origin);
+  const before = structuredClone(weapon);
+  const filters = [{ key: "action", value: "keep" }, { key: "attack", min: 24, max: 33 }, { key: "saved" }];
+  const visible = options.filter((option) => finishOptionMatches(option, filters, option.key === keep.key));
+  assert.deepEqual(visible, [keep]);
+  assert.equal(finishOptionMatches(keep, [{ key: "attack", min: 0, max: 0 }]), false);
+  assert.equal(finishOptionMatches(keep, [{ key: "direct" }]), !keep.acquire);
+  assert.equal(finishOptionMatches({ ...keep, top: false }, [{ key: "top" }]), false);
+  assert.equal(finishOptionMatches({ ...keep, totals: { element: null } }, [{ key: "element", min: 0, max: 0 }]), false);
+  assert.deepEqual(weapon, before);
+});
+
+test("skill browsing filters keep series and group indices separate, including index zero", () => {
+  const filter = [{ key: "series", value: 0 }, { key: "group", value: 4 }];
+  assert.ok(finishOptionMatches({ raw: 4 }, filter));
+  assert.equal(finishOptionMatches({ raw: 18 }, filter), false);
+  assert.equal(finishOptionMatches({ raw: 5 }, filter), false);
+});
+
+test("saved positions rebase after confirmed steps while bonus and skill collections stay independent", async () => {
+  const weapon = easyWeapon("a");
+  weapon.planner.skillEnabled = true;
+  for (const mode of ["acceptable", "preferred"]) weapon.planner[mode].skills = [{ seriesIndex: null, groupIndex: null }];
+  const req = request([weapon], 16, 16);
+  const bonus = (await collectFinishOptions(req, "bonus", weapon.id, provider(req))).options.filter((option) => option.action === "reset").at(-1);
+  const skill = (await collectFinishOptions(req, "skill", weapon.id, provider(req))).options.at(-1);
+  saveOptions(weapon, "bonus", [bonus], req.origin); saveOptions(weapon, "skill", [skill], req.origin);
+  const changed = structuredClone(req); changed.origin.bonusCounter += 2;
+  assert.equal(savedFinishChoice(weapon, "bonus", weapon.planner.savedFinishes.bonus[0], changed.origin).finish, bonus.finish - 2);
+  const route = (await planWeapons(changed, provider(changed))).acceptable;
+  assert.ok(route.complete);
+  assert.equal(route.bonus.horizon, bonus.finish - 2);
+  assert.equal(route.skill.horizon, skill.finish);
+  changed.origin.bonusCounter = req.origin.bonusCounter + bonus.finish;
+  changed.targets[0].planner.currentBonuses = bonus.raw;
+  assert.equal(savedFinishChoice(changed.targets[0], "bonus", weapon.planner.savedFinishes.bonus[0], changed.origin).status, "achieved");
+  const resumed = (await planWeapons(changed, provider(changed))).acceptable;
+  assert.ok(resumed.complete);
+  assert.equal(resumed.bonus.horizon, 0);
+  assert.equal(resumed.skill.horizon, skill.finish);
+  assert.deepEqual(resumed.savedConflicts, []);
+});
+
+test("legacy route picks migrate into collections once and cleared collections stay cleared", async () => {
+  const weapon = easyWeapon("a"); const req = request([weapon], 12, 0); const api = provider(req);
+  const alternatives = await collectFinishOptions(req, "bonus", weapon.id, api);
+  const choice = alternatives.options.filter((option) => option.action === "reset").at(-1);
+  saveOptions(weapon, "bonus", [choice], req.origin);
+  const route = (await planWeapons(req, api)).acceptable;
+  delete weapon.planner.savedFinishes;
+  const migrated = migrateSavedFinishes([weapon], { acceptable: route });
+  assert.equal(migrated[0].planner.savedFinishes.bonus.length, 1);
+  assert.equal(migrated[0].planner.savedFinishes.bonus[0].finish, choice.finish);
+  assert.deepEqual(weapon.planner.savedFinishes, undefined);
+  migrated[0].planner.savedFinishes.bonus = [];
+  assert.deepEqual(migrateSavedFinishes(migrated, { acceptable: route })[0].planner.savedFinishes.bonus, []);
 });
 
 test("a finish that collides is listed, and choosing it recalculates the stream around it", async () => {

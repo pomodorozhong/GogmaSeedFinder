@@ -1,4 +1,4 @@
-import { bonusGoalAlwaysMet, bonusTotals, hasGoal, layoutOf, matchesTier, rangeCanMatch, resultQuality, skillGoalAlwaysMet, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { bonusGoalAlwaysMet, bonusTotals, hasGoal, layoutOf, matchesTier, rangeCanMatch, resultQuality, savedFinishChoice, skillGoalAlwaysMet, validLayout, validatePlannerRequest } from "./planner-model.js";
 
 const MODES = ["acceptable", "preferred"];
 const pause = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -32,6 +32,8 @@ export async function buildCandidatePools(request, provider, report = () => {}, 
     report({ phase: "predictions", target: ti + 1, total: request.targets.length });
     for (const stream of options.streams ?? ["bonus", "skill"]) {
       const sets = Object.fromEntries(MODES.map((mode) => [mode, []]));
+      const savedKeys = new Set(hasGoal(target, stream) ? (target.planner.savedFinishes?.[stream] ?? [])
+        .map((pick) => savedFinishChoice(target, stream, pick, request.origin)).filter((pick) => pick.status === "pending").map((pick) => pick.key) : []);
       const current = stream === "bonus"
         ? (target.planner.currentBonuses ? bonusTotals(target.planner.currentBonuses, target) : null)
         : target.planner.currentSkill;
@@ -43,7 +45,7 @@ export async function buildCandidatePools(request, provider, report = () => {}, 
       for (const mode of MODES) {
         if (met(mode)) sets[mode].push({ finish: 0, action: "already", top: mode === "acceptable" && hasGoal(target, stream) && met("preferred") });
       }
-      const needed = MODES.filter((mode) => sets[mode].length === 0);
+      const needed = MODES.filter((mode) => sets[mode].length === 0 || savedKeys.size > 0 || options.includeMet);
       const count = request.limits[stream];
       if (needed.length && count > 0) {
         if (stream === "skill") {
@@ -90,8 +92,9 @@ export async function buildCandidatePools(request, provider, report = () => {}, 
               const top = matchesTier(totals, target, stream, "preferred");
               for (const mode of needed) {
                 if (!matchesTier(totals, target, stream, mode)) continue;
-                if (sets[mode].length >= cap) { pools[mode].complete = false; continue; }
-                sets[mode].push({ finish: index + 1, action: "keep", layout, acquisitions: known ? null : positions, top: mode === "acceptable" && top });
+                const choice = { finish: index + 1, action: "keep", layout, acquisitions: known ? null : positions, top: mode === "acceptable" && top };
+                if (sets[mode].length >= cap && !savedKeys.has(choiceKey(choice))) { pools[mode].complete = false; continue; }
+                sets[mode].push(choice);
               }
             }
             if (++li % 6 === 0) { await pause(); report({ phase: "layouts", target: ti + 1, layouts: li, total: layouts.size }); }
@@ -111,7 +114,7 @@ export async function buildCandidatePools(request, provider, report = () => {}, 
         // unless only the two-event finish is a top-desired result.
         const direct = new Map();
         for (const v of choices) if (!v.acquisitions) direct.set(v.finish, Boolean(direct.get(v.finish) || v.top));
-        pools[mode][stream].push({ id: target.id, choices: choices.filter((v) => !v.acquisitions || !direct.has(v.finish) || (v.top && !direct.get(v.finish))) });
+        pools[mode][stream].push({ id: target.id, choices: choices.filter((v) => options.includeMet || savedKeys.has(choiceKey(v)) || !v.acquisitions || !direct.has(v.finish) || (v.top && !direct.get(v.finish))) });
       }
     }
     await pause();
@@ -236,6 +239,51 @@ export async function optimizeStream(targets, limit, complete = true, options = 
 }
 
 const choiceKey = (choice) => `${choice.action}:${choice.finish}:${choice.layout ? layoutKey(choice.layout) : ""}`;
+
+// A weapon's saved options are alternatives: choose one, and never fall back
+// to automatic results while a nonempty saved collection exists.
+function savedChoiceSets(request, provider) {
+  return Object.fromEntries(["bonus", "skill"].map((stream) => [stream, new Map(request.targets
+    .filter((target) => hasGoal(target, stream) && target.planner.savedFinishes?.[stream]?.length)
+    .map((target) => [target.id, new Set(target.planner.savedFinishes[stream].flatMap((pick) => {
+      const choice = savedFinishChoice(target, stream, pick, request.origin);
+      if (!choice.key || choice.finish > request.limits[stream]) return [];
+      if (choice.status === "pending") {
+        const predicted = stream === "skill" ? provider.skills(target, choice.finish - 1, 1)[0]
+          : Array.from(pick.action === "keep" ? provider.keep(target, choice.finish - 1, 1, pick.layout) : provider.reset(target, choice.finish - 1, 1));
+        if (JSON.stringify(predicted) !== JSON.stringify(pick.raw)) return [];
+      }
+      return [choice.key];
+    }))]))]));
+}
+
+// Browsing is independent of a built route and uses the full search limit.
+// Saving a result from this list does not schedule or execute anything.
+export async function collectFinishOptions(request, stream, targetId, provider, report = () => {}, options = {}) {
+  validatePlannerRequest(request);
+  const from = options.from ?? 1;
+  if (!Number.isInteger(from) || from < 1 || from > request.limits[stream]) throw new Error("range");
+  const target = request.targets.find((value) => value.id === targetId);
+  if (!target || !["bonus", "skill"].includes(stream) || !hasGoal(target, stream)) throw new Error("goals");
+  const predictions = new Map();
+  const cached = Object.fromEntries(["reset", "keep", "skills"].map((kind) => [kind, (weapon, offset, count, layout) => {
+    const key = `${kind}:${offset}:${count}:${layout?.join("") ?? ""}`;
+    if (!predictions.has(key)) predictions.set(key, provider[kind](weapon, offset, count, layout));
+    return predictions.get(key);
+  }]));
+  const pools = await buildCandidatePools({ ...request, targets: [target] }, cached, report, { ...options, streams: [stream], includeMet: true });
+  const choices = pools.acceptable[stream][0].choices;
+  const found = choices.filter((choice) => choice.finish >= from).map((choice) => {
+    const rolls = stream === "skill" ? cached.skills(target, 0, request.limits[stream])
+      : choice.action === "keep" ? cached.keep(target, 0, request.limits[stream], choice.layout) : cached.reset(target, 0, request.limits[stream]);
+    const raw = stream === "skill" ? rolls[choice.finish - 1] : Array.from(rolls.subarray((choice.finish - 1) * 5, choice.finish * 5));
+    return { key: choiceKey(choice), finish: choice.finish, action: choice.action, layout: choice.layout ?? null,
+      acquire: choice.acquisitions?.find((position) => position < choice.finish) ?? null,
+      raw, top: matchesTier(stream === "bonus" ? bonusTotals(raw, target) : raw, target, stream, "preferred"),
+      totals: stream === "bonus" ? bonusTotals(raw, target) : null };
+  });
+  return { options: found, complete: pools.acceptable.complete };
+}
 
 // The weapons scheduled in a stream, limited to finishes within its horizon.
 // A weapon keeps the finish the player pinned, and a weapon finishing top
@@ -524,12 +572,15 @@ export async function planWeapons(request, provider, report = () => {}, options 
   const pools = await buildCandidatePools(request, provider, report, options);
   const routes = {};
   const ids = request.targets.map((t) => t.id);
+  const savedSets = savedChoiceSets(request, provider);
   for (const mode of MODES) {
     report({ phase: "optimize", mode });
-    const basePool = pools[mode];
+    const basePool = { ...pools[mode], ...Object.fromEntries(["bonus", "skill"].map((stream) => [stream,
+      pools[mode][stream].map((target) => savedSets[stream].has(target.id)
+        ? { ...target, choices: target.choices.filter((choice) => savedSets[stream].get(target.id).has(choiceKey(choice))) } : target)])) };
     const requestedPins = options.preservePinsByMode?.[mode] ?? {};
     let released = new Set();
-    let activePins = Object.fromEntries(["bonus", "skill"].map((stream) => [stream, { ...(requestedPins[stream] ?? {}) }]));
+    let activePins = Object.fromEntries(["bonus", "skill"].map((stream) => [stream, Object.fromEntries(Object.entries(requestedPins[stream] ?? {}).filter(([id]) => !savedSets[stream].has(id)))]));
     const restrictPool = (pins) => {
       const validPins = Object.fromEntries(["bonus", "skill"].map((stream) => [stream, {}]));
       const nextPool = { ...basePool };
@@ -587,16 +638,22 @@ export async function planWeapons(request, provider, report = () => {}, options 
     const { alternatives, complete } = await findAlternativeRoutes(request, pool, mode, ids, primary, provider, options);
     const annotatePins = (route) => {
       const pins = { bonus: {}, skill: {} };
+      const savedConflicts = [];
       const routeReleased = new Set(released);
       for (const stream of ["bonus", "skill"]) {
         const choices = new Map(route[stream].choices.map((choice) => [choice.id, choice]));
+        for (const [id, keys] of savedSets[stream]) {
+          const choice = choices.get(id);
+          if (choice && keys.has(choiceKey(choice))) pins[stream][id] = choiceKey(choice);
+          else savedConflicts.push({ id, stream });
+        }
         for (const [id, key] of Object.entries(activePins[stream])) {
           const choice = choices.get(id);
           if (choice && choiceKey(choice) === key) pins[stream][id] = key;
           else routeReleased.add(id);
         }
       }
-      return { ...route, pins, released: [...routeReleased] };
+      return { ...route, pins, savedConflicts, released: [...routeReleased] };
     };
     const annotatedAlternatives = alternatives.map(annotatePins);
     const annotatedPrimary = annotatePins(primary);

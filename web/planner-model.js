@@ -101,6 +101,81 @@ export function canFillSlots(target, excluded) {
   }, 0) >= 5;
 }
 
+// Saved finishes belong to a weapon, independently of any generated route.
+// Remember the seed and absolute stream position so rebuilding after saved
+// steps cannot silently reinterpret a pick as a different draw.
+export const savedFinishId = (pick) => `${pick.baseSeed}:${pick.weaponType}:${pick.attributeForce}:${pick.originCounter + pick.finish}:${pick.action}:${pick.layout?.join("") ?? ""}`;
+
+export function normalizedSavedFinishes(target) {
+  const saved = target.planner?.savedFinishes;
+  return Object.fromEntries(["bonus", "skill"].map((stream) => {
+    const seen = new Set();
+    const picks = (Array.isArray(saved?.[stream]) ? saved[stream] : []).flatMap((pick) => {
+      if (!pick || !Number.isInteger(pick.baseSeed) || pick.baseSeed < 0 || pick.baseSeed > 99_999_999
+        || !Number.isSafeInteger(pick.originCounter) || pick.originCounter < 0
+        || !Number.isInteger(pick.finish) || pick.finish < 1 || pick.finish > 10_000
+        || !Number.isSafeInteger(pick.originCounter + pick.finish)
+        || !Number.isInteger(pick.weaponType) || pick.weaponType < 0 || pick.weaponType > 13
+        || !Number.isInteger(pick.attributeForce) || pick.attributeForce < 0 || pick.attributeForce > 9) return [];
+      if (stream === "bonus" ? !["reset", "keep"].includes(pick.action) || !validBonuses(pick.raw, pick)
+        || (pick.action === "keep" && (!validLayout(pick.layout, pick) || JSON.stringify(pick.layout) !== JSON.stringify(layoutOf(pick.raw))))
+        : pick.action !== "skill" || !Number.isInteger(pick.raw) || pick.raw < 0 || pick.raw >= 294) return [];
+      const value = { baseSeed: pick.baseSeed, originCounter: pick.originCounter, finish: pick.finish,
+        weaponType: pick.weaponType, attributeForce: pick.attributeForce, action: pick.action,
+        layout: pick.action === "keep" ? [...pick.layout] : null, raw: stream === "bonus" ? [...pick.raw] : pick.raw };
+      const id = savedFinishId(value);
+      if (seen.has(id)) return [];
+      seen.add(id);
+      return [value];
+    });
+    return [stream, picks];
+  }));
+}
+
+export function savedFinishChoice(target, stream, pick, origin) {
+  if (pick.baseSeed !== origin.baseSeed) return { status: "seed", key: null };
+  if (pick.weaponType !== target.weaponType || pick.attributeForce !== target.attributeForce) return { status: "weapon", key: null };
+  const counter = origin[`${stream}Counter`];
+  if (!Number.isSafeInteger(counter)) return { status: "position", key: null };
+  const finish = pick.originCounter + pick.finish - counter;
+  if (finish > 0) return { status: "pending", finish, key: `${pick.action}:${finish}:${pick.layout?.join("") ?? ""}` };
+  const current = stream === "bonus" ? target.planner?.currentBonuses : target.planner?.currentSkill;
+  if (JSON.stringify(current) === JSON.stringify(pick.raw)) return { status: "achieved", finish: 0, key: "already:0:" };
+  return { status: "passed", key: null };
+}
+
+export function savedFinishFromOption(target, stream, option, origin) {
+  if (!option.finish || option.raw === null) return null;
+  return normalizedSavedFinishes({ ...target, planner: { savedFinishes: { [stream]: [{
+    ...origin, originCounter: origin[`${stream}Counter`], finish: option.finish,
+    weaponType: target.weaponType, attributeForce: target.attributeForce,
+    action: option.action, layout: option.action === "keep" ? option.layout ?? option.choices?.find((choice) => choice.id === target.id)?.layout : null, raw: option.raw,
+  }] } } })[stream][0] ?? null;
+}
+
+// Upgrade old route-only pins once when loading/importing. The active route
+// is visited first, then the other route, retaining both as saved options.
+export function migrateSavedFinishes(targets, routes, mode = "acceptable") {
+  return targets.map((target) => {
+    if (target.planner?.savedFinishes) return target;
+    const picks = normalizedSavedFinishes(target);
+    for (const current of [routes?.[mode], ...Object.entries(routes ?? {}).filter(([key]) => key !== mode).map(([, route]) => route)]) {
+      if (!current) continue;
+      for (const stream of ["bonus", "skill"]) {
+        const key = current.pins?.[stream]?.[target.id];
+        const choice = current[stream]?.choices?.find((value) => value.id === target.id);
+        if (!key || !choice || `${choice.action}:${choice.finish}:${choice.layout?.join("") ?? ""}` !== key) continue;
+        const raw = current.steps?.find((step) => step.targetId === target.id && step.stream === stream && step.intent === "finish")?.rolls?.at(-1)?.raw;
+        const original = current.targets?.find((value) => value.id === target.id);
+        if (!original) continue;
+        const pick = savedFinishFromOption(original, stream, { ...choice, raw }, current.origin);
+        if (pick && !picks[stream].some((value) => savedFinishId(value) === savedFinishId(pick))) picks[stream].push(pick);
+      }
+    }
+    return { ...target, planner: { ...normalizedPlanner(target), savedFinishes: picks } };
+  });
+}
+
 export function normalizedPlanner(target) {
   const saved = target.planner ?? {};
   const stats = (value, fallback) => {
@@ -132,6 +207,7 @@ export function normalizedPlanner(target) {
     currentBonuses: validBonuses(saved.currentBonuses, target) ? saved.currentBonuses : null,
     currentSkill: Number.isInteger(saved.currentSkill) && saved.currentSkill >= 0 && saved.currentSkill < 294 ? saved.currentSkill : null,
     elementValues: values,
+    savedFinishes: saved.savedFinishes ? normalizedSavedFinishes(target) : undefined,
   };
 }
 
@@ -146,7 +222,7 @@ export function copiedPlanner(source, target) {
   // Max 0 remains a valid zero-gain bound on every weapon, so it carries over.
   if (!sameGains) for (const tier of [goals.acceptable, goals.preferred]) { delete tier.stats.element; if (tier.maxStats.element > 0) delete tier.maxStats.element; }
   const own = normalizedPlanner(target);
-  return normalizedPlanner({ ...target, planner: { ...goals, currentBonuses: own.currentBonuses, currentSkill: own.currentSkill, elementValues: sameGains && sameAttribute ? goals.elementValues : own.elementValues } });
+  return normalizedPlanner({ ...target, planner: { ...goals, currentBonuses: own.currentBonuses, currentSkill: own.currentSkill, savedFinishes: own.savedFinishes, elementValues: sameGains && sameAttribute ? goals.elementValues : own.elementValues } });
 }
 
 export function hasGoal(target, stream) {
@@ -355,6 +431,21 @@ export function sortFinishOptions(options, levels) {
       if (difference) return dir === "asc" ? difference : -difference;
     }
     return a.option.finish - b.option.finish || a.index - b.index;
+  });
+}
+
+// Browsing filters narrow the displayed results without changing weapon
+// goals or membership in the saved collection.
+export function finishOptionMatches(option, filters, saved = false) {
+  return filters.every((filter) => {
+    if (filter.key === "top") return option.top;
+    if (filter.key === "saved") return saved;
+    if (filter.key === "action") return option.action === filter.value;
+    if (filter.key === "direct") return !option.acquire;
+    if (filter.key === "series") return Math.floor(option.raw / 14) === filter.value;
+    if (filter.key === "group") return option.raw % 14 === filter.value;
+    const value = option.totals?.[filter.key];
+    return Number.isFinite(value) && (filter.min === null || value >= filter.min) && (filter.max === null || value <= filter.max);
   });
 }
 

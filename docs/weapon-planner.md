@@ -164,34 +164,76 @@ after a build, the old route is hidden behind a warning, even after a reload,
 so it cannot be mistaken for a current result. Build new guides from the current saved
 state to change a route already in progress. State-code formats are unchanged.
 
-## Choosing another finish
+## Saving finish alternatives
 
-Every result that meets a tier counts the same, so the route takes the earliest
-workable finish and ignores stats outside the goal. A weapon's finish step in
-the guide offers **Other finishes**: every result for that weapon within the
-stream's current roll count that still meets the route's goal, with each
-identical result listed once. Each option is marked by how it fits:
+Each Stage 1 weapon card owns a **Saved picks** collection, with separate
+bonus and skill lists. The weapon editing modal has **Goals** and **Finishes**
+tabs. The pencil opens Goals; **Browse finishes** on a card or guide opens
+Finishes in the same modal. The cards retain their existing summaries.
 
-- **No marker** — it fits the route as is; no other weapon changes.
-- **Amber (⚠ collides with …)** — it fits at the same roll count, but the named
-  weapons move to other finishes that still meet their goals. Choosing it asks
-  for confirmation.
-- **Red, dashed (⛔ collides with …)** — it does not fit the current route: it
-  needs a roll another weapon finishes on, a finish already chosen for another
-  weapon, or a weapon's top-desired finish. Choosing it warns, then
-  recalculates the whole stream around it. The stream may take more rolls
-  (the route is then labelled best found rather than minimum proven), other
-  weapons may finish differently or lose top-desired results, and earlier
-  chosen finishes are kept if they still fit together and released otherwise.
+Both tabs share a draft. Goals contains the existing stat bounds, skill pairs,
+and current-weapon fields. Finishes searches using those draft goals and lets
+the player choose the bonus or skill stream, an inclusive From/To roll range,
+filter chips, and ordered sorting chips. Roll positions are relative to the
+current saved stream counter. The range limits finish positions; Keep
+acquisitions before the range are still considered and displayed. Browsing
+ranges do not change Stage 2's route limits.
 
-A fitting choice keeps the roll count, the minimum proof, and every
-top-desired and earlier chosen finish. The other stream never changes.
-Finishes can be changed only before any step in that stream is saved. Changing
-a goal from this list rebuilds each available route while keeping compatible
-manual finishes; picks that no longer meet their goals or cannot fit the route
-are released and named. Running **Build guides** manually starts fresh and
-discards those picks. Each option is searched separately, and options cut off
-by the search budget are reported as not checked.
+Each result shows its roll, action, gains or skill pair, and any Reset needed
+for a Keep layout. A bookmark **Save pick** control toggles it in the draft
+(the gold star still means only top desired). A **Saved picks** section
+retains every saved option, including those hidden by the current range or
+filters, each with the same warnings as the weapon card. A result the current
+route finishes on is marked **Used in current route**, separately from whether
+it is saved. Filter chips can narrow by top desired, saved picks, action,
+whether an earlier Reset is needed, stat bounds, or series/group skills.
+These filters never rewrite the weapon's goals or remove hidden saved picks.
+Changed goals or a changed saved position mark old search results as stale;
+search again before adding picks from those results.
+
+**Save weapon** (or **Add weapon**) commits the goals and saved picks together.
+Switching tabs preserves their draft; Cancel, Escape, or closing the modal
+discards its edits. Merely browsing or changing sorting without changing the
+weapon keeps an existing built route. A separate **Build guides** applies
+saved changes; editing, saving picks, and saving the weapon never automatically reroute or
+advance the saved counters.
+
+For each weapon and enabled stream, a nonempty saved collection restricts the
+route to one of those alternatives that meets the route's goal. With no saved
+picks for that stream, the planner searches automatic results as before.
+The scheduler can switch between the saved alternatives to avoid conflicts
+with other weapons. It does not require every saved result to be performed.
+A proven minimum under these constraints is labelled **Minimum proven with
+saved picks**. Top-desired mode still requires its own goal, so an
+acceptable-only collection may produce a complete acceptable route and an
+incomplete top-desired route.
+
+The card shows the saved results and marks the one **Used in current route**,
+with any earlier Reset the route takes for it.
+Goal edits and adding or removing other weapons keep the collections.
+Incompatible picks remain visible with their reason, such as a changed seed,
+an unmet goal, a passed roll, or a roll beyond the limit. A build that cannot
+use a saved collection names the affected weapon and stream. It never
+silently substitutes an automatic result or deletes the collection. Add more
+options, adjust the goals or limits, or explicitly remove picks; removing the
+last pick restores automatic selection. Existing weapon-selection and
+optional-weapon rules still apply, and any omitted weapon is named.
+
+Collections are stored in `target.planner.savedFinishes` alongside the goals,
+independently of generated routes, and are included in plan exports. Each pick
+records the seed, original stream counter and relative roll, weapon kind,
+action, ordered Keep layout, and exact result. The engine rebases its roll to
+the current stream counter on rebuild. A passed pick counts as already met
+only when the weapon's known current result is that saved result; matching a
+preview alone cannot establish this. Copying goals and duplicating weapons
+keep the destination's own collection. Old route-only pins migrate once into
+the owning weapon's collection on load or import, without reviving picks
+explicitly cleared afterward.
+
+The browser lists 50 results at a time with **Show more finishes**. Equal
+results at different rolls or with different required layouts remain separate
+options because their scheduling constraints differ. Candidate-budget
+exhaustion is reported and does not prove that no other finishes exist.
 
 The list's default sort follows the weapon's bonus goal: top desired first,
 then each stat with a minimum from high to low (top-desired tier first), then
@@ -207,7 +249,7 @@ A changed sort is remembered for that weapon in this browser.
 
 **Export plan** in the saved-position strip downloads a JSON file
 (`gogma-planner-B<seed>-G<bonus>-S<skill>.json`) holding the base seed and both
-Gogma counters, every registered weapon with its goals, known current results
+Gogma counters, every registered weapon with its goals, saved finish alternatives, known current results
 and Keep layout, and the planner's selection, roll limits, built routes, chosen
 route, matches and saved-step progress. **Import plan** on another browser asks
 for confirmation, then replaces that browser's weapons, saved position and
