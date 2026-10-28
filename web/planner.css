@@ -191,6 +191,9 @@
    columns keep their width instead of being squeezed beside the guide. */
 .pl-table-area { margin-right: calc(var(--pl-pad) * -1); }
 .pl-table-area .pl-table-scroll { padding-right: var(--pl-pad); }
+/* The upgrade warning wraps to the table's width instead of widening the column,
+   and stays clear of the area's bleed into the panel padding. */
+.pl-table-area .pl-route-note { contain: inline-size; margin: 0 var(--pl-pad) 12px 0; }
 .pl-table-scroll { overflow-x: auto; }
 .pl-route-table { width: max-content; border: 1px solid var(--line); border-radius: 12px; border-collapse: separate; border-spacing: 0; background: #151712; table-layout: auto; }
 .pl-route-table thead th { background: #20221c; }
@@ -336,6 +339,7 @@ button.pl-expected-roll:hover { background: #d6b35c10; }
   .pl-table-area { margin-inline: calc(var(--pl-pad) * -1); }
   .pl-table-area .pl-stream-title { padding-inline: var(--pl-pad); }
   .pl-table-area .pl-table-scroll { padding-inline: var(--pl-pad); }
+  .pl-table-area .pl-route-note { margin-inline: var(--pl-pad); }
   /* Stacked under the guide, each table centers when it fits and scrolls from
      the left edge when it does not. */
   .pl-stream-table { width: fit-content; max-width: 100%; margin-inline: auto; }
