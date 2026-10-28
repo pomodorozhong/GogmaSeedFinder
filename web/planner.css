@@ -185,7 +185,7 @@
 .pl-stream-title span { color: var(--muted); font-size: 0.74rem; font-weight: 400; }
 .pl-detail-panel { --pl-pad: clamp(22px, 5vw, 42px); }
 .pl-detail-panel:not(:has(> :not([hidden]))) { display: none; }
-.pl-workspace { display: grid; grid-template-columns: minmax(340px, .95fr) minmax(0, 1.6fr); gap: 18px; align-items: stretch; }
+.pl-workspace { display: grid; grid-template-columns: minmax(340px, 440px) minmax(0, max-content); justify-content: center; gap: 18px; align-items: stretch; }
 .pl-table-area { min-width: 0; align-self: start; }
 /* The table runs out to the panel's right edge and scrolls sideways, so its
    columns keep their width instead of being squeezed beside the guide. */
@@ -276,7 +276,7 @@ button.pl-expected-roll:hover { background: #d6b35c10; }
 .planner [data-pl-step] { scroll-margin-top: 100px; }
 @media (max-width: 1100px) {
   .pl-weapon-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .pl-workspace { grid-template-columns: minmax(300px, 1fr) minmax(0, 1.5fr); gap: 16px; }
+  .pl-workspace { grid-template-columns: minmax(300px, 400px) minmax(0, max-content); gap: 16px; }
   .pl-guide-content { padding: 15px 12px 12px; }
 }
 @media (max-width: 900px) {
@@ -335,6 +335,9 @@ button.pl-expected-roll:hover { background: #d6b35c10; }
   .pl-table-area { margin-inline: calc(var(--pl-pad) * -1); }
   .pl-table-area .pl-stream-title { padding-inline: var(--pl-pad); }
   .pl-table-area .pl-table-scroll { padding-inline: var(--pl-pad); }
+  /* Stacked under the guide, each table centers when it fits and scrolls from
+     the left edge when it does not. */
+  .pl-stream-table { width: fit-content; max-width: 100%; margin-inline: auto; }
 }
 
 .pl-table-scroll, .pl-modal { scrollbar-color: #8e7a45 #20211c; }
