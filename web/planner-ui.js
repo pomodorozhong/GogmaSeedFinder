@@ -592,25 +592,26 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
         : `${filterName(filter.key)} ${filter.min !== null ? `≥ ${filter.min}` : ""}${filter.min !== null && filter.max !== null ? " · " : ""}${filter.max !== null ? `≤ ${filter.max}` : ""}`;
     const rowKeys = (row, chips) => row !== "trying" ? (stream === "bonus" ? availableStats(target).filter((key) => !chips.some((chip) => chip.key === key)) : ["pair"])
       : ["top", "saved", ...(stream === "bonus" ? ["action", "direct", ...availableStats(target)] : ["series", "group", "pair"])].filter((key) => key === "pair" || !chips.some((chip) => chip.key === key));
-    const editor = (row) => {
+    // The chip being edited holds its own fields, in place of its label.
+    const editingChip = () => {
       const f = filterEditing;
-      if (!f || f.row !== row) return "";
       const choices = f.key === "action" ? [["reset", pl("Reset Bonuses")], ["keep", pl("Keep Bonuses")]] : f.key === "series" ? series.map((name, id) => [id, t(name)]) : f.key === "group" ? groups.map((name, id) => [id, t(name)]) : null;
       const field = f.key === "pair" ? `<select data-filter-series aria-label="${html("Series skill")}">${pairOptions(series, f.seriesIndex, "Any series skill")}</select><span>＋</span><select data-filter-group aria-label="${html("Group skill")}">${pairOptions(groups, f.groupIndex, "Any group skill")}</select>`
         : choices ? `<select data-filter-value aria-label="${esc(filterName(f.key))}">${choices.map(([id, label]) => `<option value="${id}"${String(id) === String(f.value) ? " selected" : ""}>${esc(label)}</option>`).join("")}</select>`
-          : `<input type="number" min="0" step="1" data-filter-min value="${f.min ?? ""}" placeholder="${html("Min")}" aria-label="${html("Filter minimum")}"><span>–</span><input type="number" min="0" step="1" data-filter-max value="${f.max ?? ""}" placeholder="${html("Max")}" aria-label="${html("Filter maximum")}">`;
-      return `<div class="pl-browser-filter-edit"><span>${esc(f.key === "pair" ? pl("Skill pair") : filterName(f.key))}</span>${field}<button type="button" class="text-button" data-pl-action="filter-apply">${html("Apply")}</button><button type="button" class="text-button" data-pl-action="filter-cancel">${html("Cancel")}</button></div>`;
+          : `<span>≥</span><input type="number" min="0" step="1" data-filter-min value="${f.min ?? ""}" aria-label="${html("Filter minimum")}"><span>≤</span><input type="number" min="0" step="1" data-filter-max value="${f.max ?? ""}" aria-label="${html("Filter maximum")}">`;
+      return `<span class="pl-sort-chip is-editing"><span class="pl-chip-name">${esc(f.key === "pair" ? pl("Skill pair") : filterName(f.key))}</span>${field}<button type="button" class="pl-chip-apply" data-pl-action="filter-apply" aria-label="${html("Apply")}">✓</button><button type="button" class="pl-sort-remove" data-pl-action="filter-cancel" aria-label="${html("Cancel")}">×</button></span>`;
     };
     const filterRow = (row) => {
       const chips = rowChips(row);
       const label = row === "preferred" ? `★ ${pl("Top")}` : row === "acceptable" ? `✓ ${pl("OK")}` : pl("Trying");
       const keys = rowKeys(row, chips);
-      const chipMarkup = chips.map((chip, index) => `<span class="pl-sort-chip"><button type="button" data-pl-action="filter-edit" data-row="${row}" data-index="${index}">${esc(filterLabel(chip))}</button><button type="button" class="pl-sort-remove" data-pl-action="filter-remove" data-row="${row}" data-index="${index}" aria-label="${html("Remove filter {name}", { name: filterLabel(chip) })}">×</button></span>`).join(stream === "skill" && row !== "trying" ? `<span class="pl-filter-or">${html("or")}</span>` : "");
+      const editing = filterEditing?.row === row ? filterEditing : null;
+      const chipMarkup = [...chips.map((chip, index) => editing?.index === index ? editingChip() : `<span class="pl-sort-chip"><button type="button" data-pl-action="filter-edit" data-row="${row}" data-index="${index}">${esc(filterLabel(chip))}</button><button type="button" class="pl-sort-remove" data-pl-action="filter-remove" data-row="${row}" data-index="${index}" aria-label="${html("Remove filter {name}", { name: filterLabel(chip) })}">×</button></span>`), ...(editing && editing.index === null ? [editingChip()] : [])].join(stream === "skill" && row !== "trying" ? `<span class="pl-filter-or">${html("or")}</span>` : "");
       const menu = filterMenuOpen === row ? `<div class="pl-sort-menu" data-browser-menu>${keys.map((key) => `<button type="button" data-pl-action="filter-pick" data-row="${row}" data-key="${key}">${esc(filterName(key))}</button>`).join("")}</div>` : "";
       const actions = row === "trying" ? `<button type="button" class="pl-sort-add" data-pl-action="trying-apply" data-tier="acceptable">${html("Apply to OK")}</button><button type="button" class="pl-sort-add" data-pl-action="trying-apply" data-tier="preferred">${html("Apply to Top")}</button><button type="button" class="pl-sort-add" data-pl-action="trying-discard">${html("Discard")}</button>`
         : !list.trying ? `<button type="button" class="pl-sort-add" data-pl-action="trying-start" data-tier="${row}">${html("Try changes")}</button>` : "";
       const active = list.active === row;
-      return `<div class="pl-sort pl-filter-row is-${row}${active ? " is-active" : ""}"><div class="pl-sort-row"><button type="button" class="pl-filter-row-name" data-pl-action="filter-row" data-row="${row}" aria-pressed="${active}" title="${html("Filter the list by this row")}">${esc(label)}</button>${chipMarkup}${keys.length ? `<button type="button" class="pl-sort-add" data-pl-action="filter-menu" data-row="${row}" aria-haspopup="true" aria-expanded="${filterMenuOpen === row}">＋</button>` : ""}${actions}</div>${menu}${editor(row)}</div>`;
+      return `<div class="pl-sort pl-filter-row is-${row}${active ? " is-active" : ""}"><div class="pl-sort-row"><button type="button" class="pl-filter-row-name" data-pl-action="filter-row" data-row="${row}" aria-pressed="${active}" title="${html("Filter the list by this row")}">${esc(label)}</button>${chipMarkup}${keys.length ? `<button type="button" class="pl-sort-add" data-pl-action="filter-menu" data-row="${row}" aria-haspopup="true" aria-expanded="${filterMenuOpen === row}">＋</button>` : ""}${actions}</div>${menu}</div>`;
     };
     const filterRows = `<div class="pl-filter-rows"><span class="pl-sort-label">${html("Filter")}</span>${filterRow("preferred")}${filterRow("acceptable")}${list.trying ? filterRow("trying") : ""}</div>`;
     const filterHint = `<p class="pl-fine">${html("Top and OK filters edit this weapon’s goals. Choose a row’s name to filter the list by it, or Try changes to explore without changing a goal.")}</p>${list.notice ? `<p class="pl-fine pl-filter-notice">${esc(list.notice)}</p>` : ""}`;
@@ -907,7 +908,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       else filterEditing = { row, index: null, key, ...(key === "pair" ? { seriesIndex: null, groupIndex: null } : ["action", "series", "group"].includes(key) ? { value: key === "action" ? "reset" : 0 } : { min: null, max: null }) };
       renderFinishModal(); q("[data-filter-min], [data-filter-value], [data-filter-series]")?.focus();
     }
-    else if (action === "filter-edit") { const { row } = button.dataset; const index = Number(button.dataset.index); const f = rowChips(row)[index]; if (!["top", "saved", "direct"].includes(f.key)) filterEditing = { ...f, row, index }; renderFinishModal(); }
+    else if (action === "filter-edit") { const { row } = button.dataset; const index = Number(button.dataset.index); const f = rowChips(row)[index]; if (!["top", "saved", "direct"].includes(f.key)) filterEditing = { ...f, row, index }; renderFinishModal(); q("[data-filter-min], [data-filter-value], [data-filter-series]")?.focus(); }
     else if (action === "filter-remove") { const { row } = button.dataset; const chips = rowChips(row).filter((_, index) => index !== Number(button.dataset.index)); if (setRowChips(row, chips)) { finishList.visible = 50; refreshFinishes(); } }
     else if (action === "filter-apply") applyBrowserFilter();
     else if (action === "filter-cancel") { filterEditing = null; renderFinishModal(); }

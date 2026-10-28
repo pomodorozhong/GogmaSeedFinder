@@ -194,7 +194,9 @@ filters the list:
 
 - **★ Top** (amber) and **✓ OK** (teal) are the draft's Top desired and
   Acceptable goals. Each stat bound is a chip, such as Attack ≥ 36; each skill
-  pair is a chip, and pairs are alternatives ("or"), as in the goal. Adding,
+  pair is a chip, and pairs are alternatives ("or"), as in the goal. Clicking
+  a chip edits it in place: its min and max fields (or skill choices) open
+  inside the chip, Enter or ✓ applies them and Esc or × cancels. Adding,
   editing or removing a chip edits that goal in the draft (the Goals tab shows
   the change), so these rows never drift from the goals. A bound the weapon
   cannot reach is rejected and the goal is left as it was. OK is the default
