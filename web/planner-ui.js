@@ -167,7 +167,9 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   }
   // One saved pick, judged against the given (possibly draft) goals and the
   // route's roll limit; a pick that cannot be used stays listed with its reason.
-  function savedPickRow(target, stream, pick, removeAttrs) {
+  // With two or more saved picks, `routeAttrs` adds a toggle that makes this
+  // pick the only one the route may use.
+  function savedPickRow(target, stream, pick, removeAttrs, routeAttrs = "") {
     const prefix = stream === "bonus" ? "G" : "S";
     const choice = savedFinishChoice(target, stream, pick, getState());
     const result = stream === "bonus" ? bonusTotals(pick.raw, { ...pick, planner: target.planner }) : pick.raw;
@@ -176,14 +178,16 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const used = choice.key !== null && choice.key === inRoute?.key;
     const warning = !hasGoal(target, stream) ? pl("Goal is off") : choice.status === "seed" ? pl("Different seed") : choice.status === "weapon" ? pl("Different weapon type or element") : choice.status === "passed" ? pl("Roll already passed") : choice.status === "position" ? pl("Set current state") : !fitsGoal ? pl("Does not meet the updated goal") : choice.finish > cache.limits[stream] ? pl("Outside the roll limit") : "";
     const where = choice.status === "achieved" ? pl("Already met (no rolls)") : `${prefix}${choice.finish > 0 ? choice.finish : pick.finish}`;
+    const chosen = target.planner.routePick?.[stream] === savedFinishId(pick);
+    const routeToggle = routeAttrs && (target.planner.savedFinishes?.[stream]?.length ?? 0) > 1 && (!warning || chosen) ? `<button type="button" class="pl-route-toggle" ${routeAttrs} data-pick="${esc(savedFinishId(pick))}" aria-pressed="${chosen}">${html(chosen ? "Chosen for route" : "Use for route")}</button>` : "";
     const reset = used && inRoute.acquire ? ` <span>· ${esc(pl("Reset at {at} first", { at: `${prefix}${inRoute.acquire}` }))}</span>` : "";
-    return `<li class="pl-saved-pick${warning ? " is-warning" : ""}"><div><strong>${esc(where)}</strong> <span>${esc(actionName(pick.action))}</span>${reset}${used ? `<span class="pl-pick-used">${html("Used in current route")}</span>` : ""}<p>${esc(stream === "bonus" ? statsText(result, target) : skillText(result))}</p>${warning ? `<small>${esc(warning)}</small>` : ""}</div><button type="button" class="text-button" ${removeAttrs} data-pick="${esc(savedFinishId(pick))}" aria-label="${html("Remove saved pick {at}", { at: where })}">×</button></li>`;
+    return `<li class="pl-saved-pick${warning ? " is-warning" : ""}"><div><strong>${esc(where)}</strong> <span>${esc(actionName(pick.action))}</span>${reset}${used ? `<span class="pl-pick-used">${html("Used in current route")}</span>` : ""}<p>${esc(stream === "bonus" ? statsText(result, target) : skillText(result))}</p>${warning ? `<small>${esc(warning)}</small>` : ""}${routeToggle}</div><button type="button" class="text-button" ${removeAttrs} data-pick="${esc(savedFinishId(pick))}" aria-label="${html("Remove saved pick {at}", { at: where })}">×</button></li>`;
   }
   function savedPicksMarkup(target) {
     const sections = ["bonus", "skill"].filter((stream) => hasGoal(target, stream) || target.planner.savedFinishes?.[stream]?.length).map((stream) => {
       const picks = target.planner.savedFinishes?.[stream] ?? [];
       const title = pl(stream === "bonus" ? "Bonus rolls" : "Skill rolls");
-      const rows = picks.map((pick) => savedPickRow(target, stream, pick, `data-pl-action="remove-pick" data-id="${esc(target.id)}" data-stream="${stream}"`)).join("");
+      const rows = picks.map((pick) => savedPickRow(target, stream, pick, `data-pl-action="remove-pick" data-id="${esc(target.id)}" data-stream="${stream}"`, `data-pl-action="route-pick" data-id="${esc(target.id)}" data-stream="${stream}"`)).join("");
       return `<div class="pl-pick-group"><div class="pl-pick-heading"><strong>${esc(title)}</strong><button type="button" class="text-button" data-pl-action="browse-finishes" data-id="${esc(target.id)}" data-stream="${stream}"${!hasGoal(target, stream) ? " disabled" : ""}>${html("Browse finishes")}</button></div>${picks.length ? `<details${picks.length <= 3 ? " open" : ""}><summary>${html("{n} saved picks", { n: picks.length })}</summary><ul class="pl-saved-picks">${rows}</ul></details>` : `<p class="pl-fine">${html("Automatic — no saved picks")}</p>`}</div>`;
     });
     return `<div class="pl-weapon-picks"><h4>${html("Saved picks")}</h4>${sections.join("")}</div>`;
@@ -529,10 +533,14 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   const canChooseFinish = (r, step) => step.intent === "finish" && r.complete && !worker && compatible() && cache.completed[step.stream] === 0;
   function finishMarkup(r, step) {
     if (!canChooseFinish(r, step)) return "";
-    const count = getTargets().find((target) => target.id === step.targetId)?.planner?.savedFinishes?.[step.stream]?.length ?? 0;
-    const text = count ? pl("The route uses one of this weapon's {n} saved picks.", { n: count }) : pl("Automatic — no saved picks");
+    const raw = getTargets().find((target) => target.id === step.targetId);
+    const target = raw ? { ...raw, planner: normalizedPlanner(raw) } : null;
+    const picks = target?.planner.savedFinishes?.[step.stream] ?? [];
+    const text = !picks.length ? pl("Automatic — no saved picks") : target.planner.routePick?.[step.stream] ? pl("The route uses the pick you chose.")
+      : picks.length > 1 ? pl("The route uses one of this weapon's {n} saved picks. Choose one to use it instead.", { n: picks.length }) : pl("The route uses this weapon's saved pick.");
+    const rows = picks.length > 1 ? `<ul class="pl-saved-picks">${picks.map((pick) => savedPickRow(target, step.stream, pick, `data-pl-action="remove-pick" data-id="${esc(target.id)}" data-stream="${step.stream}"`, `data-pl-action="route-pick" data-rebuild="true" data-id="${esc(target.id)}" data-stream="${step.stream}"`)).join("")}</ul>` : "";
     const prefix = step.stream === "bonus" ? "G" : "S";
-    return `<div class="pl-finish-card"><div class="pl-finish-card-top"><div><span class="pl-guide-label pl-gold">${html("Finish")}</span><div class="pl-finish-value">${prefix}${step.rolls.at(-1).offset} ${badge(step)}</div></div><button type="button" class="pl-finish-toggle" data-pl-action="finishes">${html("Browse finishes")}</button></div><p class="pl-finish-sub">${esc(text)}</p></div>`;
+    return `<div class="pl-finish-card"><div class="pl-finish-card-top"><div><span class="pl-guide-label pl-gold">${html("Finish")}</span><div class="pl-finish-value">${prefix}${step.rolls.at(-1).offset} ${badge(step)}</div></div><button type="button" class="pl-finish-toggle" data-pl-action="finishes">${html("Browse finishes")}</button></div><p class="pl-finish-sub">${esc(text)}</p>${rows}</div>`;
   }
 
   const finishSortFor = (stream, target) => cache.finishSort[`${stream}:${target.id}`] ?? goalFinishSort(target, stream);
@@ -629,7 +637,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       const used = inRoute !== null && inRoute.key === `${option.action}:${option.finish}:${(option.action === "keep" ? option.layout ?? option.choices?.find((choice) => choice.id === target.id)?.layout : null)?.join("") ?? ""}`;
       return `<button type="button" class="pl-finish-option${saved ? " is-current" : ""}" data-pl-save-pick="${index}" aria-pressed="${Boolean(saved)}"${!current || list.loading ? " disabled" : ""}${option.meets ? "" : ` data-below-goal`}><span class="pl-finish-where">${option.top ? `<span class="pl-gold">★</span>` : ""}<strong class="pl-finish-roll">${prefix}${option.finish}</strong><span class="pl-finish-how">${esc(actionName(option.action))}${(used ? inRoute.acquire : option.acquire) ? ` · ${esc(pl("Reset at {at} first", { at: `${prefix}${used ? inRoute.acquire : option.acquire}` }))}` : ""}</span>${used ? `<span class="pl-pick-used">${html("Used in current route")}</span>` : ""}${option.meets ? "" : `<span class="pl-below-goal">${html("Below goal")}</span>`}<span class="pl-save-toggle${saved ? " is-saved" : ""}">${ICON_BOOKMARK}${html(saved ? "Saved pick" : "Save pick")}</span></span><span class="pl-finish-result">${resultMarkup(option, { stream }, target)}</span></button>`;
     }).join("");
-    const savedRows = picks.map((pick) => savedPickRow(target, stream, pick, 'data-pl-action="draft-remove-pick"')).join("");
+    const savedRows = picks.map((pick) => savedPickRow(target, stream, pick, 'data-pl-action="draft-remove-pick"', 'data-pl-action="draft-route-pick"')).join("");
     const summary = list.options ? pl("{shown} matching finishes · searched {from}–{to} · {saved} saved", { shown: filtered.length, from: list.loadedFrom, to: list.loadedTo, saved: picks.length }) : pl("Search every finish in the roll range, filtered by the chosen row.");
     return `<div class="pl-browser-search"><label>${html("Stream")}<select data-pl-finish-stream>${["bonus", "skill"].map((value) => `<option value="${value}"${stream === value ? " selected" : ""}>${html(value === "bonus" ? "Bonus rolls" : "Skill rolls")}</option>`).join("")}</select></label><div class="pl-browser-range"><label>${html("From roll")}<input type="number" min="1" max="10000" step="1" data-browser-range="from" value="${list.from}"></label><span>–</span><label>${html("To roll")}<input type="number" min="1" max="10000" step="1" data-browser-range="to" value="${list.to}"></label></div><button type="button" class="secondary" data-pl-action="search-finishes">${html("Search")}</button>${list.loading ? `<button type="button" class="text-button" data-pl-action="cancel-finish-search">${html("Cancel search")}</button>` : ""}</div><p class="pl-fine">${html("Roll numbers start at the current saved position. A Keep finish may need an earlier Reset.")}</p>${picks.length ? `<details class="pl-browser-favorites"><summary>${html("Saved picks ({n})", { n: picks.length })}</summary><ul class="pl-saved-picks">${savedRows}</ul></details>` : ""}<div class="pl-browser-controls">${filterRows}<div class="pl-sort"><span class="pl-sort-label">${html("Sort")}</span><div class="pl-sort-row">${sortChips}${unusedSorts.length ? `<button type="button" class="pl-sort-add" data-pl-action="sort-menu" aria-haspopup="true" aria-expanded="${sortMenuOpen}">＋ ${html("Sort")}</button>` : ""}</div>${sortMenu}</div></div>${filterHint}<p class="pl-fine" role="status">${list.loading ? html("Checking other finishes for {name}…", { name: nameOf(target) }) : esc(summary)}${list.complete === false ? ` · ${html("Showing the best {cap} of {total} by this sort. Narrow the range or add filters to see the rest.", { cap: list.options.length, total: list.total })}` : ""}</p>${list.error ? `<p class="error" role="alert">${esc(list.error)}</p>` : ""}${list.options && !current ? `<p class="pl-browser-warning">${html("Goals or saved position changed. Search again to refresh these finishes. Your saved picks are kept.")}</p>` : ""}<div class="pl-finish-list">${items || (!list.loading && list.options ? `<p class="pl-fine">${html("No finishes match these filters. Your saved picks are kept.")}</p>` : "")}</div>${filtered.length > list.visible ? `<button type="button" class="secondary" data-pl-action="more-finishes">${html("Show more finishes")}</button>` : ""}<p class="pl-fine pl-browser-save-note">${html("Save weapon to keep your goals and saved picks. Build guides separately when you are ready.")}</p>`;
   }
@@ -766,6 +774,18 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     finishList.error = "";
     if (!setRowChips(row, chips)) return;
     filterEditing = null; finishList.visible = 50; refreshFinishes();
+  }
+  // Choosing the pick a weapon's route uses (again: back to any saved pick).
+  // From the route itself the guides are rebuilt at once.
+  function setRoutePick(targetId, stream, id, rebuild) {
+    const raw = getTargets().find((target) => target.id === targetId);
+    if (!raw || !["bonus", "skill"].includes(stream)) return;
+    const planner = normalizedPlanner(raw);
+    if (!planner.routePick) return;
+    planner.routePick[stream] = planner.routePick[stream] === id ? null : id;
+    setTargets(getTargets().map((target) => target.id === targetId ? { ...raw, planner } : target));
+    if (rebuild) build({ preventDefault() {} });
+    else { invalidate(); renderWeapons(); }
   }
   function removeSavedPick(targetId, stream, id) {
     const raw = getTargets().find((target) => target.id === targetId);
@@ -912,6 +932,8 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     else if (action === "filter-remove") { const { row } = button.dataset; const chips = rowChips(row).filter((_, index) => index !== Number(button.dataset.index)); if (setRowChips(row, chips)) { finishList.visible = 50; refreshFinishes(); } }
     else if (action === "filter-apply") applyBrowserFilter();
     else if (action === "filter-cancel") { filterEditing = null; renderFinishModal(); }
+    else if (action === "route-pick") setRoutePick(button.dataset.id, button.dataset.stream, button.dataset.pick, button.dataset.rebuild === "true");
+    else if (action === "draft-route-pick") { const planner = editorTarget.planner; planner.routePick ??= { bonus: null, skill: null }; planner.routePick[finishList.stream] = planner.routePick[finishList.stream] === button.dataset.pick ? null : button.dataset.pick; renderFinishModal(); }
     else if (action === "draft-remove-pick") { editorTarget.planner.savedFinishes[finishList.stream] = editorTarget.planner.savedFinishes[finishList.stream].filter((pick) => savedFinishId(pick) !== button.dataset.pick); renderFinishModal(); }
     else if (action === "wsort-add") { cache.weaponSort = "newTop"; persist(); renderWeapons(); q("#pl-weapon-sort .pl-sort-chip button")?.focus(); }
     else if (action === "wsort-flip") { cache.weaponSort = cache.weaponSort === "newTop" ? "newBottom" : "newTop"; persist(); renderWeapons(); q("#pl-weapon-sort .pl-sort-chip button")?.focus(); }

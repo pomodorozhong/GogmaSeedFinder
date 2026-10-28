@@ -237,6 +237,16 @@ incomplete top-desired route.
 
 The card shows the saved results and marks the one **Used in current route**,
 with any earlier Reset the route takes for it.
+
+With two or more saved picks in a stream, each one has a **Use for route**
+toggle (on the weapon card, in the Finishes tab, and on step 04's Finish card).
+The chosen pick, stored with the weapon as `planner.routePick`, becomes the
+only alternative the route may use, even when another saved pick would finish
+sooner; clicking it again (**Chosen for route**) lets the route choose among
+all saved picks. A choice that is no longer usable (passed, outside the roll
+limit, or no longer predicted) falls back to every saved pick, and removing
+the pick clears the choice. On the weapon card the choice waits for **Build
+guides**; on step 04's Finish card it rebuilds the guides at once.
 Goal edits and adding or removing other weapons keep the collections.
 Incompatible picks remain visible with their reason, such as a changed seed,
 an unmet goal, a passed roll, or a roll beyond the limit. A build that cannot

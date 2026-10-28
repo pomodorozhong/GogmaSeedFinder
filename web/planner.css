@@ -99,6 +99,10 @@
 .pl-saved-pick small { display: block; color: #e8b768; }
 .pl-saved-pick .text-button { flex: none; min-width: 30px; min-height: 30px; padding: 0 4px; font-size: 1.1rem; }
 .pl-pick-used { display: block; color: var(--pl-teal); font-size: 0.7rem; }
+.pl-saved-pick .pl-route-toggle { display: inline-flex; align-items: center; min-height: 0; height: 24px; margin-top: 4px; padding: 0 10px; color: var(--pl-teal); background: none; border: 1px dashed var(--pl-teal); border-radius: 999px; font: inherit; font-size: 0.72rem; cursor: pointer; }
+.pl-saved-pick .pl-route-toggle[aria-pressed="true"] { border-style: solid; background: var(--pl-teal-bg); font-weight: 600; }
+.pl-saved-pick .pl-route-toggle[aria-pressed="true"]::before { content: "✓ "; white-space: pre; }
+.pl-finish-card .pl-saved-picks { margin-top: 2px; }
 .pl-finish-where .pl-pick-used { display: inline; }
 .pl-below-goal { color: var(--muted); font-size: 0.7rem; }
 .pl-finish-option[data-below-goal] { opacity: 0.72; }

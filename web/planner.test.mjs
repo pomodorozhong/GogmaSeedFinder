@@ -1010,6 +1010,31 @@ test("rerouting chooses among saved alternatives and keeps them when editing goa
   assert.deepEqual(a.planner.savedFinishes.bonus.map(savedFinishId), b.planner.savedFinishes.bonus.map(savedFinishId));
 });
 
+test("a saved pick chosen for the route is used even when another saved pick is shorter", async () => {
+  const weapon = easyWeapon("a");
+  const req = request([weapon], 16, 0);
+  const options = (await collectFinishOptions(req, "bonus", weapon.id, provider(req))).options.filter((option) => option.meets && option.action === "reset");
+  const picks = [options[0], options.at(-1)];
+  assert.ok(picks[0].finish < picks[1].finish);
+  saveOptions(weapon, "bonus", picks, req.origin);
+  weapon.planner = normalizedPlanner(weapon);
+  assert.deepEqual(weapon.planner.routePick, { bonus: null, skill: null });
+  assert.equal(keyOf((await planWeapons(req, provider(req))).acceptable.bonus.choices[0]), picks[0].key, "without a choice the shortest pick wins");
+  weapon.planner.routePick.bonus = savedFinishId(weapon.planner.savedFinishes.bonus[1]);
+  weapon.planner = normalizedPlanner(weapon);
+  const chosen = (await planWeapons(req, provider(req))).acceptable;
+  assert.ok(chosen.complete);
+  assert.equal(keyOf(chosen.bonus.choices[0]), picks[1].key);
+  assert.deepEqual(chosen.savedConflicts, []);
+  // A choice that no longer names a saved pick is dropped.
+  weapon.planner.savedFinishes.bonus.pop();
+  assert.equal(normalizedPlanner(weapon).routePick.bonus, null);
+  // A chosen pick beyond the roll limit falls back to the other saved picks.
+  weapon.planner.savedFinishes.bonus.push(savedFinishFromOption(weapon, "bonus", picks[1], req.origin));
+  const limited = { ...req, limits: { ...req.limits, bonus: picks[0].finish } };
+  assert.equal(keyOf((await planWeapons(limited, provider(limited))).acceptable.bonus.choices[0]), picks[0].key);
+});
+
 test("incompatible saved sets report a conflict instead of silently falling back or deleting picks", async () => {
   const weapon = easyWeapon("a"); const req = request([weapon], 12, 0);
   const option = (await collectFinishOptions(req, "bonus", weapon.id, provider(req))).options.find((value) => value.meets && value.action === "reset");

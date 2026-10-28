@@ -1,4 +1,4 @@
-import { bonusGoalAlwaysMet, bonusTotals, finishOptionMatches, hasGoal, layoutOf, matchesTier, rangeCanMatch, resultQuality, savedFinishChoice, skillGoalAlwaysMet, sortFinishOptions, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { bonusGoalAlwaysMet, bonusTotals, finishOptionMatches, hasGoal, layoutOf, matchesTier, rangeCanMatch, resultQuality, savedFinishChoice, savedFinishId, skillGoalAlwaysMet, sortFinishOptions, validLayout, validatePlannerRequest } from "./planner-model.js";
 
 const MODES = ["acceptable", "preferred"];
 const pause = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -241,20 +241,25 @@ export async function optimizeStream(targets, limit, complete = true, options = 
 const choiceKey = (choice) => `${choice.action}:${choice.finish}:${choice.layout ? layoutKey(choice.layout) : ""}`;
 
 // A weapon's saved options are alternatives: choose one, and never fall back
-// to automatic results while a nonempty saved collection exists.
+// to automatic results while a nonempty saved collection exists. A pick the
+// player chose for the route is the only option while it is still usable.
 function savedChoiceSets(request, provider) {
   return Object.fromEntries(["bonus", "skill"].map((stream) => [stream, new Map(request.targets
     .filter((target) => hasGoal(target, stream) && target.planner.savedFinishes?.[stream]?.length)
-    .map((target) => [target.id, new Set(target.planner.savedFinishes[stream].flatMap((pick) => {
-      const choice = savedFinishChoice(target, stream, pick, request.origin);
-      if (!choice.key || choice.finish > request.limits[stream]) return [];
-      if (choice.status === "pending") {
-        const predicted = stream === "skill" ? provider.skills(target, choice.finish - 1, 1)[0]
-          : Array.from(pick.action === "keep" ? provider.keep(target, choice.finish - 1, 1, pick.layout) : provider.reset(target, choice.finish - 1, 1));
-        if (JSON.stringify(predicted) !== JSON.stringify(pick.raw)) return [];
-      }
-      return [choice.key];
-    }))]))]));
+    .map((target) => {
+      const usable = target.planner.savedFinishes[stream].flatMap((pick) => {
+        const choice = savedFinishChoice(target, stream, pick, request.origin);
+        if (!choice.key || choice.finish > request.limits[stream]) return [];
+        if (choice.status === "pending") {
+          const predicted = stream === "skill" ? provider.skills(target, choice.finish - 1, 1)[0]
+            : Array.from(pick.action === "keep" ? provider.keep(target, choice.finish - 1, 1, pick.layout) : provider.reset(target, choice.finish - 1, 1));
+          if (JSON.stringify(predicted) !== JSON.stringify(pick.raw)) return [];
+        }
+        return [{ id: savedFinishId(pick), key: choice.key }];
+      });
+      const chosen = usable.find((pick) => pick.id === target.planner.routePick?.[stream]);
+      return [target.id, new Set((chosen ? [chosen] : usable).map((pick) => pick.key))];
+    }))]));
 }
 
 // Browsing is independent of a built route and the weapon's goal: it lists

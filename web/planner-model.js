@@ -197,6 +197,7 @@ export function normalizedPlanner(target) {
     for (const key of legacyExcluded) if (availableStats(target).includes(key)) { delete mins[key]; maxs[key] = 0; }
     return { stats: mins, maxStats: maxs, skills: pairs(value?.skills, fallbackSkills) };
   };
+  const savedFinishes = saved.savedFinishes ? normalizedSavedFinishes(target) : undefined;
   const values = Array.isArray(saved.elementValues) && saved.elementValues.length === 2 ? saved.elementValues.map((v) => Number.isFinite(v) && v >= 0 ? v : null) : [null, null];
   return {
     bonusEnabled: saved.bonusEnabled !== false,
@@ -207,7 +208,11 @@ export function normalizedPlanner(target) {
     currentBonuses: validBonuses(saved.currentBonuses, target) ? saved.currentBonuses : null,
     currentSkill: Number.isInteger(saved.currentSkill) && saved.currentSkill >= 0 && saved.currentSkill < 294 ? saved.currentSkill : null,
     elementValues: values,
-    savedFinishes: saved.savedFinishes ? normalizedSavedFinishes(target) : undefined,
+    savedFinishes,
+    // The saved pick the player chose for the route, per stream; null lets
+    // the route choose among the saved picks.
+    routePick: savedFinishes ? Object.fromEntries(["bonus", "skill"].map((stream) => [stream,
+      savedFinishes[stream].some((pick) => savedFinishId(pick) === saved.routePick?.[stream]) ? saved.routePick[stream] : null])) : undefined,
   };
 }
 
