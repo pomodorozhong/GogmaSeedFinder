@@ -263,12 +263,19 @@ function savedChoiceSets(request, provider) {
 // the goal. Keep finishes may use a Reset before the range. Saving a result
 // from this list does not schedule or execute anything.
 export async function collectFinishOptions(request, stream, targetId, provider, report = () => {}, options = {}) {
-  validatePlannerRequest(request);
+  // Browsing needs a position and a weapon, not a complete goal: a player may
+  // clear every goal filter to see all rolls.
+  const { origin, limits } = request;
+  if (!["bonus", "skill"].includes(stream)) throw new Error("goals");
+  if (!Number.isInteger(origin?.baseSeed) || origin.baseSeed < 0 || origin.baseSeed > 99_999_999) throw new Error("state");
+  const count = limits?.[stream];
+  if (!Number.isInteger(count) || count < 1 || count > 10_000) throw new Error("limits");
+  const counter = origin[`${stream}Counter`];
+  if (!Number.isInteger(counter) || counter < 0 || counter + count > 0xffffffff) throw new Error("state");
   const from = options.from ?? 1;
-  const count = request.limits[stream];
   if (!Number.isInteger(from) || from < 1 || from > count) throw new Error("range");
-  const target = request.targets.find((value) => value.id === targetId);
-  if (!target || !["bonus", "skill"].includes(stream)) throw new Error("goals");
+  const target = request.targets?.find((value) => value.id === targetId);
+  if (!target || !Number.isInteger(target.weaponType) || target.weaponType < 0 || target.weaponType > 13 || !Number.isInteger(target.attributeForce) || target.attributeForce < 0 || target.attributeForce > 9) throw new Error("targets");
   const cap = options.cap ?? 50_000;
   // Saved-pick membership is the browser's to judge.
   const filters = (options.filters ?? []).filter((filter) => filter.key !== "saved");

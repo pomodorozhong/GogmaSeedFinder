@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import { initSync, predict_gogma_rolls, predict_gogma_keep_rolls, predict_skill_rolls } from "./pkg/gogma_wasm_search.js";
-import { availableStats, BONUS_CATEGORY, DEFAULT_FINISH_SORT, finishOptionMatches, goalFinishFilters, goalFinishSort, syncGoalFilters, sortFinishOptions, bonusGoalAlwaysMet, bonusTotals, canFillSlots, copiedPlanner, layoutOf, MAX_SELECTED, migrateSavedFinishes, rangeCanMatch, matchesTier, normalizedFinishSort, normalizedPlanner, normalizedProgress, parsePlannerExport, plannerExport, routePosition, savedFinishChoice, savedFinishFromOption, savedFinishId, streamSteps, resultQuality, routeWeaponsMatch, skillGoalMatches, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { availableStats, BONUS_CATEGORY, DEFAULT_FINISH_SORT, filtersToTier, finishOptionMatches, goalFinishSort, rowFilters, tierFinishFilters, sortFinishOptions, bonusGoalAlwaysMet, bonusTotals, canFillSlots, copiedPlanner, layoutOf, MAX_SELECTED, migrateSavedFinishes, rangeCanMatch, matchesTier, normalizedFinishSort, normalizedPlanner, normalizedProgress, parsePlannerExport, plannerExport, routePosition, savedFinishChoice, savedFinishFromOption, savedFinishId, streamSteps, resultQuality, routeWeaponsMatch, skillGoalMatches, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
 import { collectFinishOptions, finishOptions, optimizeStream, pinFinish, planWeapons, recalcWithFinish, selectTargets } from "./planner-engine.js";
 
 initSync({ module: await readFile(new URL("./pkg/gogma_wasm_search_bg.wasm", import.meta.url)) });
@@ -1082,45 +1082,49 @@ test("finish filters combine bounds, actions and favorites without changing goal
   assert.deepEqual(weapon, before);
 });
 
-test("finish search lists every roll; goal bounds become editable filters that follow goal edits", async () => {
+test("finish search lists every roll; each goal tier is a row of filters that maps back to the goal", async () => {
   const weapon = easyWeapon("goal-filters");
   weapon.planner.acceptable = { stats: { attack: 24 }, maxStats: { affinity: 6 }, skills: [] };
   weapon.planner.preferred = { stats: { attack: 30, affinity: 4 }, maxStats: { affinity: 10 }, skills: [] };
-  // Either tier is acceptable, so each filter takes the loosest shared bound.
-  const goal = goalFinishFilters(weapon, "bonus");
-  assert.deepEqual(goal, [{ key: "attack", min: 24, max: null }, { key: "affinity", min: null, max: 10 }]);
-  const req = request([weapon], 30, 0);
+  const ok = tierFinishFilters(weapon, "acceptable", "bonus");
+  const top = tierFinishFilters(weapon, "preferred", "bonus");
+  assert.deepEqual(ok, [{ key: "attack", min: 24, max: null }, { key: "affinity", min: null, max: 6 }]);
+  assert.deepEqual(top, [{ key: "attack", min: 30, max: null }, { key: "affinity", min: 4, max: 10 }]);
+  // A row maps back to exactly its tier; filters a goal cannot hold are named.
+  assert.deepEqual(filtersToTier(top, "bonus"), { stats: weapon.planner.preferred.stats, maxStats: weapon.planner.preferred.maxStats, skipped: [] });
+  assert.deepEqual(filtersToTier([...ok, { key: "action", value: "keep" }, { key: "saved" }], "bonus").skipped, ["action", "saved"]);
+
   // With no filters every roll is listed, including results below the goal.
+  const req = request([weapon], 30, 0);
   const all = await collectFinishOptions(req, "bonus", weapon.id, provider(req));
   assert.ok(all.complete);
   assert.ok(all.options.some((option) => !option.meets));
   for (let finish = 1; finish <= 30; finish += 1) assert.ok(all.options.some((option) => option.action === "reset" && option.finish === finish));
-  // The goal's chips hide nothing the goal allows, and run inside the search.
-  const meeting = all.options.filter((option) => option.meets);
-  assert.ok(meeting.length && meeting.every((option) => finishOptionMatches(option, goal)));
-  const filtered = await collectFinishOptions(req, "bonus", weapon.id, provider(req), () => {}, { filters: goal });
-  assert.deepEqual(filtered.options.map((option) => option.key), all.options.filter((option) => finishOptionMatches(option, goal)).map((option) => option.key));
+  // Each row's filters run inside the search; the OK row keeps what meets it.
+  const filtered = await collectFinishOptions(req, "bonus", weapon.id, provider(req), () => {}, { filters: rowFilters(ok) });
+  assert.deepEqual(filtered.options.map((option) => option.key), all.options.filter((option) => finishOptionMatches(option, ok)).map((option) => option.key));
+  assert.ok(filtered.options.every((option) => option.meets));
+  // Browsing works with an empty goal, so every row may be cleared.
+  weapon.planner.acceptable = { stats: {}, maxStats: {}, skills: [] }; weapon.planner.preferred = { stats: {}, maxStats: {}, skills: [] };
+  const empty = await collectFinishOptions(req, "bonus", weapon.id, provider(req));
+  assert.equal(empty.total, all.total);
+  assert.ok(empty.options.every((option) => !option.meets && !option.top));
   // A capped search keeps the best results by the browser's sort.
-  const sort = [{ key: "attack", dir: "desc" }];
-  const capped = await collectFinishOptions(req, "bonus", weapon.id, provider(req), () => {}, { sort, cap: 5 });
+  const capped = await collectFinishOptions(req, "bonus", weapon.id, provider(req), () => {}, { sort: [{ key: "attack", dir: "desc" }], cap: 5 });
   assert.equal(capped.complete, false);
   assert.equal(capped.total, all.options.length);
   assert.deepEqual(capped.options.map((option) => option.totals.attack), all.options.map((option) => option.totals.attack).sort((x, y) => y - x).slice(0, 5));
 
-  // The player's narrowed attack filter and removed affinity filter survive an
-  // unrelated goal edit; a changed bound resets only its own filter.
-  const narrowed = [{ key: "attack", min: 27, max: null }, { key: "action", value: "keep" }];
-  weapon.planner.acceptable.stats.element = 3; weapon.planner.preferred.stats.element = 5;
-  const withElement = goalFinishFilters(weapon, "bonus");
-  assert.deepEqual(syncGoalFilters(narrowed, goal, withElement), [...narrowed, { key: "element", min: 3, max: null }]);
-  weapon.planner.acceptable.stats.attack = 30;
-  assert.deepEqual(syncGoalFilters(narrowed, goal, goalFinishFilters(weapon, "bonus")).find((filter) => filter.key === "attack"), { key: "attack", min: 30, max: null });
-  assert.deepEqual(syncGoalFilters([], [], goal), goal);
-
+  // Skill pairs are alternatives: one chip each, combined into one filter.
   weapon.planner.skillEnabled = true;
-  weapon.planner.acceptable.skills = [{ seriesIndex: 0, groupIndex: 3 }, { seriesIndex: 0, groupIndex: null }];
-  weapon.planner.preferred.skills = [];
-  assert.deepEqual(goalFinishFilters(weapon, "skill"), [{ key: "series", value: 0 }]);
+  weapon.planner.acceptable.skills = [{ seriesIndex: 0, groupIndex: 3 }, { seriesIndex: 2, groupIndex: null }];
+  const pairs = tierFinishFilters(weapon, "acceptable", "skill");
+  assert.deepEqual(pairs, [{ key: "pair", seriesIndex: 0, groupIndex: 3 }, { key: "pair", seriesIndex: 2, groupIndex: null }]);
+  const combined = rowFilters(pairs);
+  assert.ok(finishOptionMatches({ raw: 3 }, combined));
+  assert.ok(finishOptionMatches({ raw: 2 * 14 + 9 }, combined));
+  assert.equal(finishOptionMatches({ raw: 4 }, combined), false);
+  assert.deepEqual(filtersToTier([...pairs, { key: "series", value: 5 }], "skill").skills, [...weapon.planner.acceptable.skills, { seriesIndex: 5, groupIndex: null }]);
 });
 
 test("skill browsing filters keep series and group indices separate, including index zero", () => {

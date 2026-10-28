@@ -173,33 +173,48 @@ Finishes in the same modal. The cards retain their existing summaries.
 
 Both tabs share a draft. Goals contains the existing stat bounds, skill pairs,
 and current-weapon fields. Finishes lists every result in a roll range,
-whether or not it meets the goal, and lets the player choose the bonus or skill stream, an inclusive From/To roll range,
-filter chips, and ordered sorting chips. Roll positions are relative to the
+whether or not it meets the goal, and lets the player choose the bonus or
+skill stream, an inclusive From/To roll range, filter rows, and ordered
+sorting chips. Roll positions are relative to the
 current saved stream counter. The range limits finish positions; Keep
 acquisitions before the range are still considered and displayed. Browsing
 ranges do not change Stage 2's route limits.
 
 Each result shows its roll, action, gains or skill pair, any Reset needed
-for a Keep layout, and **Below goal** when it meets neither goal tier. A bookmark **Save pick** control toggles it in the draft
+for a Keep layout, and **Below goal** when it meets neither goal tier. A
+bookmark **Save pick** control toggles it in the draft
 (the gold star still means only top desired). A **Saved picks** section
 retains every saved option, including those hidden by the current range or
 filters, each with the same warnings as the weapon card. A result the current
 route finishes on is marked **Used in current route**, separately from whether
-it is saved. Filter chips can narrow by top desired, saved picks, action,
-whether an earlier Reset is needed, stat bounds, or series/group skills.
-These filters never rewrite the weapon's goals or remove hidden saved picks.
-The draft goal's own stat bounds (and a series or group every acceptable
-skill pair shares) start as filter chips, using the loosest bound the
-acceptable tiers share so they hide nothing the goal allows. Narrow or remove
-them to inspect results; a later goal edit resets only the chips whose goal
-bound changed. The chips are the search's only criteria: with none, every
-Reset, Keep and skill result in the range is listed, and changing a chip
-searches again. A search returns at most 50,000 results; beyond that it keeps
-the best by the current sort and says how many matched, so narrow the range
-or add filters to see the rest. A saved pick that does not meet the goal
-stays saved with its warning and is not used by a route. A changed saved
-position marks old search results as stale; search again before adding picks
-from those results.
+it is saved.
+
+The filters are three rows of chips, and the row whose name is chosen
+filters the list:
+
+- **★ Top** (amber) and **✓ OK** (teal) are the draft's Top desired and
+  Acceptable goals. Each stat bound is a chip, such as Attack ≥ 36; each skill
+  pair is a chip, and pairs are alternatives ("or"), as in the goal. Adding,
+  editing or removing a chip edits that goal in the draft (the Goals tab shows
+  the change), so these rows never drift from the goals. A bound the weapon
+  cannot reach is rejected and the goal is left as it was. OK is the default
+  row.
+- **Trying** (dashed) appears after **Try changes** on a goal row and starts
+  as a copy of it. It changes no goal, and can also hold filters a goal cannot:
+  top desired only, saved picks only, action, and no Reset needed. **Apply to
+  OK** or **Apply to Top** replaces that goal with the row's goal chips and
+  says which other chips were not applied; **Discard** removes the row and
+  returns to the row it came from.
+
+The chosen row is the search's only criteria: with no chips, every Reset,
+Keep and skill result in the range is listed, and changing a chip or the row
+searches again. Browsing allows empty goals, but Save weapon still requires a
+goal. Hidden saved picks stay saved. A search returns at most 50,000 results;
+beyond that it keeps the best by the current sort and says how many matched,
+so narrow the range or add filters to see the rest. A saved pick that does
+not meet the goal stays saved with its warning and is not used by a route. A
+changed saved position marks old search results as stale; search again
+before adding picks from those results.
 
 **Save weapon** (or **Add weapon**) commits the goals and saved picks together.
 Switching tabs preserves their draft; Cancel, Escape, or closing the modal

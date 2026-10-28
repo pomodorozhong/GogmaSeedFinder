@@ -444,40 +444,48 @@ export function finishOptionMatches(option, filters, saved = false) {
     if (filter.key === "direct") return !option.acquire;
     if (filter.key === "series") return Math.floor(option.raw / 14) === filter.value;
     if (filter.key === "group") return option.raw % 14 === filter.value;
+    if (filter.key === "pairs") return skillGoalMatches(option.raw, filter.pairs);
     const value = option.totals?.[filter.key];
     return Number.isFinite(value) && (filter.min === null || value >= filter.min) && (filter.max === null || value <= filter.max);
   });
 }
 
-// The goal's own bounds as browsing filters: the loosest bound every
-// acceptable tier shares, so they hide nothing the goal allows and the
-// player can narrow them without changing the goal.
-export function goalFinishFilters(target, stream) {
-  if (!hasGoal(target, stream)) return [];
-  const tiers = tiersFor(target, stream, "acceptable");
-  if (stream === "skill") {
-    const pairs = tiers.flatMap((tier) => tier.skills);
-    return [["series", "seriesIndex"], ["group", "groupIndex"]].flatMap(([key, field]) => {
-      const values = new Set(pairs.map((pair) => pair[field]));
-      return pairs.length && values.size === 1 && pairs[0][field] !== null ? [{ key, value: pairs[0][field] }] : [];
-    });
-  }
+// One goal tier as a row of browsing filter chips: one per stat bound, or
+// one per skill pair (see rowFilters for how pairs combine).
+export function tierFinishFilters(target, tier, stream) {
+  const goal = target.planner[tier];
+  if (stream === "skill") return goal.skills.map((pair) => ({ key: "pair", seriesIndex: pair.seriesIndex, groupIndex: pair.groupIndex }));
   return availableStats(target).flatMap((key) => {
-    const mins = tiers.map((tier) => tier.stats[key]);
-    const maxs = tiers.map((tier) => tier.maxStats?.[key]);
-    const min = mins.every((value) => value > 0) ? Math.min(...mins) : null;
-    const max = maxs.every(Number.isInteger) ? Math.max(...maxs) : null;
+    const min = goal.stats[key] ?? null;
+    const max = goal.maxStats[key] ?? null;
     return min === null && max === null ? [] : [{ key, min, max }];
   });
 }
 
-// Brings goal-derived filters up to date after a goal edit. A filter whose
-// goal bound changed is reset to it; the player's edits and removals of
-// unchanged ones stay, as do filters the goal does not cover.
-export function syncGoalFilters(filters, previous, next) {
-  const bound = (list, key) => JSON.stringify(list.find((filter) => filter.key === key) ?? null);
-  const changed = new Set([...previous, ...next].map((filter) => filter.key).filter((key) => bound(previous, key) !== bound(next, key)));
-  return [...filters.filter((filter) => !changed.has(filter.key)), ...next.filter((filter) => changed.has(filter.key)).map((filter) => ({ ...filter }))];
+// A row's chips as search criteria. Every chip must match, except skill
+// pairs, which are alternatives like the goal's pairs.
+export function rowFilters(chips) {
+  const pairs = chips.filter((chip) => chip.key === "pair");
+  return [...chips.filter((chip) => chip.key !== "pair"), ...(pairs.length ? [{ key: "pairs", pairs: pairs.map(({ seriesIndex, groupIndex }) => ({ seriesIndex, groupIndex })) }] : [])];
+}
+
+// The goal a row of filters describes. Filters a goal cannot hold (top,
+// saved, action, Reset) are returned separately rather than dropped silently.
+export function filtersToTier(filters, stream) {
+  const skipped = filters.filter((filter) => ["top", "saved", "action", "direct"].includes(filter.key)).map((filter) => filter.key);
+  if (stream === "skill") {
+    const pairs = filters.filter((filter) => filter.key === "pair").map(({ seriesIndex, groupIndex }) => ({ seriesIndex, groupIndex }));
+    const half = (key) => filters.find((filter) => filter.key === key)?.value ?? null;
+    if (half("series") !== null || half("group") !== null) pairs.push({ seriesIndex: half("series"), groupIndex: half("group") });
+    return { skills: pairs, skipped };
+  }
+  const stats = {}; const maxStats = {};
+  for (const filter of filters) {
+    if (!Object.hasOwn(filter, "min") || filter.key === "pair") continue;
+    if (filter.min !== null) stats[filter.key] = filter.min;
+    if (filter.max !== null) maxStats[filter.key] = filter.max;
+  }
+  return { stats, maxStats, skipped };
 }
 
 // A weapon's default finish sort follows its bonus goal: each stat with a

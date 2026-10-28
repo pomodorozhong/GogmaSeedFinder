@@ -1,6 +1,6 @@
 import { t, localizedTargetName } from "./i18n.js";
 import { pl } from "./planner-text.js";
-import { availableStats, BONUS_CATEGORY, bonusTotals, FINISH_SORT_KEYS, finishOptionMatches, goalFinishFilters, goalFinishSort, sortFinishOptions, syncGoalFilters, copiedPlanner, hasBonusGoal, hasGoal, layoutOf, matchesTier, MAX_SELECTED, migrateSavedFinishes, normalizedFinishSort, normalizedPlanner, normalizedProgress, parsePlannerExport, plannerExport, routePosition, routeWeaponsMatch, samePosition, savedFinishChoice, savedFinishFromOption, savedFinishId, statMaximum, statRollValues, streamSteps, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { availableStats, BONUS_CATEGORY, bonusTotals, FINISH_SORT_KEYS, filtersToTier, finishOptionMatches, goalFinishSort, rowFilters, sortFinishOptions, tierFinishFilters, copiedPlanner, hasBonusGoal, hasGoal, layoutOf, matchesTier, MAX_SELECTED, migrateSavedFinishes, normalizedFinishSort, normalizedPlanner, normalizedProgress, parsePlannerExport, plannerExport, routePosition, routeWeaponsMatch, samePosition, savedFinishChoice, savedFinishFromOption, savedFinishId, statMaximum, statRollValues, streamSteps, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
 
 const STORAGE_KEY = "gogma-weapon-planner-v1";
 const ICON_EDIT = `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 2.5l3 3L5 14H2v-3z"/></svg>`;
@@ -323,7 +323,8 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     while (getTargets().some((v) => nameOf(v) === label)) label = `${baseName} ${++count}`;
     return label;
   }
-  function readEditorTarget() {
+  // Browsing may leave a goal empty (to list every roll); saving still checks it.
+  function readEditorTarget({ validate = true } = {}) {
     const form = q("#pl-goal-form");
     if ([...form.querySelectorAll("#pl-goals-panel input, #pl-goals-panel select, [name=label]")].some((input) => !input.checkValidity())) throw new Error(pl("Check the goal fields before continuing."));
     const target = { ...editorTarget, planner: normalizedPlanner(editorTarget) };
@@ -353,7 +354,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
         }
       }
       // Validate goals without requiring a discovered seed in the editor.
-      validatePlannerRequest({ origin: { baseSeed: 0, bonusCounter: 0, skillCounter: 0 }, targets: [target], limits: { bonus: 0, skill: 0 } });
+      if (validate) validatePlannerRequest({ origin: { baseSeed: 0, bonusCounter: 0, skillCounter: 0 }, targets: [target], limits: { bonus: 0, skill: 0 } });
     return target;
   }
   function editorError(error) {
@@ -551,16 +552,14 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     if (!editorTarget) return;
     if (tab === "finishes") {
       try {
-        editorTarget = readEditorTarget();
+        editorTarget = readEditorTarget({ validate: false });
         if (draft?.id === editing) draft = editorTarget;
       } catch (error) { editorError(error); return; }
       const nextStream = stream ?? finishList?.stream ?? (editorTarget.planner.bonusEnabled ? "bonus" : "skill");
       if (finishList?.stream !== nextStream) stopFinishSearch();
-      finishList = finishViews[nextStream] ??= { stream: nextStream, from: 1, to: Math.max(1, cache.limits[nextStream]), filters: [], goalFilters: [], visible: 50, options: null, error: "" };
-      // The Goals tab's bounds start as this tab's filters and follow later goal edits.
-      const goalFilters = goalFinishFilters(editorTarget, nextStream);
-      finishList.filters = syncGoalFilters(finishList.filters, finishList.goalFilters, goalFilters);
-      finishList.goalFilters = goalFilters;
+      // The Top and OK rows are the draft goals themselves; "trying" is a
+      // temporary row that changes no goal until it is applied.
+      finishList = finishViews[nextStream] ??= { stream: nextStream, from: 1, to: Math.max(1, cache.limits[nextStream]), active: "acceptable", trying: null, notice: "", visible: 50, options: null, error: "" };
     }
     editorTab = tab;
     q("#pl-editor .section-heading .pl-muted").textContent = nameOf(editorTarget);
@@ -587,26 +586,42 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const unusedSorts = keys.filter((key) => !levels.some((level) => level.key === key));
     const sortChips = levels.map((level, index) => `<span class="pl-sort-chip"><button type="button" data-pl-action="sort-flip" data-index="${index}" aria-label="${html("Sort level {n}: {name}, {direction}. Click to reverse.", { n: index + 1, name: sortName(level.key), direction: pl(level.dir === "desc" ? "High first" : "Low first") })}">${esc(sortName(level.key))} ${level.dir === "desc" ? "↓" : "↑"}</button><button type="button" class="pl-sort-remove" data-pl-action="sort-remove" data-index="${index}" aria-label="${html("Remove sort level {n}", { n: index + 1 })}">×</button></span>`).join("");
     const sortMenu = sortMenuOpen ? `<div class="pl-sort-menu" data-browser-menu>${unusedSorts.map((key) => `<button type="button" data-pl-action="sort-pick" data-key="${key}">${esc(sortName(key))}</button>`).join("")}</div>` : "";
-    const filterName = (key) => ({ top: pl("Top desired only"), saved: pl("Saved picks only"), direct: pl("No Reset needed"), action: pl("Action"), series: pl("Series skill"), group: pl("Group skill") })[key] ?? statName(key, target);
+    const filterName = (key) => ({ top: pl("Top desired only"), saved: pl("Saved picks only"), direct: pl("No Reset needed"), action: pl("Action"), series: pl("Series skill"), group: pl("Group skill"), pair: pl("Add combination") })[key] ?? statName(key, target);
     const filterLabel = (filter) => ["top", "saved", "direct"].includes(filter.key) ? filterName(filter.key) : filter.key === "action" ? actionName(filter.value)
-      : filter.key === "series" ? t(series[filter.value]) : filter.key === "group" ? t(groups[filter.value])
+      : filter.key === "series" ? t(series[filter.value]) : filter.key === "group" ? t(groups[filter.value]) : filter.key === "pair" ? pairText([filter])
         : `${filterName(filter.key)} ${filter.min !== null ? `≥ ${filter.min}` : ""}${filter.min !== null && filter.max !== null ? " · " : ""}${filter.max !== null ? `≤ ${filter.max}` : ""}`;
-    const filterKeys = ["top", "saved", ...(stream === "bonus" ? ["action", "direct", ...availableStats(target)] : ["series", "group"])].filter((key) => !list.filters.some((filter) => filter.key === key));
-    const filterChips = list.filters.map((filter, index) => `<span class="pl-sort-chip"><button type="button" data-pl-action="filter-edit" data-index="${index}">${esc(filterLabel(filter))}</button><button type="button" class="pl-sort-remove" data-pl-action="filter-remove" data-index="${index}" aria-label="${html("Remove filter {name}", { name: filterName(filter.key) })}">×</button></span>`).join("");
-    const filterMenu = filterMenuOpen ? `<div class="pl-sort-menu" data-browser-menu>${filterKeys.map((key) => `<button type="button" data-pl-action="filter-pick" data-key="${key}">${esc(filterName(key))}</button>`).join("")}</div>` : "";
-    let bounds = "";
-    if (filterEditing) {
+    const rowKeys = (row, chips) => row !== "trying" ? (stream === "bonus" ? availableStats(target).filter((key) => !chips.some((chip) => chip.key === key)) : ["pair"])
+      : ["top", "saved", ...(stream === "bonus" ? ["action", "direct", ...availableStats(target)] : ["series", "group", "pair"])].filter((key) => key === "pair" || !chips.some((chip) => chip.key === key));
+    const editor = (row) => {
       const f = filterEditing;
+      if (!f || f.row !== row) return "";
       const choices = f.key === "action" ? [["reset", pl("Reset Bonuses")], ["keep", pl("Keep Bonuses")]] : f.key === "series" ? series.map((name, id) => [id, t(name)]) : f.key === "group" ? groups.map((name, id) => [id, t(name)]) : null;
-      bounds = `<div class="pl-browser-filter-edit"><span>${esc(filterName(f.key))}</span>${choices ? `<select data-filter-value aria-label="${esc(filterName(f.key))}">${choices.map(([id, label]) => `<option value="${id}"${String(id) === String(f.value) ? " selected" : ""}>${esc(label)}</option>`).join("")}</select>` : `<input type="number" min="0" step="1" data-filter-min value="${f.min ?? ""}" placeholder="${html("Min")}" aria-label="${html("Filter minimum")}"><span>–</span><input type="number" min="0" step="1" data-filter-max value="${f.max ?? ""}" placeholder="${html("Max")}" aria-label="${html("Filter maximum")}">`}<button type="button" class="text-button" data-pl-action="filter-apply">${html("Apply")}</button><button type="button" class="text-button" data-pl-action="filter-cancel">${html("Cancel")}</button></div>`;
-    }
+      const field = f.key === "pair" ? `<select data-filter-series aria-label="${html("Series skill")}">${pairOptions(series, f.seriesIndex, "Any series skill")}</select><span>＋</span><select data-filter-group aria-label="${html("Group skill")}">${pairOptions(groups, f.groupIndex, "Any group skill")}</select>`
+        : choices ? `<select data-filter-value aria-label="${esc(filterName(f.key))}">${choices.map(([id, label]) => `<option value="${id}"${String(id) === String(f.value) ? " selected" : ""}>${esc(label)}</option>`).join("")}</select>`
+          : `<input type="number" min="0" step="1" data-filter-min value="${f.min ?? ""}" placeholder="${html("Min")}" aria-label="${html("Filter minimum")}"><span>–</span><input type="number" min="0" step="1" data-filter-max value="${f.max ?? ""}" placeholder="${html("Max")}" aria-label="${html("Filter maximum")}">`;
+      return `<div class="pl-browser-filter-edit"><span>${esc(f.key === "pair" ? pl("Skill pair") : filterName(f.key))}</span>${field}<button type="button" class="text-button" data-pl-action="filter-apply">${html("Apply")}</button><button type="button" class="text-button" data-pl-action="filter-cancel">${html("Cancel")}</button></div>`;
+    };
+    const filterRow = (row) => {
+      const chips = rowChips(row);
+      const label = row === "preferred" ? `★ ${pl("Top")}` : row === "acceptable" ? `✓ ${pl("OK")}` : pl("Trying");
+      const keys = rowKeys(row, chips);
+      const chipMarkup = chips.map((chip, index) => `<span class="pl-sort-chip"><button type="button" data-pl-action="filter-edit" data-row="${row}" data-index="${index}">${esc(filterLabel(chip))}</button><button type="button" class="pl-sort-remove" data-pl-action="filter-remove" data-row="${row}" data-index="${index}" aria-label="${html("Remove filter {name}", { name: filterLabel(chip) })}">×</button></span>`).join(stream === "skill" && row !== "trying" ? `<span class="pl-filter-or">${html("or")}</span>` : "");
+      const menu = filterMenuOpen === row ? `<div class="pl-sort-menu" data-browser-menu>${keys.map((key) => `<button type="button" data-pl-action="filter-pick" data-row="${row}" data-key="${key}">${esc(filterName(key))}</button>`).join("")}</div>` : "";
+      const actions = row === "trying" ? `<button type="button" class="pl-sort-add" data-pl-action="trying-apply" data-tier="acceptable">${html("Apply to OK")}</button><button type="button" class="pl-sort-add" data-pl-action="trying-apply" data-tier="preferred">${html("Apply to Top")}</button><button type="button" class="pl-sort-add" data-pl-action="trying-discard">${html("Discard")}</button>`
+        : !list.trying ? `<button type="button" class="pl-sort-add" data-pl-action="trying-start" data-tier="${row}">${html("Try changes")}</button>` : "";
+      const active = list.active === row;
+      return `<div class="pl-sort pl-filter-row is-${row}${active ? " is-active" : ""}"><div class="pl-sort-row"><button type="button" class="pl-filter-row-name" data-pl-action="filter-row" data-row="${row}" aria-pressed="${active}" title="${html("Filter the list by this row")}">${esc(label)}</button>${chipMarkup}${keys.length ? `<button type="button" class="pl-sort-add" data-pl-action="filter-menu" data-row="${row}" aria-haspopup="true" aria-expanded="${filterMenuOpen === row}">＋</button>` : ""}${actions}</div>${menu}${editor(row)}</div>`;
+    };
+    const filterRows = `<div class="pl-filter-rows"><span class="pl-sort-label">${html("Filter")}</span>${filterRow("preferred")}${filterRow("acceptable")}${list.trying ? filterRow("trying") : ""}</div>`;
+    const filterHint = `<p class="pl-fine">${html("Top and OK filters edit this weapon’s goals. Choose a row’s name to filter the list by it, or Try changes to explore without changing a goal.")}</p>${list.notice ? `<p class="pl-fine pl-filter-notice">${esc(list.notice)}</p>` : ""}`;
     const picks = target.planner.savedFinishes?.[stream] ?? [];
     const savedIds = new Set(picks.map(savedFinishId));
     const current = list.signature === finishSearchSignature(target, stream);
     const savedOption = (option) => savedIds.has(savedFinishId({ ...option, baseSeed: list.origin.baseSeed, originCounter: list.origin[`${stream}Counter`], weaponType: target.weaponType, attributeForce: target.attributeForce }));
     const sortSignature = JSON.stringify(levels);
     if (list.options && (list.sorted?.options !== list.options || list.sorted.signature !== sortSignature)) list.sorted = { options: list.options, signature: sortSignature, rows: sortFinishOptions(list.options, levels) };
-    const filtered = list.options ? list.sorted.rows.filter(({ option }) => finishOptionMatches(option, list.filters, savedOption(option))) : [];
+    const filters = activeFilters();
+    const filtered = list.options ? list.sorted.rows.filter(({ option }) => finishOptionMatches(option, filters, savedOption(option))) : [];
     const inRoute = current ? usedFinish(target.id, stream) : null;
     const items = filtered.slice(0, list.visible).map(({ option, index }) => {
       const saved = savedOption(option);
@@ -614,8 +629,52 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       return `<button type="button" class="pl-finish-option${saved ? " is-current" : ""}" data-pl-save-pick="${index}" aria-pressed="${Boolean(saved)}"${!current || list.loading ? " disabled" : ""}${option.meets ? "" : ` data-below-goal`}><span class="pl-finish-where">${option.top ? `<span class="pl-gold">★</span>` : ""}<strong class="pl-finish-roll">${prefix}${option.finish}</strong><span class="pl-finish-how">${esc(actionName(option.action))}${(used ? inRoute.acquire : option.acquire) ? ` · ${esc(pl("Reset at {at} first", { at: `${prefix}${used ? inRoute.acquire : option.acquire}` }))}` : ""}</span>${used ? `<span class="pl-pick-used">${html("Used in current route")}</span>` : ""}${option.meets ? "" : `<span class="pl-below-goal">${html("Below goal")}</span>`}<span class="pl-save-toggle${saved ? " is-saved" : ""}">${ICON_BOOKMARK}${html(saved ? "Saved pick" : "Save pick")}</span></span><span class="pl-finish-result">${resultMarkup(option, { stream }, target)}</span></button>`;
     }).join("");
     const savedRows = picks.map((pick) => savedPickRow(target, stream, pick, 'data-pl-action="draft-remove-pick"')).join("");
-    const summary = list.options ? pl("{shown} matching finishes · searched {from}–{to} · {saved} saved", { shown: filtered.length, from: list.loadedFrom, to: list.loadedTo, saved: picks.length }) : pl("Search every finish in the roll range. The filters start from this weapon’s goals.");
-    return `<div class="pl-browser-search"><label>${html("Stream")}<select data-pl-finish-stream>${["bonus", "skill"].map((value) => `<option value="${value}"${stream === value ? " selected" : ""}>${html(value === "bonus" ? "Bonus rolls" : "Skill rolls")}</option>`).join("")}</select></label><div class="pl-browser-range"><label>${html("From roll")}<input type="number" min="1" max="10000" step="1" data-browser-range="from" value="${list.from}"></label><span>–</span><label>${html("To roll")}<input type="number" min="1" max="10000" step="1" data-browser-range="to" value="${list.to}"></label></div><button type="button" class="secondary" data-pl-action="search-finishes">${html("Search")}</button>${list.loading ? `<button type="button" class="text-button" data-pl-action="cancel-finish-search">${html("Cancel search")}</button>` : ""}</div><p class="pl-fine">${html("Roll numbers start at the current saved position. A Keep finish may need an earlier Reset.")}</p><div class="pl-browser-goals"><strong>${html("Goal")}</strong><span>★ ${esc(stream === "bonus" ? bonusGoalText(target, "preferred") : pairText(goalFor(target, "preferred", stream)))}</span><span>✓ ${esc(stream === "bonus" ? bonusGoalText(target, "acceptable") : pairText(goalFor(target, "acceptable", stream)))}</span></div>${picks.length ? `<details class="pl-browser-favorites"><summary>${html("Saved picks ({n})", { n: picks.length })}</summary><ul class="pl-saved-picks">${savedRows}</ul></details>` : ""}<div class="pl-browser-controls"><div class="pl-sort"><span class="pl-sort-label">${html("Filter")}</span><div class="pl-sort-row">${filterChips}<button type="button" class="pl-sort-add" data-pl-action="filter-menu" aria-haspopup="true" aria-expanded="${filterMenuOpen}">＋ ${html("Filter")}</button></div>${filterMenu}</div>${bounds}<div class="pl-sort"><span class="pl-sort-label">${html("Sort")}</span><div class="pl-sort-row">${sortChips}${unusedSorts.length ? `<button type="button" class="pl-sort-add" data-pl-action="sort-menu" aria-haspopup="true" aria-expanded="${sortMenuOpen}">＋ ${html("Sort")}</button>` : ""}</div>${sortMenu}</div></div><p class="pl-fine" role="status">${list.loading ? html("Checking other finishes for {name}…", { name: nameOf(target) }) : esc(summary)}${list.complete === false ? ` · ${html("Showing the best {cap} of {total} by this sort. Narrow the range or add filters to see the rest.", { cap: list.options.length, total: list.total })}` : ""}</p>${list.error ? `<p class="error" role="alert">${esc(list.error)}</p>` : ""}${list.options && !current ? `<p class="pl-browser-warning">${html("Goals or saved position changed. Search again to refresh these finishes. Your saved picks are kept.")}</p>` : ""}<div class="pl-finish-list">${items || (!list.loading && list.options ? `<p class="pl-fine">${html("No finishes match these filters. Your saved picks are kept.")}</p>` : "")}</div>${filtered.length > list.visible ? `<button type="button" class="secondary" data-pl-action="more-finishes">${html("Show more finishes")}</button>` : ""}<p class="pl-fine pl-browser-save-note">${html("Save weapon to keep your goals and saved picks. Build guides separately when you are ready.")}</p>`;
+    const summary = list.options ? pl("{shown} matching finishes · searched {from}–{to} · {saved} saved", { shown: filtered.length, from: list.loadedFrom, to: list.loadedTo, saved: picks.length }) : pl("Search every finish in the roll range, filtered by the chosen row.");
+    return `<div class="pl-browser-search"><label>${html("Stream")}<select data-pl-finish-stream>${["bonus", "skill"].map((value) => `<option value="${value}"${stream === value ? " selected" : ""}>${html(value === "bonus" ? "Bonus rolls" : "Skill rolls")}</option>`).join("")}</select></label><div class="pl-browser-range"><label>${html("From roll")}<input type="number" min="1" max="10000" step="1" data-browser-range="from" value="${list.from}"></label><span>–</span><label>${html("To roll")}<input type="number" min="1" max="10000" step="1" data-browser-range="to" value="${list.to}"></label></div><button type="button" class="secondary" data-pl-action="search-finishes">${html("Search")}</button>${list.loading ? `<button type="button" class="text-button" data-pl-action="cancel-finish-search">${html("Cancel search")}</button>` : ""}</div><p class="pl-fine">${html("Roll numbers start at the current saved position. A Keep finish may need an earlier Reset.")}</p>${picks.length ? `<details class="pl-browser-favorites"><summary>${html("Saved picks ({n})", { n: picks.length })}</summary><ul class="pl-saved-picks">${savedRows}</ul></details>` : ""}<div class="pl-browser-controls">${filterRows}<div class="pl-sort"><span class="pl-sort-label">${html("Sort")}</span><div class="pl-sort-row">${sortChips}${unusedSorts.length ? `<button type="button" class="pl-sort-add" data-pl-action="sort-menu" aria-haspopup="true" aria-expanded="${sortMenuOpen}">＋ ${html("Sort")}</button>` : ""}</div>${sortMenu}</div></div>${filterHint}<p class="pl-fine" role="status">${list.loading ? html("Checking other finishes for {name}…", { name: nameOf(target) }) : esc(summary)}${list.complete === false ? ` · ${html("Showing the best {cap} of {total} by this sort. Narrow the range or add filters to see the rest.", { cap: list.options.length, total: list.total })}` : ""}</p>${list.error ? `<p class="error" role="alert">${esc(list.error)}</p>` : ""}${list.options && !current ? `<p class="pl-browser-warning">${html("Goals or saved position changed. Search again to refresh these finishes. Your saved picks are kept.")}</p>` : ""}<div class="pl-finish-list">${items || (!list.loading && list.options ? `<p class="pl-fine">${html("No finishes match these filters. Your saved picks are kept.")}</p>` : "")}</div>${filtered.length > list.visible ? `<button type="button" class="secondary" data-pl-action="more-finishes">${html("Show more finishes")}</button>` : ""}<p class="pl-fine pl-browser-save-note">${html("Save weapon to keep your goals and saved picks. Build guides separately when you are ready.")}</p>`;
+  }
+  // A row's chips: Top and OK read the draft goals, so they are always in sync.
+  function rowChips(row) {
+    if (row === "trying") return finishList.trying?.filters ?? [];
+    return tierFinishFilters(editorTarget, row, finishList.stream);
+  }
+  function activeFilters() {
+    const row = finishList.active === "trying" && !finishList.trying ? "acceptable" : finishList.active;
+    return rowFilters(rowChips(row));
+  }
+  // Writes a goal tier into the Goals form, which stays the draft's source.
+  function writeTier(tier, value) {
+    const form = q("#pl-goal-form");
+    if (finishList.stream === "skill") { form.querySelector(`[data-pairs="${tier}"]`).innerHTML = value.skills.map(comboRow).join(""); return; }
+    for (const input of form.querySelectorAll(`[data-tier="${tier}"][data-stat]`)) input.value = (input.dataset.bound === "min" ? value.stats : value.maxStats)[input.dataset.stat] ?? "";
+  }
+  // Sets a row's chips. On a goal row this edits the draft goal; an invalid
+  // goal (such as a minimum above what five slots can gain) is rolled back.
+  function setRowChips(row, chips) {
+    if (row === "trying") { finishList.trying.filters = chips; return true; }
+    const before = tierFinishFilters(editorTarget, row, finishList.stream);
+    writeTier(row, filtersToTier(chips, finishList.stream));
+    try {
+      editorTarget = readEditorTarget({ validate: false });
+      if (draft?.id === editing) draft = editorTarget;
+      return true;
+    } catch (error) {
+      writeTier(row, filtersToTier(before, finishList.stream));
+      finishList.error = error.message; renderFinishModal();
+      return false;
+    }
+  }
+  function startTrying(tier) {
+    finishList.trying = { from: tier, filters: structuredClone(rowChips(tier)) };
+    finishList.active = "trying"; finishList.notice = ""; filterEditing = null; filterMenuOpen = false;
+    refreshFinishes();
+  }
+  function applyTrying(tier) {
+    const { skipped } = filtersToTier(finishList.trying.filters, finishList.stream);
+    const chips = finishList.trying.filters.filter((chip) => !skipped.includes(chip.key));
+    if (!setRowChips(tier, chips)) return;
+    finishList.trying = null; finishList.active = tier; filterEditing = null; filterMenuOpen = false;
+    finishList.notice = skipped.length ? pl("Top desired, saved, action and Reset filters aren’t part of a goal, so they weren’t applied.") : "";
+    refreshFinishes();
   }
   function renderFinishModal() {
     if (!editorTarget || !q("#pl-finishes-panel")) return;
@@ -644,7 +703,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   function searchEditorFinishes() {
     if (!finishList || !editorTarget) return;
     try {
-      editorTarget = readEditorTarget();
+      editorTarget = readEditorTarget({ validate: false });
       if (draft?.id === editing) draft = editorTarget;
       for (const key of ["from", "to"]) {
         const input = q(`[data-browser-range="${key}"]`);
@@ -653,9 +712,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       if (![finishList.from, finishList.to].every((value) => Number.isInteger(value) && value >= 1 && value <= 10000) || finishList.from > finishList.to) throw new Error(pl("Enter a roll range from 1 to 10,000, with From no higher than To."));
       if (!hasGoal(editorTarget, finishList.stream)) throw new Error(pl("Enable this stream in Goals before searching its finishes."));
       const target = structuredClone(editorTarget);
-      target.planner[finishList.stream === "bonus" ? "skillEnabled" : "bonusEnabled"] = false;
       const request = { origin: getState(), targets: [target], limits: { bonus: 0, skill: 0, [finishList.stream]: finishList.to } };
-      validatePlannerRequest(request);
       stopFinishSearch();
       const list = finishList;
       list.loading = true; list.error = ""; list.visible = 50;
@@ -672,7 +729,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
         renderFinishModal();
       };
       helper.onerror = (error) => fail(pl("Unable to calculate the guide. {detail}", { detail: error.message }));
-      helper.postMessage({ kind: "collect", request, stream: list.stream, targetId: target.id, from, filters: list.filters, sort: list.sort ?? finishSortFor(list.stream, editorTarget) });
+      helper.postMessage({ kind: "collect", request, stream: list.stream, targetId: target.id, from, filters: activeFilters(), sort: list.sort ?? finishSortFor(list.stream, editorTarget) });
       q("#pl-editor-error").hidden = true; renderFinishModal();
     } catch (error) { finishList.error = ["goals", "state", "limits", "statusValues", "excluded", "minAboveMax"].includes(error.message) ? errorText(error.message) : error.message; renderFinishModal(); }
   }
@@ -691,16 +748,23 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
   }
   function applyBrowserFilter() {
     if (!filterEditing || !finishList) return;
-    const filter = { ...filterEditing };
-    const choice = q("[data-filter-value]");
-    if (choice) filter.value = filter.key === "action" ? choice.value : Number(choice.value);
+    const { row, index, key } = filterEditing;
+    const read = (name) => q(`[data-filter-${name}]`).value === "" ? null : Number(q(`[data-filter-${name}]`).value);
+    let filter;
+    if (key === "pair") filter = { key, seriesIndex: read("series"), groupIndex: read("group") };
+    else if (["action", "series", "group"].includes(key)) filter = { key, value: key === "action" ? q("[data-filter-value]").value : Number(q("[data-filter-value]").value) };
     else {
-      const bound = (name) => q(`[data-filter-${name}]`).value === "" ? null : Number(q(`[data-filter-${name}]`).value);
-      filter.min = bound("min"); filter.max = bound("max");
+      filter = { key, min: read("min"), max: read("max") };
       if ([filter.min, filter.max].some((value) => value !== null && (!Number.isInteger(value) || value < 0)) || (filter.min !== null && filter.max !== null && filter.min > filter.max)) { finishList.error = errorText("minAboveMax"); renderFinishModal(); return; }
     }
-    finishList.filters = [...finishList.filters.filter((value) => value.key !== filter.key), filter];
-    filterEditing = null; finishList.error = ""; finishList.visible = 50; refreshFinishes();
+    const chips = [...rowChips(row)];
+    // An emptied stat bound removes its chip.
+    const empty = Object.hasOwn(filter, "min") && filter.min === null && filter.max === null;
+    if (index !== null) { if (empty) chips.splice(index, 1); else chips[index] = filter; }
+    else if (!empty) { const same = filter.key === "pair" ? -1 : chips.findIndex((chip) => chip.key === filter.key); if (same >= 0) chips[same] = filter; else chips.push(filter); }
+    finishList.error = "";
+    if (!setRowChips(row, chips)) return;
+    filterEditing = null; finishList.visible = 50; refreshFinishes();
   }
   function removeSavedPick(targetId, stream, id) {
     const raw = getTargets().find((target) => target.id === targetId);
@@ -832,15 +896,19 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     else if (action === "editor-tab") switchEditorTab(button.dataset.tab);
     else if (action === "search-finishes") searchEditorFinishes();
     else if (action === "cancel-finish-search") { stopFinishSearch(); renderFinishModal(); }
-    else if (action === "filter-menu") { filterMenuOpen = !filterMenuOpen; sortMenuOpen = false; renderFinishModal(); }
+    else if (action === "filter-menu") { filterMenuOpen = filterMenuOpen === button.dataset.row ? false : button.dataset.row; sortMenuOpen = false; renderFinishModal(); }
+    else if (action === "filter-row") { finishList.active = button.dataset.row; finishList.visible = 50; refreshFinishes(); }
+    else if (action === "trying-start") startTrying(button.dataset.tier);
+    else if (action === "trying-apply") applyTrying(button.dataset.tier);
+    else if (action === "trying-discard") { finishList.active = finishList.trying.from; finishList.trying = null; finishList.notice = ""; filterEditing = null; filterMenuOpen = false; refreshFinishes(); }
     else if (action === "filter-pick") {
-      const key = button.dataset.key; filterMenuOpen = false;
-      if (["top", "saved", "direct"].includes(key)) { finishList.filters.push({ key }); refreshFinishes(); }
-      else filterEditing = { key, min: null, max: null, value: key === "action" ? "reset" : 0 };
-      renderFinishModal(); q("[data-filter-min], [data-filter-value]")?.focus();
+      const { key, row } = button.dataset; filterMenuOpen = false;
+      if (["top", "saved", "direct"].includes(key)) { if (setRowChips(row, [...rowChips(row), { key }])) refreshFinishes(); }
+      else filterEditing = { row, index: null, key, ...(key === "pair" ? { seriesIndex: null, groupIndex: null } : ["action", "series", "group"].includes(key) ? { value: key === "action" ? "reset" : 0 } : { min: null, max: null }) };
+      renderFinishModal(); q("[data-filter-min], [data-filter-value], [data-filter-series]")?.focus();
     }
-    else if (action === "filter-edit") { const f = finishList.filters[Number(button.dataset.index)]; if (!["top", "saved", "direct"].includes(f.key)) filterEditing = { ...f }; renderFinishModal(); }
-    else if (action === "filter-remove") { finishList.filters.splice(Number(button.dataset.index), 1); finishList.visible = 50; refreshFinishes(); }
+    else if (action === "filter-edit") { const { row } = button.dataset; const index = Number(button.dataset.index); const f = rowChips(row)[index]; if (!["top", "saved", "direct"].includes(f.key)) filterEditing = { ...f, row, index }; renderFinishModal(); }
+    else if (action === "filter-remove") { const { row } = button.dataset; const chips = rowChips(row).filter((_, index) => index !== Number(button.dataset.index)); if (setRowChips(row, chips)) { finishList.visible = 50; refreshFinishes(); } }
     else if (action === "filter-apply") applyBrowserFilter();
     else if (action === "filter-cancel") { filterEditing = null; renderFinishModal(); }
     else if (action === "draft-remove-pick") { editorTarget.planner.savedFinishes[finishList.stream] = editorTarget.planner.savedFinishes[finishList.stream].filter((pick) => savedFinishId(pick) !== button.dataset.pick); renderFinishModal(); }
