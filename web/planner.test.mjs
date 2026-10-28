@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import { initSync, predict_gogma_rolls, predict_gogma_keep_rolls, predict_skill_rolls } from "./pkg/gogma_wasm_search.js";
-import { availableStats, BONUS_CATEGORY, DEFAULT_FINISH_SORT, finishOptionMatches, goalFinishSort, sortFinishOptions, bonusGoalAlwaysMet, bonusTotals, canFillSlots, copiedPlanner, layoutOf, MAX_SELECTED, migrateSavedFinishes, rangeCanMatch, matchesTier, normalizedFinishSort, normalizedPlanner, normalizedProgress, parsePlannerExport, plannerExport, routePosition, savedFinishChoice, savedFinishFromOption, savedFinishId, streamSteps, resultQuality, routeWeaponsMatch, skillGoalMatches, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { availableStats, BONUS_CATEGORY, DEFAULT_FINISH_SORT, finishOptionMatches, goalFinishFilters, goalFinishSort, syncGoalFilters, sortFinishOptions, bonusGoalAlwaysMet, bonusTotals, canFillSlots, copiedPlanner, layoutOf, MAX_SELECTED, migrateSavedFinishes, rangeCanMatch, matchesTier, normalizedFinishSort, normalizedPlanner, normalizedProgress, parsePlannerExport, plannerExport, routePosition, savedFinishChoice, savedFinishFromOption, savedFinishId, streamSteps, resultQuality, routeWeaponsMatch, skillGoalMatches, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
 import { collectFinishOptions, finishOptions, optimizeStream, pinFinish, planWeapons, recalcWithFinish, selectTargets } from "./planner-engine.js";
 
 initSync({ module: await readFile(new URL("./pkg/gogma_wasm_search_bg.wasm", import.meta.url)) });
@@ -1080,6 +1080,34 @@ test("finish filters combine bounds, actions and favorites without changing goal
   assert.equal(finishOptionMatches({ ...keep, top: false }, [{ key: "top" }]), false);
   assert.equal(finishOptionMatches({ ...keep, totals: { element: null } }, [{ key: "element", min: 0, max: 0 }]), false);
   assert.deepEqual(weapon, before);
+});
+
+test("goal bounds become browsing filters that hide nothing the goal allows and follow goal edits", async () => {
+  const weapon = easyWeapon("goal-filters");
+  weapon.planner.acceptable = { stats: { attack: 24 }, maxStats: { affinity: 6 }, skills: [] };
+  weapon.planner.preferred = { stats: { attack: 30, affinity: 4 }, maxStats: { affinity: 10 }, skills: [] };
+  // Either tier is acceptable, so each filter takes the loosest shared bound.
+  const goal = goalFinishFilters(weapon, "bonus");
+  assert.deepEqual(goal, [{ key: "attack", min: 24, max: null }, { key: "affinity", min: null, max: 10 }]);
+  const req = request([weapon], 30, 0);
+  const options = (await collectFinishOptions(req, "bonus", weapon.id, provider(req))).options;
+  assert.ok(options.length);
+  assert.ok(options.every((option) => finishOptionMatches(option, goal)));
+
+  // The player's narrowed attack filter and removed affinity filter survive an
+  // unrelated goal edit; a changed bound resets only its own filter.
+  const narrowed = [{ key: "attack", min: 27, max: null }, { key: "action", value: "keep" }];
+  weapon.planner.acceptable.stats.element = 3; weapon.planner.preferred.stats.element = 5;
+  const withElement = goalFinishFilters(weapon, "bonus");
+  assert.deepEqual(syncGoalFilters(narrowed, goal, withElement), [...narrowed, { key: "element", min: 3, max: null }]);
+  weapon.planner.acceptable.stats.attack = 30;
+  assert.deepEqual(syncGoalFilters(narrowed, goal, goalFinishFilters(weapon, "bonus")).find((filter) => filter.key === "attack"), { key: "attack", min: 30, max: null });
+  assert.deepEqual(syncGoalFilters([], [], goal), goal);
+
+  weapon.planner.skillEnabled = true;
+  weapon.planner.acceptable.skills = [{ seriesIndex: 0, groupIndex: 3 }, { seriesIndex: 0, groupIndex: null }];
+  weapon.planner.preferred.skills = [];
+  assert.deepEqual(goalFinishFilters(weapon, "skill"), [{ key: "series", value: 0 }]);
 });
 
 test("skill browsing filters keep series and group indices separate, including index zero", () => {

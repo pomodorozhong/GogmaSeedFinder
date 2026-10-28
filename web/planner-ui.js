@@ -1,6 +1,6 @@
 import { t, localizedTargetName } from "./i18n.js";
 import { pl } from "./planner-text.js";
-import { availableStats, BONUS_CATEGORY, bonusTotals, FINISH_SORT_KEYS, finishOptionMatches, goalFinishSort, sortFinishOptions, copiedPlanner, hasBonusGoal, hasGoal, layoutOf, matchesTier, MAX_SELECTED, migrateSavedFinishes, normalizedFinishSort, normalizedPlanner, normalizedProgress, parsePlannerExport, plannerExport, routePosition, routeWeaponsMatch, samePosition, savedFinishChoice, savedFinishFromOption, savedFinishId, statMaximum, statRollValues, streamSteps, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { availableStats, BONUS_CATEGORY, bonusTotals, FINISH_SORT_KEYS, finishOptionMatches, goalFinishFilters, goalFinishSort, sortFinishOptions, syncGoalFilters, copiedPlanner, hasBonusGoal, hasGoal, layoutOf, matchesTier, MAX_SELECTED, migrateSavedFinishes, normalizedFinishSort, normalizedPlanner, normalizedProgress, parsePlannerExport, plannerExport, routePosition, routeWeaponsMatch, samePosition, savedFinishChoice, savedFinishFromOption, savedFinishId, statMaximum, statRollValues, streamSteps, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
 
 const STORAGE_KEY = "gogma-weapon-planner-v1";
 const ICON_EDIT = `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 2.5l3 3L5 14H2v-3z"/></svg>`;
@@ -556,7 +556,11 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       } catch (error) { editorError(error); return; }
       const nextStream = stream ?? finishList?.stream ?? (editorTarget.planner.bonusEnabled ? "bonus" : "skill");
       if (finishList?.stream !== nextStream) stopFinishSearch();
-      finishList = finishViews[nextStream] ??= { stream: nextStream, from: 1, to: Math.max(1, cache.limits[nextStream]), filters: [], visible: 50, options: null, error: "" };
+      finishList = finishViews[nextStream] ??= { stream: nextStream, from: 1, to: Math.max(1, cache.limits[nextStream]), filters: [], goalFilters: [], visible: 50, options: null, error: "" };
+      // The Goals tab's bounds start as this tab's filters and follow later goal edits.
+      const goalFilters = goalFinishFilters(editorTarget, nextStream);
+      finishList.filters = syncGoalFilters(finishList.filters, finishList.goalFilters, goalFilters);
+      finishList.goalFilters = goalFilters;
     }
     editorTab = tab;
     q("#pl-editor .section-heading .pl-muted").textContent = nameOf(editorTarget);

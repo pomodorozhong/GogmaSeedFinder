@@ -188,6 +188,12 @@ route finishes on is marked **Used in current route**, separately from whether
 it is saved. Filter chips can narrow by top desired, saved picks, action,
 whether an earlier Reset is needed, stat bounds, or series/group skills.
 These filters never rewrite the weapon's goals or remove hidden saved picks.
+The draft goal's own stat bounds (and a series or group every acceptable
+skill pair shares) start as filter chips, using the loosest bound the
+acceptable tiers share so they hide nothing the goal allows. Narrow or remove
+them to inspect results; a later goal edit resets only the chips whose goal
+bound changed. Because the search itself covers only results meeting the
+goal, widening a chip beyond the goal shows nothing more.
 Changed goals or a changed saved position mark old search results as stale;
 search again before adding picks from those results.
 

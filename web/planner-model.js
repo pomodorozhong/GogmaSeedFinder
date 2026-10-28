@@ -449,6 +449,37 @@ export function finishOptionMatches(option, filters, saved = false) {
   });
 }
 
+// The goal's own bounds as browsing filters: the loosest bound every
+// acceptable tier shares, so they hide nothing the goal allows and the
+// player can narrow them without changing the goal.
+export function goalFinishFilters(target, stream) {
+  if (!hasGoal(target, stream)) return [];
+  const tiers = tiersFor(target, stream, "acceptable");
+  if (stream === "skill") {
+    const pairs = tiers.flatMap((tier) => tier.skills);
+    return [["series", "seriesIndex"], ["group", "groupIndex"]].flatMap(([key, field]) => {
+      const values = new Set(pairs.map((pair) => pair[field]));
+      return pairs.length && values.size === 1 && pairs[0][field] !== null ? [{ key, value: pairs[0][field] }] : [];
+    });
+  }
+  return availableStats(target).flatMap((key) => {
+    const mins = tiers.map((tier) => tier.stats[key]);
+    const maxs = tiers.map((tier) => tier.maxStats?.[key]);
+    const min = mins.every((value) => value > 0) ? Math.min(...mins) : null;
+    const max = maxs.every(Number.isInteger) ? Math.max(...maxs) : null;
+    return min === null && max === null ? [] : [{ key, min, max }];
+  });
+}
+
+// Brings goal-derived filters up to date after a goal edit. A filter whose
+// goal bound changed is reset to it; the player's edits and removals of
+// unchanged ones stay, as do filters the goal does not cover.
+export function syncGoalFilters(filters, previous, next) {
+  const bound = (list, key) => JSON.stringify(list.find((filter) => filter.key === key) ?? null);
+  const changed = new Set([...previous, ...next].map((filter) => filter.key).filter((key) => bound(previous, key) !== bound(next, key)));
+  return [...filters.filter((filter) => !changed.has(filter.key)), ...next.filter((filter) => changed.has(filter.key)).map((filter) => ({ ...filter }))];
+}
+
 // A weapon's default finish sort follows its bonus goal: top desired first,
 // then each stat with a minimum (more is better, top-desired tier first),
 // then each stat with a maximum (less is better). The earliest roll always
