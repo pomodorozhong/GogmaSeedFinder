@@ -1026,6 +1026,9 @@ test("a saved pick chosen for the route is used even when another saved pick is 
   assert.ok(chosen.complete);
   assert.equal(keyOf(chosen.bonus.choices[0]), picks[1].key);
   assert.deepEqual(chosen.savedConflicts, []);
+  // Export and import keep the choice.
+  const exported = JSON.stringify(plannerExport(req.origin, [weapon], { routes: {}, selected: [weapon.id] }));
+  assert.deepEqual(normalizedPlanner(parsePlannerExport(exported).targets[0]).routePick, weapon.planner.routePick);
   // A choice that no longer names a saved pick is dropped.
   weapon.planner.savedFinishes.bonus.pop();
   assert.equal(normalizedPlanner(weapon).routePick.bonus, null);
