@@ -100,6 +100,8 @@
 .pl-saved-pick .text-button { flex: none; min-width: 30px; min-height: 30px; padding: 0 4px; font-size: 1.1rem; }
 .pl-pick-used { display: block; color: var(--pl-teal); font-size: 0.7rem; }
 .pl-finish-where .pl-pick-used { display: inline; }
+.pl-below-goal { color: var(--muted); font-size: 0.7rem; }
+.pl-finish-option[data-below-goal] { opacity: 0.72; }
 .pl-save-toggle { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 2px 7px; color: var(--muted); font-size: 0.72rem; border: 1px solid var(--line); border-radius: 999px; }
 .pl-save-toggle.is-saved { color: var(--pl-teal); border-color: var(--pl-teal); }
 .pl-save-toggle.is-saved svg { fill: currentColor; }

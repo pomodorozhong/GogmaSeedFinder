@@ -11,7 +11,7 @@ self.onmessage = async ({ data }) => {
   try {
     await initWasm();
     if (data.kind === "collect") {
-      const result = await collectFinishOptions(data.request, data.stream, data.targetId, providerFor(data.request.origin), () => {}, { from: data.from });
+      const result = await collectFinishOptions(data.request, data.stream, data.targetId, providerFor(data.request.origin), () => {}, { from: data.from, filters: data.filters, sort: data.sort });
       self.postMessage({ type: "collected", ...result });
     } else if (data.kind === "finishes") {
       const result = await finishOptions(data.route, data.stream, data.targetId, providerFor(data.route.origin));

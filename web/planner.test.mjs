@@ -969,7 +969,7 @@ const keyOf = (choice) => `${choice.action}:${choice.finish}:${choice.layout?.jo
 test("saved collections survive normalization, export, and goal copying without sharing another weapon's picks", async () => {
   const weapon = easyWeapon("a");
   const req = request([weapon], 12, 0);
-  const options = (await collectFinishOptions(req, "bonus", weapon.id, provider(req))).options.filter((option) => option.action === "reset").slice(0, 2);
+  const options = (await collectFinishOptions(req, "bonus", weapon.id, provider(req))).options.filter((option) => option.meets && option.action === "reset").slice(0, 2);
   assert.equal(options.length, 2);
   saveOptions(weapon, "bonus", options, req.origin);
   const saved = structuredClone(weapon.planner.savedFinishes);
@@ -989,7 +989,7 @@ test("saved collections survive normalization, export, and goal copying without 
 test("rerouting chooses among saved alternatives and keeps them when editing goals or adding weapons", async () => {
   const a = easyWeapon("a"); const b = easyWeapon("b");
   const req = request([a, b], 16, 0);
-  const options = (await collectFinishOptions(req, "bonus", a.id, provider(req))).options.filter((option) => option.action === "reset");
+  const options = (await collectFinishOptions(req, "bonus", a.id, provider(req))).options.filter((option) => option.meets && option.action === "reset");
   const picks = [options[0], options.at(-1)];
   for (const weapon of [a, b]) saveOptions(weapon, "bonus", picks, req.origin);
   const saved = JSON.stringify(req.targets);
@@ -1012,7 +1012,7 @@ test("rerouting chooses among saved alternatives and keeps them when editing goa
 
 test("incompatible saved sets report a conflict instead of silently falling back or deleting picks", async () => {
   const weapon = easyWeapon("a"); const req = request([weapon], 12, 0);
-  const option = (await collectFinishOptions(req, "bonus", weapon.id, provider(req))).options.find((value) => value.action === "reset");
+  const option = (await collectFinishOptions(req, "bonus", weapon.id, provider(req))).options.find((value) => value.meets && value.action === "reset");
   saveOptions(weapon, "bonus", [option], req.origin);
   const original = structuredClone(weapon.planner.savedFinishes);
   const topOnly = structuredClone(req);
@@ -1042,7 +1042,7 @@ test("incompatible saved sets report a conflict instead of silently falling back
 test("saved Keep options survive candidate dominance and remain constrained to the ordered layout", async () => {
   const weapon = easyWeapon("keep"); const req = request([weapon], 20, 0);
   const options = await collectFinishOptions(req, "bonus", weapon.id, provider(req));
-  const keep = options.options.find((option) => option.action === "keep" && option.acquire);
+  const keep = options.options.find((option) => option.meets && option.action === "keep" && option.acquire);
   assert.ok(keep);
   saveOptions(weapon, "bonus", [keep], req.origin);
   const route = (await planWeapons(req, provider(req))).acceptable;
@@ -1056,7 +1056,7 @@ test("finish search ranges filter finish positions while retaining earlier Keep 
   const found = await collectFinishOptions(req, "bonus", weapon.id, provider(req), () => {}, { from: 14 });
   assert.ok(found.options.length);
   assert.ok(found.options.every((option) => option.finish >= 14 && option.finish <= 20));
-  const keep = found.options.find((option) => option.action === "keep" && option.acquire < 14);
+  const keep = found.options.find((option) => option.meets && option.action === "keep" && option.acquire < 14);
   assert.ok(keep, "the Reset is allowed before the displayed finish range");
   saveOptions(weapon, "bonus", [keep], req.origin);
   const built = (await planWeapons(req, provider(req))).acceptable;
@@ -1082,7 +1082,7 @@ test("finish filters combine bounds, actions and favorites without changing goal
   assert.deepEqual(weapon, before);
 });
 
-test("goal bounds become browsing filters that hide nothing the goal allows and follow goal edits", async () => {
+test("finish search lists every roll; goal bounds become editable filters that follow goal edits", async () => {
   const weapon = easyWeapon("goal-filters");
   weapon.planner.acceptable = { stats: { attack: 24 }, maxStats: { affinity: 6 }, skills: [] };
   weapon.planner.preferred = { stats: { attack: 30, affinity: 4 }, maxStats: { affinity: 10 }, skills: [] };
@@ -1090,9 +1090,22 @@ test("goal bounds become browsing filters that hide nothing the goal allows and 
   const goal = goalFinishFilters(weapon, "bonus");
   assert.deepEqual(goal, [{ key: "attack", min: 24, max: null }, { key: "affinity", min: null, max: 10 }]);
   const req = request([weapon], 30, 0);
-  const options = (await collectFinishOptions(req, "bonus", weapon.id, provider(req))).options;
-  assert.ok(options.length);
-  assert.ok(options.every((option) => finishOptionMatches(option, goal)));
+  // With no filters every roll is listed, including results below the goal.
+  const all = await collectFinishOptions(req, "bonus", weapon.id, provider(req));
+  assert.ok(all.complete);
+  assert.ok(all.options.some((option) => !option.meets));
+  for (let finish = 1; finish <= 30; finish += 1) assert.ok(all.options.some((option) => option.action === "reset" && option.finish === finish));
+  // The goal's chips hide nothing the goal allows, and run inside the search.
+  const meeting = all.options.filter((option) => option.meets);
+  assert.ok(meeting.length && meeting.every((option) => finishOptionMatches(option, goal)));
+  const filtered = await collectFinishOptions(req, "bonus", weapon.id, provider(req), () => {}, { filters: goal });
+  assert.deepEqual(filtered.options.map((option) => option.key), all.options.filter((option) => finishOptionMatches(option, goal)).map((option) => option.key));
+  // A capped search keeps the best results by the browser's sort.
+  const sort = [{ key: "attack", dir: "desc" }];
+  const capped = await collectFinishOptions(req, "bonus", weapon.id, provider(req), () => {}, { sort, cap: 5 });
+  assert.equal(capped.complete, false);
+  assert.equal(capped.total, all.options.length);
+  assert.deepEqual(capped.options.map((option) => option.totals.attack), all.options.map((option) => option.totals.attack).sort((x, y) => y - x).slice(0, 5));
 
   // The player's narrowed attack filter and removed affinity filter survive an
   // unrelated goal edit; a changed bound resets only its own filter.
@@ -1122,8 +1135,8 @@ test("saved positions rebase after confirmed steps while bonus and skill collect
   weapon.planner.skillEnabled = true;
   for (const mode of ["acceptable", "preferred"]) weapon.planner[mode].skills = [{ seriesIndex: null, groupIndex: null }];
   const req = request([weapon], 16, 16);
-  const bonus = (await collectFinishOptions(req, "bonus", weapon.id, provider(req))).options.filter((option) => option.action === "reset").at(-1);
-  const skill = (await collectFinishOptions(req, "skill", weapon.id, provider(req))).options.at(-1);
+  const bonus = (await collectFinishOptions(req, "bonus", weapon.id, provider(req))).options.filter((option) => option.meets && option.action === "reset").at(-1);
+  const skill = (await collectFinishOptions(req, "skill", weapon.id, provider(req))).options.filter((option) => option.meets).at(-1);
   saveOptions(weapon, "bonus", [bonus], req.origin); saveOptions(weapon, "skill", [skill], req.origin);
   const changed = structuredClone(req); changed.origin.bonusCounter += 2;
   assert.equal(savedFinishChoice(weapon, "bonus", weapon.planner.savedFinishes.bonus[0], changed.origin).finish, bonus.finish - 2);
@@ -1144,7 +1157,7 @@ test("saved positions rebase after confirmed steps while bonus and skill collect
 test("legacy route picks migrate into collections once and cleared collections stay cleared", async () => {
   const weapon = easyWeapon("a"); const req = request([weapon], 12, 0); const api = provider(req);
   const alternatives = await collectFinishOptions(req, "bonus", weapon.id, api);
-  const choice = alternatives.options.filter((option) => option.action === "reset").at(-1);
+  const choice = alternatives.options.filter((option) => option.meets && option.action === "reset").at(-1);
   saveOptions(weapon, "bonus", [choice], req.origin);
   const route = (await planWeapons(req, api)).acceptable;
   delete weapon.planner.savedFinishes;

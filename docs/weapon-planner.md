@@ -172,15 +172,15 @@ tabs. The pencil opens Goals; **Browse finishes** on a card or guide opens
 Finishes in the same modal. The cards retain their existing summaries.
 
 Both tabs share a draft. Goals contains the existing stat bounds, skill pairs,
-and current-weapon fields. Finishes searches using those draft goals and lets
-the player choose the bonus or skill stream, an inclusive From/To roll range,
+and current-weapon fields. Finishes lists every result in a roll range,
+whether or not it meets the goal, and lets the player choose the bonus or skill stream, an inclusive From/To roll range,
 filter chips, and ordered sorting chips. Roll positions are relative to the
 current saved stream counter. The range limits finish positions; Keep
 acquisitions before the range are still considered and displayed. Browsing
 ranges do not change Stage 2's route limits.
 
-Each result shows its roll, action, gains or skill pair, and any Reset needed
-for a Keep layout. A bookmark **Save pick** control toggles it in the draft
+Each result shows its roll, action, gains or skill pair, any Reset needed
+for a Keep layout, and **Below goal** when it meets neither goal tier. A bookmark **Save pick** control toggles it in the draft
 (the gold star still means only top desired). A **Saved picks** section
 retains every saved option, including those hidden by the current range or
 filters, each with the same warnings as the weapon card. A result the current
@@ -192,10 +192,14 @@ The draft goal's own stat bounds (and a series or group every acceptable
 skill pair shares) start as filter chips, using the loosest bound the
 acceptable tiers share so they hide nothing the goal allows. Narrow or remove
 them to inspect results; a later goal edit resets only the chips whose goal
-bound changed. Because the search itself covers only results meeting the
-goal, widening a chip beyond the goal shows nothing more.
-Changed goals or a changed saved position mark old search results as stale;
-search again before adding picks from those results.
+bound changed. The chips are the search's only criteria: with none, every
+Reset, Keep and skill result in the range is listed, and changing a chip
+searches again. A search returns at most 50,000 results; beyond that it keeps
+the best by the current sort and says how many matched, so narrow the range
+or add filters to see the rest. A saved pick that does not meet the goal
+stays saved with its warning and is not used by a route. A changed saved
+position marks old search results as stale; search again before adding picks
+from those results.
 
 **Save weapon** (or **Add weapon**) commits the goals and saved picks together.
 Switching tabs preserves their draft; Cancel, Escape, or closing the modal
@@ -238,8 +242,7 @@ explicitly cleared afterward.
 
 The browser lists 50 results at a time with **Show more finishes**. Equal
 results at different rolls or with different required layouts remain separate
-options because their scheduling constraints differ. Candidate-budget
-exhaustion is reported and does not prove that no other finishes exist.
+options because their scheduling constraints differ.
 
 The list's default sort follows the weapon's bonus goal: top desired first,
 then each stat with a minimum from high to low (top-desired tier first), then

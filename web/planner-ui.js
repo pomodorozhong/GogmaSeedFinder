@@ -573,7 +573,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     }
     q("#pl-editor").scrollTop = 0;
     renderFinishModal();
-    if (tab === "finishes" && !finishList.options && !finishList.loading) searchEditorFinishes();
+    if (tab === "finishes" && !finishList.loading && (!finishList.options || finishList.signature !== finishSearchSignature(editorTarget, finishList.stream))) searchEditorFinishes();
   }
   function finishBrowserMarkup() {
     const list = finishList;
@@ -611,11 +611,11 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     const items = filtered.slice(0, list.visible).map(({ option, index }) => {
       const saved = savedOption(option);
       const used = inRoute !== null && inRoute.key === `${option.action}:${option.finish}:${(option.action === "keep" ? option.layout ?? option.choices?.find((choice) => choice.id === target.id)?.layout : null)?.join("") ?? ""}`;
-      return `<button type="button" class="pl-finish-option${saved ? " is-current" : ""}" data-pl-save-pick="${index}" aria-pressed="${Boolean(saved)}"${!current || list.loading ? " disabled" : ""}><span class="pl-finish-where">${option.top ? `<span class="pl-gold">★</span>` : ""}<strong class="pl-finish-roll">${prefix}${option.finish}</strong><span class="pl-finish-how">${esc(actionName(option.action))}${(used ? inRoute.acquire : option.acquire) ? ` · ${esc(pl("Reset at {at} first", { at: `${prefix}${used ? inRoute.acquire : option.acquire}` }))}` : ""}</span>${used ? `<span class="pl-pick-used">${html("Used in current route")}</span>` : ""}<span class="pl-save-toggle${saved ? " is-saved" : ""}">${ICON_BOOKMARK}${html(saved ? "Saved pick" : "Save pick")}</span></span><span class="pl-finish-result">${resultMarkup(option, { stream }, target)}</span></button>`;
+      return `<button type="button" class="pl-finish-option${saved ? " is-current" : ""}" data-pl-save-pick="${index}" aria-pressed="${Boolean(saved)}"${!current || list.loading ? " disabled" : ""}${option.meets ? "" : ` data-below-goal`}><span class="pl-finish-where">${option.top ? `<span class="pl-gold">★</span>` : ""}<strong class="pl-finish-roll">${prefix}${option.finish}</strong><span class="pl-finish-how">${esc(actionName(option.action))}${(used ? inRoute.acquire : option.acquire) ? ` · ${esc(pl("Reset at {at} first", { at: `${prefix}${used ? inRoute.acquire : option.acquire}` }))}` : ""}</span>${used ? `<span class="pl-pick-used">${html("Used in current route")}</span>` : ""}${option.meets ? "" : `<span class="pl-below-goal">${html("Below goal")}</span>`}<span class="pl-save-toggle${saved ? " is-saved" : ""}">${ICON_BOOKMARK}${html(saved ? "Saved pick" : "Save pick")}</span></span><span class="pl-finish-result">${resultMarkup(option, { stream }, target)}</span></button>`;
     }).join("");
     const savedRows = picks.map((pick) => savedPickRow(target, stream, pick, 'data-pl-action="draft-remove-pick"')).join("");
-    const summary = list.options ? pl("{shown} matching finishes · searched {from}–{to} · {saved} saved", { shown: filtered.length, from: list.loadedFrom, to: list.loadedTo, saved: picks.length }) : pl("Search for finishes that meet this weapon’s goals.");
-    return `<div class="pl-browser-search"><label>${html("Stream")}<select data-pl-finish-stream>${["bonus", "skill"].map((value) => `<option value="${value}"${stream === value ? " selected" : ""}>${html(value === "bonus" ? "Bonus rolls" : "Skill rolls")}</option>`).join("")}</select></label><div class="pl-browser-range"><label>${html("From roll")}<input type="number" min="1" max="10000" step="1" data-browser-range="from" value="${list.from}"></label><span>–</span><label>${html("To roll")}<input type="number" min="1" max="10000" step="1" data-browser-range="to" value="${list.to}"></label></div><button type="button" class="secondary" data-pl-action="search-finishes">${html("Search")}</button>${list.loading ? `<button type="button" class="text-button" data-pl-action="cancel-finish-search">${html("Cancel search")}</button>` : ""}</div><p class="pl-fine">${html("Roll numbers start at the current saved position. A Keep finish may need an earlier Reset.")}</p><div class="pl-browser-goals"><strong>${html("Goal")}</strong><span>★ ${esc(stream === "bonus" ? bonusGoalText(target, "preferred") : pairText(goalFor(target, "preferred", stream)))}</span><span>✓ ${esc(stream === "bonus" ? bonusGoalText(target, "acceptable") : pairText(goalFor(target, "acceptable", stream)))}</span></div>${picks.length ? `<details class="pl-browser-favorites"><summary>${html("Saved picks ({n})", { n: picks.length })}</summary><ul class="pl-saved-picks">${savedRows}</ul></details>` : ""}<div class="pl-browser-controls"><div class="pl-sort"><span class="pl-sort-label">${html("Filter")}</span><div class="pl-sort-row">${filterChips}<button type="button" class="pl-sort-add" data-pl-action="filter-menu" aria-haspopup="true" aria-expanded="${filterMenuOpen}">＋ ${html("Filter")}</button></div>${filterMenu}</div>${bounds}<div class="pl-sort"><span class="pl-sort-label">${html("Sort")}</span><div class="pl-sort-row">${sortChips}${unusedSorts.length ? `<button type="button" class="pl-sort-add" data-pl-action="sort-menu" aria-haspopup="true" aria-expanded="${sortMenuOpen}">＋ ${html("Sort")}</button>` : ""}</div>${sortMenu}</div></div><p class="pl-fine" role="status">${list.loading ? html("Checking other finishes for {name}…", { name: nameOf(target) }) : esc(summary)}${list.complete === false ? ` · ${html("Search limit reached; more finishes may exist.")}` : ""}</p>${list.error ? `<p class="error" role="alert">${esc(list.error)}</p>` : ""}${list.options && !current ? `<p class="pl-browser-warning">${html("Goals or saved position changed. Search again to refresh these finishes. Your saved picks are kept.")}</p>` : ""}<div class="pl-finish-list">${items || (!list.loading && list.options ? `<p class="pl-fine">${html("No finishes match these filters. Your saved picks are kept.")}</p>` : "")}</div>${filtered.length > list.visible ? `<button type="button" class="secondary" data-pl-action="more-finishes">${html("Show more finishes")}</button>` : ""}<p class="pl-fine pl-browser-save-note">${html("Save weapon to keep your goals and saved picks. Build guides separately when you are ready.")}</p>`;
+    const summary = list.options ? pl("{shown} matching finishes · searched {from}–{to} · {saved} saved", { shown: filtered.length, from: list.loadedFrom, to: list.loadedTo, saved: picks.length }) : pl("Search every finish in the roll range. The filters start from this weapon’s goals.");
+    return `<div class="pl-browser-search"><label>${html("Stream")}<select data-pl-finish-stream>${["bonus", "skill"].map((value) => `<option value="${value}"${stream === value ? " selected" : ""}>${html(value === "bonus" ? "Bonus rolls" : "Skill rolls")}</option>`).join("")}</select></label><div class="pl-browser-range"><label>${html("From roll")}<input type="number" min="1" max="10000" step="1" data-browser-range="from" value="${list.from}"></label><span>–</span><label>${html("To roll")}<input type="number" min="1" max="10000" step="1" data-browser-range="to" value="${list.to}"></label></div><button type="button" class="secondary" data-pl-action="search-finishes">${html("Search")}</button>${list.loading ? `<button type="button" class="text-button" data-pl-action="cancel-finish-search">${html("Cancel search")}</button>` : ""}</div><p class="pl-fine">${html("Roll numbers start at the current saved position. A Keep finish may need an earlier Reset.")}</p><div class="pl-browser-goals"><strong>${html("Goal")}</strong><span>★ ${esc(stream === "bonus" ? bonusGoalText(target, "preferred") : pairText(goalFor(target, "preferred", stream)))}</span><span>✓ ${esc(stream === "bonus" ? bonusGoalText(target, "acceptable") : pairText(goalFor(target, "acceptable", stream)))}</span></div>${picks.length ? `<details class="pl-browser-favorites"><summary>${html("Saved picks ({n})", { n: picks.length })}</summary><ul class="pl-saved-picks">${savedRows}</ul></details>` : ""}<div class="pl-browser-controls"><div class="pl-sort"><span class="pl-sort-label">${html("Filter")}</span><div class="pl-sort-row">${filterChips}<button type="button" class="pl-sort-add" data-pl-action="filter-menu" aria-haspopup="true" aria-expanded="${filterMenuOpen}">＋ ${html("Filter")}</button></div>${filterMenu}</div>${bounds}<div class="pl-sort"><span class="pl-sort-label">${html("Sort")}</span><div class="pl-sort-row">${sortChips}${unusedSorts.length ? `<button type="button" class="pl-sort-add" data-pl-action="sort-menu" aria-haspopup="true" aria-expanded="${sortMenuOpen}">＋ ${html("Sort")}</button>` : ""}</div>${sortMenu}</div></div><p class="pl-fine" role="status">${list.loading ? html("Checking other finishes for {name}…", { name: nameOf(target) }) : esc(summary)}${list.complete === false ? ` · ${html("Showing the best {cap} of {total} by this sort. Narrow the range or add filters to see the rest.", { cap: list.options.length, total: list.total })}` : ""}</p>${list.error ? `<p class="error" role="alert">${esc(list.error)}</p>` : ""}${list.options && !current ? `<p class="pl-browser-warning">${html("Goals or saved position changed. Search again to refresh these finishes. Your saved picks are kept.")}</p>` : ""}<div class="pl-finish-list">${items || (!list.loading && list.options ? `<p class="pl-fine">${html("No finishes match these filters. Your saved picks are kept.")}</p>` : "")}</div>${filtered.length > list.visible ? `<button type="button" class="secondary" data-pl-action="more-finishes">${html("Show more finishes")}</button>` : ""}<p class="pl-fine pl-browser-save-note">${html("Save weapon to keep your goals and saved picks. Build guides separately when you are ready.")}</p>`;
   }
   function renderFinishModal() {
     if (!editorTarget || !q("#pl-finishes-panel")) return;
@@ -633,7 +633,13 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     if (!finishList || !editorTarget) return;
     const levels = structuredClone(finishList.sort ?? finishSortFor(finishList.stream, editorTarget));
     change(levels, sortKeys(finishList.stream, editorTarget));
-    finishList.sort = levels; renderFinishModal();
+    finishList.sort = levels;
+    // A capped search kept only the best by the old sort.
+    if (finishList.complete === false) refreshFinishes(); else renderFinishModal();
+  }
+  // Filters are the search's only criteria, so changing them searches again.
+  function refreshFinishes() {
+    if (finishList?.options || finishList?.loading) searchEditorFinishes(); else renderFinishModal();
   }
   function searchEditorFinishes() {
     if (!finishList || !editorTarget) return;
@@ -662,11 +668,11 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
         if (finishWorker !== helper) return;
         if (data.type === "error") { fail(errorText(data.message)); return; }
         stopFinishSearch();
-        Object.assign(list, { options: data.options, complete: data.complete, origin: request.origin, loadedFrom: from, loadedTo: request.limits[list.stream], signature });
+        Object.assign(list, { options: data.options, complete: data.complete, total: data.total, origin: request.origin, loadedFrom: from, loadedTo: request.limits[list.stream], signature });
         renderFinishModal();
       };
       helper.onerror = (error) => fail(pl("Unable to calculate the guide. {detail}", { detail: error.message }));
-      helper.postMessage({ kind: "collect", request, stream: list.stream, targetId: target.id, from });
+      helper.postMessage({ kind: "collect", request, stream: list.stream, targetId: target.id, from, filters: list.filters, sort: list.sort ?? finishSortFor(list.stream, editorTarget) });
       q("#pl-editor-error").hidden = true; renderFinishModal();
     } catch (error) { finishList.error = ["goals", "state", "limits", "statusValues", "excluded", "minAboveMax"].includes(error.message) ? errorText(error.message) : error.message; renderFinishModal(); }
   }
@@ -694,7 +700,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
       if ([filter.min, filter.max].some((value) => value !== null && (!Number.isInteger(value) || value < 0)) || (filter.min !== null && filter.max !== null && filter.min > filter.max)) { finishList.error = errorText("minAboveMax"); renderFinishModal(); return; }
     }
     finishList.filters = [...finishList.filters.filter((value) => value.key !== filter.key), filter];
-    filterEditing = null; finishList.error = ""; finishList.visible = 50; renderFinishModal();
+    filterEditing = null; finishList.error = ""; finishList.visible = 50; refreshFinishes();
   }
   function removeSavedPick(targetId, stream, id) {
     const raw = getTargets().find((target) => target.id === targetId);
@@ -829,12 +835,12 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     else if (action === "filter-menu") { filterMenuOpen = !filterMenuOpen; sortMenuOpen = false; renderFinishModal(); }
     else if (action === "filter-pick") {
       const key = button.dataset.key; filterMenuOpen = false;
-      if (["top", "saved", "direct"].includes(key)) finishList.filters.push({ key });
+      if (["top", "saved", "direct"].includes(key)) { finishList.filters.push({ key }); refreshFinishes(); }
       else filterEditing = { key, min: null, max: null, value: key === "action" ? "reset" : 0 };
       renderFinishModal(); q("[data-filter-min], [data-filter-value]")?.focus();
     }
     else if (action === "filter-edit") { const f = finishList.filters[Number(button.dataset.index)]; if (!["top", "saved", "direct"].includes(f.key)) filterEditing = { ...f }; renderFinishModal(); }
-    else if (action === "filter-remove") { finishList.filters.splice(Number(button.dataset.index), 1); finishList.visible = 50; renderFinishModal(); }
+    else if (action === "filter-remove") { finishList.filters.splice(Number(button.dataset.index), 1); finishList.visible = 50; refreshFinishes(); }
     else if (action === "filter-apply") applyBrowserFilter();
     else if (action === "filter-cancel") { filterEditing = null; renderFinishModal(); }
     else if (action === "draft-remove-pick") { editorTarget.planner.savedFinishes[finishList.stream] = editorTarget.planner.savedFinishes[finishList.stream].filter((pick) => savedFinishId(pick) !== button.dataset.pick); renderFinishModal(); }

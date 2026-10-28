@@ -1,4 +1,4 @@
-import { bonusGoalAlwaysMet, bonusTotals, hasGoal, layoutOf, matchesTier, rangeCanMatch, resultQuality, savedFinishChoice, skillGoalAlwaysMet, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { bonusGoalAlwaysMet, bonusTotals, finishOptionMatches, hasGoal, layoutOf, matchesTier, rangeCanMatch, resultQuality, savedFinishChoice, skillGoalAlwaysMet, sortFinishOptions, validLayout, validatePlannerRequest } from "./planner-model.js";
 
 const MODES = ["acceptable", "preferred"];
 const pause = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -257,32 +257,72 @@ function savedChoiceSets(request, provider) {
     }))]))]));
 }
 
-// Browsing is independent of a built route and uses the full search limit.
-// Saving a result from this list does not schedule or execute anything.
+// Browsing is independent of a built route and the weapon's goal: it lists
+// every finish in the range, narrowed only by the player's filters (which may
+// start from the goal's bounds). `top` and `meets` judge each result against
+// the goal. Keep finishes may use a Reset before the range. Saving a result
+// from this list does not schedule or execute anything.
 export async function collectFinishOptions(request, stream, targetId, provider, report = () => {}, options = {}) {
   validatePlannerRequest(request);
   const from = options.from ?? 1;
-  if (!Number.isInteger(from) || from < 1 || from > request.limits[stream]) throw new Error("range");
+  const count = request.limits[stream];
+  if (!Number.isInteger(from) || from < 1 || from > count) throw new Error("range");
   const target = request.targets.find((value) => value.id === targetId);
-  if (!target || !["bonus", "skill"].includes(stream) || !hasGoal(target, stream)) throw new Error("goals");
-  const predictions = new Map();
-  const cached = Object.fromEntries(["reset", "keep", "skills"].map((kind) => [kind, (weapon, offset, count, layout) => {
-    const key = `${kind}:${offset}:${count}:${layout?.join("") ?? ""}`;
-    if (!predictions.has(key)) predictions.set(key, provider[kind](weapon, offset, count, layout));
-    return predictions.get(key);
-  }]));
-  const pools = await buildCandidatePools({ ...request, targets: [target] }, cached, report, { ...options, streams: [stream], includeMet: true });
-  const choices = pools.acceptable[stream][0].choices;
-  const found = choices.filter((choice) => choice.finish >= from).map((choice) => {
-    const rolls = stream === "skill" ? cached.skills(target, 0, request.limits[stream])
-      : choice.action === "keep" ? cached.keep(target, 0, request.limits[stream], choice.layout) : cached.reset(target, 0, request.limits[stream]);
-    const raw = stream === "skill" ? rolls[choice.finish - 1] : Array.from(rolls.subarray((choice.finish - 1) * 5, choice.finish * 5));
-    return { key: choiceKey(choice), finish: choice.finish, action: choice.action, layout: choice.layout ?? null,
-      acquire: choice.acquisitions?.find((position) => position < choice.finish) ?? null,
-      raw, top: matchesTier(stream === "bonus" ? bonusTotals(raw, target) : raw, target, stream, "preferred"),
-      totals: stream === "bonus" ? bonusTotals(raw, target) : null };
-  });
-  return { options: found, complete: pools.acceptable.complete };
+  if (!target || !["bonus", "skill"].includes(stream)) throw new Error("goals");
+  const cap = options.cap ?? 50_000;
+  // Saved-pick membership is the browser's to judge.
+  const filters = (options.filters ?? []).filter((filter) => filter.key !== "saved");
+  const found = [];
+  const add = (option) => {
+    const result = stream === "bonus" ? option.totals : option.raw;
+    option.top = matchesTier(result, target, stream, "preferred") && hasGoal(target, stream);
+    option.meets = matchesTier(result, target, stream, "acceptable") && hasGoal(target, stream);
+    if (finishOptionMatches(option, filters)) found.push(option);
+  };
+  if (stream === "skill") {
+    const rolls = provider.skills(target, 0, count);
+    for (let index = from - 1; index < count; index += 1) add({ key: `skill:${index + 1}:`, finish: index + 1, action: "skill", layout: null, acquire: null, raw: rolls[index], totals: null });
+  } else {
+    const rolls = provider.reset(target, 0, count);
+    const raw = (values, index) => Array.from(values.subarray(index * 5, index * 5 + 5));
+    const layouts = new Map();
+    const initial = target.planner.currentBonuses ? layoutOf(target.planner.currentBonuses) : target.keepCategories;
+    if (validLayout(initial, target)) layouts.set(layoutKey(initial), { layout: initial, positions: [], initial: true });
+    const resets = !filters.some((filter) => filter.key === "action" && filter.value !== "reset");
+    for (let index = 0; index < count; index += 1) {
+      const result = raw(rolls, index);
+      if (resets && index + 1 >= from) add({ key: `reset:${index + 1}:`, finish: index + 1, action: "reset", layout: null, acquire: null, raw: result, totals: bonusTotals(result, target) });
+      const layout = layoutOf(result);
+      const lk = layoutKey(layout);
+      if (!layouts.has(lk)) layouts.set(lk, { layout, positions: [], initial: false });
+      layouts.get(lk).positions.push(index + 1);
+    }
+    const keeps = !filters.some((filter) => filter.key === "action" && filter.value !== "keep");
+    const direct = filters.some((filter) => filter.key === "direct");
+    let li = 0;
+    for (const { layout, positions, initial: known } of keeps ? layouts.values() : []) {
+      if (direct && !known) continue;
+      // Skip layouts whose loosest possible gains miss a stat filter.
+      const maximum = bonusTotals(layout.map((category) => [15, 16, 14, 10][category]), target);
+      const minimum = bonusTotals(layout.map((category) => [8, 9, 11, 6][category]), target);
+      const possible = filters.every((filter) => {
+        const ends = [minimum[filter.key], maximum[filter.key]].filter(Number.isFinite);
+        if (!ends.length || (filter.min === undefined && filter.max === undefined)) return true;
+        return (filter.min === null || Math.max(...ends) >= filter.min) && (filter.max === null || Math.min(...ends) <= filter.max);
+      });
+      if (!possible) continue;
+      const kept = provider.keep(target, 0, count, layout);
+      for (let index = Math.max(known ? 0 : positions[0], from - 1); index < count; index += 1) {
+        const result = raw(kept, index);
+        add({ key: `keep:${index + 1}:${layoutKey(layout)}`, finish: index + 1, action: "keep", layout,
+          acquire: known ? null : positions.find((position) => position < index + 1) ?? null, raw: result, totals: bonusTotals(result, target) });
+      }
+      if (++li % 24 === 0) { await pause(); report({ phase: "layouts", layouts: li, total: layouts.size }); }
+    }
+  }
+  // Too many matches keep the best by the browser's sort, then the earliest.
+  const sorted = sortFinishOptions(found, options.sort ?? []).map(({ option }) => option);
+  return { options: sorted.slice(0, cap), complete: sorted.length <= cap, total: sorted.length };
 }
 
 // The weapons scheduled in a stream, limited to finishes within its horizon.
