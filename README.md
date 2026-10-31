@@ -1,76 +1,10 @@
-# Gogma Seed Finder
+# Gogma Seed Finder (fork)
 
-Monster Hunter Wildsのゴグマ／アーティア抽選結果からRNG状態を絞り込み、将来の結果を予測するための独立プロジェクトです。
+A fork of [apeshinzo78/GogmaSeedFinder](https://github.com/apeshinzo78/GogmaSeedFinder), a browser tool for PS5 players that finds the Gogma/Artian RNG seed in Monster Hunter Wilds and predicts future rolls.
 
-主な対象は、ゲーム内部の値を直接取得できないPS5ユーザーです。観測結果を手入力し、利用者のブラウザ内で候補探索と未来予測を行うWebツールを目指します。
+**What this fork is doing:** adding a **weapon planner** tab. You enter bonus and skill goals for up to 100 weapons and get a step-by-step Reset/Keep route, instead of comparing forecast tables by hand. The work is on the `codex/weapon-planner-ui` branch. `main` follows upstream.
 
-## Status
+- Live site (from `main`): https://pomodorozhong.github.io/GogmaSeedFinder/
+- Docs, status and build steps: [upstream README](https://github.com/apeshinzo78/GogmaSeedFinder#readme)
 
-ゴグマのシリーズ／グループスキル抽選と、巨戟復元強化の「ボーナスをリセットして再復元」「ボーナスを同じ構成で再復元」について、Rust版`rng-core`とgolden testを実装済みです。巨戟復元は既知counterとcounter範囲探索に対応し、ブラウザ内のRust/WASMとWeb Workerで探索できます。スラッシュアックス、弓、ヘビィボウガンの実測に合わせた武器種別の候補プールを実装し、ライトボウガンはヘビィと同じルールを使用します。スラッシュアックスで未来予測が再現すること、抽選結果は武器種・属性で変わり、武器個体が違っても両方が一致すれば同じになることをゲーム内で確認済みです。
-
-Web画面はセーブ地点を相対位置`0`として扱い、発見した候補から最大10,000回の未来を計算します。7つの用途別タブ、現在の基準seedと2カウンター、3値の個別手入力、端末内保存、最大140件の武器プロファイル比較に対応しています。登録タグまたは結果表の見出しをドラッグすると、復元ボーナスとスキル未来予測で共通の表示順を変更して保存できます。リセット結果の「この構成でEX厳選へ」から保存後カウンターと5枠構成を引き継げます。また、複数のEX未厳選武器へ個別の5枠構成を登録し、同じ共通カウンターから横並びで比較できます。スキル位置の特定後は、共通seed・復元位置・スキル位置を保持する`GSF2`を両方の未来表に表示します。使い方ページには、1つの基準seedと独立した2カウンターの関係、複数武器を順番に採用して素材を節約する例を掲載しています。EXボーナスは攻撃・会心・属性・斬れ味／装填の系統色を保ったまま強調します。
-
-通常アーティア未来予測はレア8専用です。ゴグマと共通の基準seedと、武器種・レア度ごとに独立した作成カウンターを使います。無属性／属性・状態異常の近接武器、弓、ボウガンについて、武器種別の作成カウンター検索、最大10,000本の未来表、CSV出力に対応しています。大剣・ランス・弓・ヘビィボウガン・ライトボウガンの計28本は、実機の作成カウンターと5枠すべてが一致しています。残りの近接9武器種は同じ共通式で計算しますが、個別の実機確認は未完了です。レア6・7は対象外です。スキル未来予測と「ボーナスを同じ構成で再復元」はGARP v0.9.3の式との一致までで、独立したゲーム実測による確認はまだです。スクリーンショット入力、非常に広い未知counter探索は未実装です。
-
-## Planned architecture
-
-- `crates/rng-core`: Luaで確認した32-bit RNGと各抽選のRust実装
-- `crates/seed-search-cli`: 観測結果から候補を探索する検証用CLI
-- `docs`: RNG仕様と検証記録
-- `research/upstream`: 上流資料の出典・ハッシュ・取扱記録
-- `diagnostics/gogma-constraint-probe`: ゲーム内のボーナス制約値をJSON出力する読み取り専用REFramework診断
-- `tests/fixtures`: Lua実装と比較する既知の入出力
-- `web`: Rust/WASMを使用するWeb UI（探索PoC成立後に追加）
-
-## Development order
-
-1. ゴグマのセット／グループスキル抽選をRustへ移植する（完了）
-2. Lua版と連続結果が一致するgolden testを作る（完了）
-3. 既知seedを再発見するCLIを作る（既知counterについて完了）
-4. 必要な観測数と探索時間を測定する（golden sampleについて完了）
-5. 巨戟復元強化のReset Bonusesを移植し、実測golden testを作る（完了）
-6. ゴグマボーナス観測からの既知counter探索を追加する（完了）
-7. 有界の未知Gogma counter探索を追加する（完了）
-8. WebAssemblyとWeb Worker版の速度検証UIを追加する（完了）
-9. ゲーム画面の名称で入力できる手動入力UIへ拡張する（完了）
-10. 発見したseed/counterから未来の結果を表示する（完了）
-11. 途中セーブ用のセーブ状態コードとEX強調を追加する（完了）
-12. 既知seed上のスキル位置探索と未来予測UIを追加する（golden vectorについて完了、実測待ち）
-13. 複数の武器種・属性の比較表と、両抽選位置を保持する`GSF2`を追加する（完了）
-14. 用途別5タブ、共通セーブ状態、武器プロファイルごとのKeep Bonuses未来予測を追加する（GARP式について完了、実測待ち）
-
-## Verification
-
-```powershell
-cargo test --workspace --all-targets
-cargo clippy --workspace --all-targets -- -D warnings
-```
-
-UI translation checks (Node.js):
-
-```sh
-node --test web/i18n.test.mjs
-```
-
-## Web prototype
-
-公開版: [Gogma Seed Finder](https://apeshinzo78.github.io/GogmaSeedFinder/)
-
-すべての探索・未来予測は利用者のブラウザ内で実行され、観測結果やseedがサーバーへ送信されることはありません。
-
-```powershell
-.\scripts\build-wasm.ps1
-python -m http.server 4173 --bind 127.0.0.1 --directory web
-```
-
-ブラウザで`http://127.0.0.1:4173/`を開きます。詳細は`docs/WEB_POC.md`を参照してください。
-
-## Attribution
-
-アルゴリズム調査はWiseHorror氏の「Gogma Artian Roll Planner」を参照しています。詳細は`THIRD_PARTY_NOTICES.md`を参照してください。
-
-## License
-
-このリポジトリの作者自身が作成したコードは[MIT License](LICENSE)で公開しています。商用・非商用を問わず、利用・改変・再配布できます。
-
-第三者由来の資料・データ・名称などにはMIT Licenseが付与されるとは限りません。該当する権利・許諾とクレジットについては[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)を確認してください。
+The code is under the [MIT License](LICENSE). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for third-party material.
