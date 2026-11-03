@@ -295,6 +295,27 @@ planner export (format `gogma-weapon-planner`, version 1) is rejected without
 changing anything. Base Artian counters and forecast-tab settings are not
 included.
 
+## Reviewing the implementation
+
+- **Shared save data:** [weapon-profiles.js](../web/weapon-profiles.js) creates individual weapons and restores legacy profiles. [save-position.js](../web/save-position.js) handles the Gogma seed and its two counters. Local storage recovers valid fields independently; an invalid planner import rejects the whole position. Base Artian uses its own state.
+- **Weapon editing.** The editor owns one draft for the Goals and Finishes tabs. Changing a filter can edit a draft goal. Save validates the form and passes the weapon and its sort choices to the planner. Cancel drops the draft and stops its finish search. [Editor controller](../web/planner-editor.js) · [Form fields](../web/planner-goal-form.js)
+- **Finish browsing.** The editor derives the active filters for both the worker request and the visible results. The view builds the result buttons, filter chips and sort controls. The model defines how goals match results and how saved finishes are identified. [Finish view](../web/planner-finish-view.js) · [Planner model](../web/planner-model.js)
+- **Search:** [planner-worker.js](../web/planner-worker.js) supplies the WASM predictors. The route optimizer and finish browser in [planner-engine.js](../web/planner-engine.js) share [one Reset/Keep traversal](../web/planner-bonus-rolls.js). They apply different rules: a finish may be worth browsing even when it cannot fit a route.
+- **Execution:** [planner-progress.js](../web/planner-progress.js) derives each row’s status from the two saved-step counts. In [planner-ui.js](../web/planner-ui.js), matching a draw records a bookmark; confirming a save calls `saveStep` in [app.js](../web/app.js), which checks the seed and the affected stream again before writing.
+
+The arrows below follow a weapon edit. Each search starts its own worker instance.
+
+```mermaid
+flowchart LR
+    Planner["Planner UI"] -->|opens weapon| Editor["Weapon editor · one draft"]
+    Editor -->|reads and writes fields| Goals["Goal form"]
+    Editor -->|renders results| View["Finish view"]
+    Editor -->|searches finishes| Client["Worker client"]
+    Planner -->|builds routes| Client
+    Client -. starts .-> Worker["Planner worker"]
+    Editor -. validated Save .-> Planner
+```
+
 ## Validation and data
 
 `npm test` covers stat equivalence, separate units, stat ranges and exclusion,
