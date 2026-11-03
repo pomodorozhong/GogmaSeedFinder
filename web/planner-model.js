@@ -104,6 +104,8 @@ export function canFillSlots(target, excluded) {
 // Saved finishes belong to a weapon, independently of any generated route.
 // Remember the seed and absolute stream position so rebuilding after saved
 // steps cannot silently reinterpret a pick as a different draw.
+// Route choices are relative to the current position; saved pick IDs below are absolute.
+export const choiceKey = ({ action, finish, layout }) => `${action}:${finish}:${layout?.join("") ?? ""}`;
 export const savedFinishId = (pick) => `${pick.baseSeed}:${pick.weaponType}:${pick.attributeForce}:${pick.originCounter + pick.finish}:${pick.action}:${pick.layout?.join("") ?? ""}`;
 
 export function normalizedSavedFinishes(target) {
@@ -138,7 +140,7 @@ export function savedFinishChoice(target, stream, pick, origin) {
   const counter = origin[`${stream}Counter`];
   if (!Number.isSafeInteger(counter)) return { status: "position", key: null };
   const finish = pick.originCounter + pick.finish - counter;
-  if (finish > 0) return { status: "pending", finish, key: `${pick.action}:${finish}:${pick.layout?.join("") ?? ""}` };
+  if (finish > 0) return { status: "pending", finish, key: choiceKey({ ...pick, finish }) };
   const current = stream === "bonus" ? target.planner?.currentBonuses : target.planner?.currentSkill;
   if (JSON.stringify(current) === JSON.stringify(pick.raw)) return { status: "achieved", finish: 0, key: "already:0:" };
   return { status: "passed", key: null };
@@ -164,7 +166,7 @@ export function migrateSavedFinishes(targets, routes, mode = "acceptable") {
       for (const stream of ["bonus", "skill"]) {
         const key = current.pins?.[stream]?.[target.id];
         const choice = current[stream]?.choices?.find((value) => value.id === target.id);
-        if (!key || !choice || `${choice.action}:${choice.finish}:${choice.layout?.join("") ?? ""}` !== key) continue;
+        if (!key || !choice || choiceKey(choice) !== key) continue;
         const raw = current.steps?.find((step) => step.targetId === target.id && step.stream === stream && step.intent === "finish")?.rolls?.at(-1)?.raw;
         const original = current.targets?.find((value) => value.id === target.id);
         if (!original) continue;
@@ -418,6 +420,10 @@ export function parsePlannerExport(text) {
 // first; the earliest roll always breaks the remaining ties.
 export const FINISH_SORT_KEYS = ["top", "direct", ...STAT_KEYS];
 export const DEFAULT_FINISH_SORT = [];
+
+export function finishSortKeys(stream, target) {
+  return stream === "bonus" ? ["top", "direct", ...availableStats(target)] : ["top"];
+}
 
 export function normalizedFinishSort(levels) {
   if (!Array.isArray(levels)) return DEFAULT_FINISH_SORT.map((level) => ({ ...level }));

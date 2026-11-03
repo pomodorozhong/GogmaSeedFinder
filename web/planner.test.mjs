@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import vm from "node:vm";
 import { initSync, predict_gogma_rolls, predict_gogma_keep_rolls, predict_skill_rolls } from "./pkg/gogma_wasm_search.js";
 import { availableStats, BONUS_CATEGORY, DEFAULT_FINISH_SORT, filtersToTier, finishOptionMatches, goalFinishSort, rowFilters, tierFinishFilters, sortFinishOptions, bonusGoalAlwaysMet, bonusTotals, canFillSlots, copiedPlanner, layoutOf, MAX_SELECTED, migrateSavedFinishes, rangeCanMatch, matchesTier, normalizedFinishSort, normalizedPlanner, normalizedProgress, parsePlannerExport, plannerExport, routePosition, savedFinishChoice, savedFinishFromOption, savedFinishId, streamSteps, resultQuality, routeWeaponsMatch, skillGoalMatches, statGoalMatches, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
@@ -1278,8 +1278,11 @@ test("a planner export round-trips the position, weapons and progress, and other
 test("all planner copy has Japanese and Traditional Chinese translations", async () => {
   const source = await readFile(new URL("./planner-text.js", import.meta.url), "utf8");
   const dictionary = vm.runInNewContext(source.slice(source.indexOf("export const PLANNER_TEXT =") + 7, source.indexOf("export function pl(")) + "\nPLANNER_TEXT;");
-  const ui = await readFile(new URL("./planner-ui.js", import.meta.url), "utf8");
-  for (const [, key] of ui.matchAll(/(?:html|pl)\("([^"\n]+)"/g)) assert.ok(dictionary[key], `Missing key: ${key}`);
+  const modules = (await readdir(new URL("./", import.meta.url))).filter((name) => /^planner-.*\.js$/.test(name));
+  for (const name of modules) {
+    const source = await readFile(new URL(name, import.meta.url), "utf8");
+    for (const [, key] of source.matchAll(/(?:html|pl)\("([^"\n]+)"/g)) assert.ok(dictionary[key], `${name}: missing key: ${key}`);
+  }
   for (const [key, translations] of Object.entries(dictionary)) {
     assert.equal(translations.length, 2, key);
     for (const text of translations) {

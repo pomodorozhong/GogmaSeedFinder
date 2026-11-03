@@ -12,6 +12,8 @@ import {
   predictArtianBaseRolls,
 } from "./artian-base-rng.js";
 import { localizedTargetName, t } from "./i18n.js";
+import { createPosition, readImportedPosition, readSavedPosition, withStreamCounter } from "./save-position.js";
+import { createWeaponProfile, defaultSkills, LORDS_SOUL_GROUP_INDEX, normalizeKeepCategories, restoreProfiles } from "./weapon-profiles.js";
 import { initPlanner } from "./planner-ui.js";
 import { layoutOf, normalizedPlanner } from "./planner-model.js";
 import { pl } from "./planner-text.js";
@@ -122,33 +124,12 @@ const BOWGUN_WEAPON_TYPES = new Set([12, 13]);
 const SHARPNESS_AMMO_BONUS_IDS = new Set([6, 10]);
 const ELEMENT_BONUS_IDS = new Set([11, 14]);
 const EX_BONUS_IDS = new Set([10, 14, 15, 16]);
-const LORDS_SOUL_GROUP_INDEX = 13;
 const PRIORITY_GROUP_SKILL_INDICES = [LORDS_SOUL_GROUP_INDEX];
 const PRIORITY_SERIES_SKILL_INDICES = [11, 6, 5, 18];
 const SKILL_COUNTER_GATE = 54;
 const MAX_REGISTERED_TARGETS = WEAPON_TYPES.length * ATTRIBUTES.length;
 const LARGE_REGISTERED_TARGET_COUNT = 16;
 const STORAGE_KEY = "gogma-seed-finder-state-v1";
-
-const SKILL_TARGET_PRESETS = new Map([
-  [0, [
-    { seriesIndex: 19, groupIndex: LORDS_SOUL_GROUP_INDEX },
-  ]],
-  [1, [
-    { seriesIndex: 11, groupIndex: LORDS_SOUL_GROUP_INDEX },
-    { seriesIndex: 18, groupIndex: LORDS_SOUL_GROUP_INDEX },
-  ]],
-  [3, [
-    { seriesIndex: 11, groupIndex: LORDS_SOUL_GROUP_INDEX },
-  ]],
-  [5, [
-    { seriesIndex: 5, groupIndex: LORDS_SOUL_GROUP_INDEX },
-    { seriesIndex: 18, groupIndex: LORDS_SOUL_GROUP_INDEX },
-  ]],
-  [8, [
-    { seriesIndex: 11, groupIndex: LORDS_SOUL_GROUP_INDEX },
-  ]],
-]);
 
 const SAMPLE_OBSERVATIONS = [
   [11, 12, 15, 14, 11],
@@ -509,23 +490,10 @@ initPlanner({
   // A planner export restores the weapons and saved position like a pasted
   // save-state code; nothing changes unless the whole position is valid.
   importState: ({ state, targets }) => {
-    const value = (raw) => raw === null || raw === undefined ? null : Number(raw);
-    const baseSeed = value(state.baseSeed);
-    const bonusCounter = value(state.bonusCounter);
-    const skillCounter = value(state.skillCounter);
-    if (
-      !Number.isSafeInteger(baseSeed) || baseSeed < 0 || baseSeed > 99_999_999 ||
-      [bonusCounter, skillCounter].some((counter) => counter !== null && !isValidCounter(counter))
-    ) throw new Error(pl("This file is not a valid planner export."));
+    const position = readImportedPosition(state, "状態コード");
+    if (!position) throw new Error(pl("This file is not a valid planner export."));
     comparisonTargets = normalizeStoredTargets(targets);
-    saveState = {
-      baseSeed,
-      bonusCounter,
-      skillCounter,
-      baseSource: "状態コード",
-      bonusSource: bonusCounter === null ? null : "状態コード",
-      skillSource: skillCounter === null ? null : "状態コード",
-    };
+    saveState = position;
     renderComparisonTargets();
     renderSaveState();
     void Promise.all([refreshPredictions(), refreshComparisonPredictions(), refreshSkillPredictions()]);
@@ -536,7 +504,7 @@ initPlanner({
     details.scrollIntoView({ behavior: "smooth", block: "center" });
     manualStateBaseSeedInput.focus({ preventScroll: true });
   },
-  metadata: { weapons: WEAPON_TYPES, attributes: ATTRIBUTES, bonuses: GOGMA_BONUSES, bonusName: gogmaBonusName, series: SERIES_SKILLS, groups: GROUP_SKILLS, defaultSkills: defaultSkillCombinationsForWeapon },
+  metadata: { weapons: WEAPON_TYPES, attributes: ATTRIBUTES, bonuses: GOGMA_BONUSES, bonusName: gogmaBonusName, series: SERIES_SKILLS, groups: GROUP_SKILLS, defaultSkills },
 });
 
 document.querySelector("#load-sample").addEventListener("click", () => {
@@ -915,42 +883,6 @@ function prioritizedSkillOptions(labels, priorityIndices) {
   ];
 }
 
-function defaultSkillCombinationsForWeapon(weaponType) {
-  return normalizeSkillCombinations(SKILL_TARGET_PRESETS.get(weaponType) ?? []);
-}
-
-function normalizeSkillCombinations(combinations) {
-  if (!Array.isArray(combinations)) return [];
-  const seen = new Set();
-  return combinations.reduce((normalized, combination) => {
-    const rawSeriesIndex = combination?.seriesIndex;
-    const rawGroupIndex = combination?.groupIndex;
-    const seriesIndex = Number(rawSeriesIndex);
-    const groupIndex = Number(rawGroupIndex);
-    if (
-      rawSeriesIndex === null ||
-      rawSeriesIndex === undefined ||
-      rawSeriesIndex === "" ||
-      rawGroupIndex === null ||
-      rawGroupIndex === undefined ||
-      rawGroupIndex === "" ||
-      !Number.isSafeInteger(seriesIndex) ||
-      seriesIndex < 0 ||
-      seriesIndex >= SERIES_SKILLS.length ||
-      !Number.isSafeInteger(groupIndex) ||
-      groupIndex < 0 ||
-      groupIndex >= GROUP_SKILLS.length
-    ) {
-      return normalized;
-    }
-    const key = `${seriesIndex}:${groupIndex}`;
-    if (seen.has(key)) return normalized;
-    seen.add(key);
-    normalized.push({ seriesIndex, groupIndex });
-    return normalized;
-  }, []);
-}
-
 function renderSkillFilterSeriesOptions(selectedIndices = new Set()) {
   skillFilterSeriesOptions.replaceChildren(
     ...prioritizedSkillOptions(SERIES_SKILLS, PRIORITY_SERIES_SKILL_INDICES).map(([index, label]) => {
@@ -969,14 +901,6 @@ function renderSkillFilterSeriesOptions(selectedIndices = new Set()) {
 }
 
 function loadPersistedAppState() {
-  const emptyState = {
-    baseSeed: null,
-    bonusCounter: null,
-    skillCounter: null,
-    baseSource: null,
-    bonusSource: null,
-    skillSource: null,
-  };
   const emptyArtianBaseState = {
     baseSeed: null,
     counters: {},
@@ -984,27 +908,7 @@ function loadPersistedAppState() {
   };
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
-    const candidateState = saved?.saveState ?? {};
-    const baseSeed = candidateState.baseSeed === null || candidateState.baseSeed === undefined
-      ? Number.NaN
-      : Number(candidateState.baseSeed);
-    const bonusCounter = candidateState.bonusCounter === null || candidateState.bonusCounter === undefined
-      ? Number.NaN
-      : Number(candidateState.bonusCounter);
-    const skillCounter = candidateState.skillCounter === null || candidateState.skillCounter === undefined
-      ? Number.NaN
-      : Number(candidateState.skillCounter);
-    const normalizedState = {
-      ...emptyState,
-      baseSeed: Number.isSafeInteger(baseSeed) && baseSeed >= 0 && baseSeed <= 99_999_999
-        ? baseSeed
-        : null,
-      bonusCounter: isValidCounter(bonusCounter) ? bonusCounter : null,
-      skillCounter: isValidCounter(skillCounter) ? skillCounter : null,
-      baseSource: typeof candidateState.baseSource === "string" ? candidateState.baseSource : null,
-      bonusSource: typeof candidateState.bonusSource === "string" ? candidateState.bonusSource : null,
-      skillSource: typeof candidateState.skillSource === "string" ? candidateState.skillSource : null,
-    };
+    const normalizedState = readSavedPosition(saved?.saveState);
     const targets = normalizeStoredTargets(saved?.targets);
     const bonusPrediction = {
       mode: saved?.bonusPrediction?.mode === "keep" ? "keep" : "reset",
@@ -1039,7 +943,7 @@ function loadPersistedAppState() {
     return { saveState: normalizedState, targets, bonusPrediction, artianBaseState };
   } catch {
     return {
-      saveState: emptyState,
+      saveState: readSavedPosition(),
       targets: [],
       bonusPrediction: { mode: "reset" },
       artianBaseState: emptyArtianBaseState,
@@ -1060,42 +964,10 @@ function persistAppState() {
 }
 
 function normalizeStoredTargets(targets) {
-  return Array.isArray(targets)
-    ? targets
-        .filter((target) =>
-          Number.isSafeInteger(target?.weaponType) &&
-          target.weaponType >= 0 &&
-          target.weaponType <= 13 &&
-          Number.isSafeInteger(target?.attributeForce) &&
-          target.attributeForce >= 0 &&
-          target.attributeForce <= 9,
-        )
-        .slice(0, MAX_REGISTERED_TARGETS)
-        .map((target, index) => ({
-          id: typeof target.id === "string" && target.id ? target.id : `legacy-${index}`,
-          weaponType: target.weaponType,
-          attributeForce: target.attributeForce,
-          label: typeof target.label === "string" ? target.label.slice(0, 24) : "",
-          skillCombinations: Array.isArray(target.skillCombinations)
-            ? normalizeSkillCombinations(target.skillCombinations)
-            : defaultSkillCombinationsForWeapon(target.weaponType),
-          keepCategories: normalizeKeepCategories(target.keepCategories),
-          keepSource: typeof target.keepSource === "string" ? target.keepSource : null,
-          planner: normalizedPlanner(target),
-        }))
-    : [];
-}
-
-function normalizeKeepCategories(categories) {
-  if (!Array.isArray(categories) || categories.length !== 5) return [null, null, null, null, null];
-  return categories.map((category) =>
-    Number.isSafeInteger(category) && category >= 0 && category <= 3 ? category : null,
-  );
-}
-
-function createTargetId() {
-  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
-  return `target-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return restoreProfiles(targets, {
+    weapons: WEAPON_TYPES.length, attributes: ATTRIBUTES.length,
+    series: SERIES_SKILLS.length, groups: GROUP_SKILLS.length,
+  });
 }
 
 function setActiveTab(tabName, updateHash = true) {
@@ -1351,30 +1223,12 @@ function currentStateCode() {
 }
 
 function setStateFromBonus(baseSeed, bonusCounter, source, clearSkill = false) {
-  const baseChanged = saveState.baseSeed !== null && saveState.baseSeed !== baseSeed;
-  saveState = {
-    ...saveState,
-    baseSeed,
-    bonusCounter,
-    skillCounter: baseChanged || clearSkill ? null : saveState.skillCounter,
-    baseSource: source,
-    bonusSource: source,
-    skillSource: baseChanged || clearSkill ? null : saveState.skillSource,
-  };
+  saveState = withStreamCounter(saveState, "bonus", baseSeed, bonusCounter, source, clearSkill);
   renderSaveState();
 }
 
 function setStateFromSkill(baseSeed, skillCounter, source) {
-  const baseChanged = saveState.baseSeed !== null && saveState.baseSeed !== baseSeed;
-  saveState = {
-    ...saveState,
-    baseSeed,
-    bonusCounter: baseChanged ? null : saveState.bonusCounter,
-    skillCounter,
-    baseSource: source,
-    bonusSource: baseChanged ? null : saveState.bonusSource,
-    skillSource: source,
-  };
+  saveState = withStreamCounter(saveState, "skill", baseSeed, skillCounter, source);
   renderSaveState();
 }
 
@@ -1406,14 +1260,7 @@ function applyManualSaveState() {
       "スキルカウンター",
       0xffffffff,
     );
-    saveState = {
-      baseSeed,
-      bonusCounter,
-      skillCounter,
-      baseSource: "手入力",
-      bonusSource: bonusCounter === null ? null : "手入力",
-      skillSource: skillCounter === null ? null : "手入力",
-    };
+    saveState = createPosition(baseSeed, bonusCounter, skillCounter, "手入力");
     renderSaveState();
     manualStateMessage.textContent = "入力した値を現在のセーブ状態に設定しました。空欄のカウンターは未特定として扱います。";
     showSavedCounters([
@@ -1537,29 +1384,14 @@ async function openContinuationCode() {
       counterGate: 35,
       observations: [],
     };
-    saveState = {
-      baseSeed: parsedState.seed,
-      bonusCounter: parsedState.counter,
-      skillCounter: parsedState.skillCounter,
-      baseSource: "状態コード",
-      bonusSource: "状態コード",
-      skillSource: parsedState.skillCounter === null ? null : "状態コード",
-    };
+    saveState = createPosition(parsedState.seed, parsedState.counter, parsedState.skillCounter, "状態コード");
     renderSaveState();
     foundCandidates.set(candidateKey(candidate), candidate);
     statusText.textContent = "状態コード読込";
     statusText.className = "status-pill complete";
     renderCandidates();
     if (comparisonTargets.length === 0) {
-      comparisonTargets.push({
-        id: createTargetId(),
-        weaponType: Number(weaponSelect.value),
-        attributeForce: Number(attributeSelect.value),
-        label: "",
-        skillCombinations: defaultSkillCombinationsForWeapon(Number(weaponSelect.value)),
-        keepCategories: [null, null, null, null, null],
-        keepSource: null,
-      });
+      comparisonTargets.push(createWeaponProfile({ weaponType: Number(weaponSelect.value), attributeForce: Number(attributeSelect.value) }));
     }
     renderComparisonTargets();
     renderPredictionFilters();
@@ -2079,25 +1911,7 @@ async function selectCandidate(candidate) {
   comparisonAttributeSelect.value = String(lastSearchConfig.attributeForce);
   skillWeaponSelect.value = String(lastSearchConfig.weaponType);
   skillAttributeSelect.value = String(lastSearchConfig.attributeForce);
-  const searchTarget = {
-    weaponType: lastSearchConfig.weaponType,
-    attributeForce: lastSearchConfig.attributeForce,
-    label: "",
-  };
-  if (
-    comparisonTargets.length < MAX_REGISTERED_TARGETS &&
-    !comparisonTargets.some(
-      (target) => comparisonCombinationKey(target) === comparisonCombinationKey(searchTarget),
-    )
-  ) {
-    comparisonTargets.push({
-      ...searchTarget,
-      id: createTargetId(),
-      skillCombinations: defaultSkillCombinationsForWeapon(searchTarget.weaponType),
-      keepCategories: [null, null, null, null, null],
-      keepSource: null,
-    });
-  }
+  registerObservedWeapon(lastSearchConfig.weaponType, lastSearchConfig.attributeForce);
   renderComparisonTargets();
   persistAppState();
   renderPredictionFilters();
@@ -2272,14 +2086,7 @@ async function beginKeepOptimization(target, bonusIds, completedRolls) {
       showComparisonError(`EX厳選へ引き継ぐには、登録武器を${MAX_REGISTERED_TARGETS}件未満にしてください。`);
       return;
     }
-    profile = {
-      ...target,
-      id: createTargetId(),
-      label: target.label ?? "",
-      skillCombinations: target.skillCombinations ?? defaultSkillCombinationsForWeapon(target.weaponType),
-      keepCategories: [null, null, null, null, null],
-      keepSource: null,
-    };
+    profile = createWeaponProfile(target);
     comparisonTargets.push(profile);
   }
   profile.keepCategories = Array.from(bonusIds, bonusCategoryId);
@@ -2584,6 +2391,14 @@ async function addSkillTarget() {
   await Promise.all([refreshComparisonPredictions(), refreshSkillPredictions()]);
 }
 
+// A search can discover the same weapon in either stream. Register it only once.
+function registerObservedWeapon(weaponType, attributeForce) {
+  if (comparisonTargets.length >= MAX_REGISTERED_TARGETS ||
+      comparisonTargets.some((target) => target.weaponType === weaponType && target.attributeForce === attributeForce)) return false;
+  comparisonTargets.push(createWeaponProfile({ weaponType, attributeForce }));
+  return true;
+}
+
 function registerTarget(target, showError, allowDuplicateCombination) {
   const duplicateCombination = comparisonTargets.filter(
     (existing) => comparisonCombinationKey(existing) === comparisonCombinationKey(target),
@@ -2607,13 +2422,7 @@ function registerTarget(target, showError, allowDuplicateCombination) {
     showError(`予測対象は最大${MAX_REGISTERED_TARGETS}件です。不要な武器を削除してください。`);
     return false;
   }
-  comparisonTargets.push({
-    ...target,
-    id: createTargetId(),
-    skillCombinations: defaultSkillCombinationsForWeapon(target.weaponType),
-    keepCategories: [null, null, null, null, null],
-    keepSource: null,
-  });
+  comparisonTargets.push(createWeaponProfile(target));
   renderComparisonTargets();
   persistAppState();
   return true;
@@ -3239,24 +3048,7 @@ async function findSkillPosition() {
     showSavedCounters([
       savedCounterMessage("スキルカウンター", selectedSkillCounter),
     ]);
-    const observedTarget = {
-      weaponType: Number(skillWeaponSelect.value),
-      attributeForce: Number(skillAttributeSelect.value),
-      label: "",
-    };
-    if (
-      comparisonTargets.length < MAX_REGISTERED_TARGETS &&
-      !comparisonTargets.some(
-        (target) => comparisonCombinationKey(target) === comparisonCombinationKey(observedTarget),
-      )
-    ) {
-      comparisonTargets.push({
-        ...observedTarget,
-        id: createTargetId(),
-        skillCombinations: defaultSkillCombinationsForWeapon(observedTarget.weaponType),
-        keepCategories: [null, null, null, null, null],
-        keepSource: null,
-      });
+    if (registerObservedWeapon(Number(skillWeaponSelect.value), Number(skillAttributeSelect.value))) {
       renderComparisonTargets();
       persistAppState();
     }

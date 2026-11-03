@@ -1,4 +1,5 @@
-import { bonusGoalAlwaysMet, bonusTotals, finishOptionMatches, hasGoal, layoutOf, matchesTier, rangeCanMatch, resultQuality, savedFinishChoice, savedFinishId, skillGoalAlwaysMet, sortFinishOptions, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { visitBonusRolls } from "./planner-bonus-rolls.js";
+import { choiceKey, bonusGoalAlwaysMet, bonusTotals, finishOptionMatches, hasGoal, layoutOf, matchesTier, rangeCanMatch, resultQuality, savedFinishChoice, savedFinishId, skillGoalAlwaysMet, sortFinishOptions, validLayout, validatePlannerRequest } from "./planner-model.js";
 
 const MODES = ["acceptable", "preferred"];
 const pause = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -48,57 +49,33 @@ export async function buildCandidatePools(request, provider, report = () => {}, 
       const needed = MODES.filter((mode) => sets[mode].length === 0 || savedKeys.size > 0 || options.includeMet);
       const count = request.limits[stream];
       if (needed.length && count > 0) {
+        const add = (finish, action, result, layout, acquisitions) => {
+          const preferred = matchesTier(result, target, stream, "preferred");
+          for (const mode of needed) {
+            const matches = mode === "preferred" ? preferred : matchesTier(result, target, stream, mode);
+            if (!matches) continue;
+            const top = mode === "acceptable" && preferred;
+            const choice = layout ? { finish, action, layout, acquisitions, top } : { finish, action, top };
+            if (layout && sets[mode].length >= cap && !savedKeys.has(choiceKey(choice))) pools[mode].complete = false;
+            else sets[mode].push(choice);
+          }
+        };
         if (stream === "skill") {
           if (!skillCache.has(key)) skillCache.set(key, provider.skills(target, 0, count));
           const rolls = skillCache.get(key);
-          for (let index = 0; index < count; index += 1) {
-            const top = matchesTier(rolls[index], target, stream, "preferred");
-            for (const mode of needed) if (matchesTier(rolls[index], target, stream, mode)) sets[mode].push({ finish: index + 1, action: "skill", top: mode === "acceptable" && top });
-          }
+          for (let i = 0; i < count; i += 1) add(i + 1, "skill", rolls[i]);
         } else {
           if (!resetCache.has(key)) resetCache.set(key, provider.reset(target, 0, count));
-          const rolls = resetCache.get(key);
-          const layouts = new Map();
-          const initial = target.planner.currentBonuses ? layoutOf(target.planner.currentBonuses) : target.keepCategories;
-          if (validLayout(initial, target)) layouts.set(layoutKey(initial), { layout: initial, positions: [], initial: true });
-          for (let index = 0; index < count; index += 1) {
-            const result = Array.from(rolls.subarray(index * 5, index * 5 + 5));
-            const totals = bonusTotals(result, target);
-            const top = matchesTier(totals, target, stream, "preferred");
-            for (const mode of needed) if (matchesTier(totals, target, stream, mode)) sets[mode].push({ finish: index + 1, action: "reset", top: mode === "acceptable" && top });
-            const layout = layoutOf(result);
-            const lk = layoutKey(layout);
-            if (!layouts.has(lk)) layouts.set(lk, { layout, positions: [], initial: false });
-            layouts.get(lk).positions.push(index + 1);
-          }
-          let li = 0;
-          for (const { layout, positions, initial: known } of layouts.values()) {
-            // Loose bounds (top and bottom tier in every slot) are safe for
-            // pruning; the real engine still enforces all tier and category
-            // caps for every candidate.
-            const maximum = bonusTotals(layout.map((category) => [15, 16, 14, 10][category]), target);
-            const minimum = bonusTotals(layout.map((category) => [8, 9, 11, 6][category]), target);
-            // Custom status gains can put either tier first. A bounded stat
-            // can only match known gains, so ignore unknown endpoints.
-            for (const stat of Object.keys(minimum)) {
-              const known = [minimum[stat], maximum[stat]].filter(Number.isFinite);
-              minimum[stat] = known.length ? Math.min(...known) : null;
-              maximum[stat] = known.length ? Math.max(...known) : null;
-            }
-            if (!needed.some((mode) => rangeCanMatch(minimum, maximum, target, mode))) continue;
-            const kept = provider.keep(target, 0, count, layout);
-            for (let index = known ? 0 : positions[0]; index < count; index += 1) {
-              const totals = bonusTotals(kept.subarray(index * 5, index * 5 + 5), target);
-              const top = matchesTier(totals, target, stream, "preferred");
-              for (const mode of needed) {
-                if (!matchesTier(totals, target, stream, mode)) continue;
-                const choice = { finish: index + 1, action: "keep", layout, acquisitions: known ? null : positions, top: mode === "acceptable" && top };
-                if (sets[mode].length >= cap && !savedKeys.has(choiceKey(choice))) { pools[mode].complete = false; continue; }
-                sets[mode].push(choice);
-              }
-            }
-            if (++li % 6 === 0) { await pause(); report({ phase: "layouts", target: ti + 1, layouts: li, total: layouts.size }); }
-          }
+          await visitBonusRolls(target, count, resetCache.get(key), provider, {
+            onReset: (finish, raw) => add(finish, "reset", bonusTotals(raw, target)),
+            onKeep: (finish, raw, layout, acquisitions) => add(finish, "keep", bonusTotals(raw, target), layout, acquisitions),
+            canKeep: (low, high) => needed.some((mode) => rangeCanMatch(low, high, target, mode)),
+            batchSize: 6,
+            onBatch: async (layouts, total) => {
+              await pause();
+              report({ phase: "layouts", target: ti + 1, layouts, total });
+            },
+          });
         }
       }
       // A weapon that already meets its acceptable goal can still be
@@ -238,8 +215,6 @@ export async function optimizeStream(targets, limit, complete = true, options = 
   return { status: "complete", horizon, choices: best.map(({ acquisitions, ...choice }) => choice), proven: complete && !exhausted, nodes: budget.nodes };
 }
 
-const choiceKey = (choice) => `${choice.action}:${choice.finish}:${choice.layout ? layoutKey(choice.layout) : ""}`;
-
 // A weapon's saved options are alternatives: choose one, and never fall back
 // to automatic results while a nonempty saved collection exists. A pick the
 // player chose for the route is the only option while it is still usable.
@@ -285,52 +260,35 @@ export async function collectFinishOptions(request, stream, targetId, provider, 
   // Saved-pick membership is the browser's to judge.
   const filters = (options.filters ?? []).filter((filter) => filter.key !== "saved");
   const found = [];
-  const add = (option) => {
-    const result = stream === "bonus" ? option.totals : option.raw;
-    option.top = matchesTier(result, target, stream, "preferred") && hasGoal(target, stream);
-    option.meets = matchesTier(result, target, stream, "acceptable") && hasGoal(target, stream);
+  const add = (finish, action, raw, layout = null, acquire = null) => {
+    const totals = stream === "bonus" ? bonusTotals(raw, target) : null;
+    const quality = resultQuality(totals ?? raw, target, stream);
+    const option = {
+      key: choiceKey({ finish, action, layout }), finish, action, layout, acquire, raw, totals,
+      top: quality === "preferred", meets: quality !== "none",
+    };
     if (finishOptionMatches(option, filters)) found.push(option);
   };
   if (stream === "skill") {
     const rolls = provider.skills(target, 0, count);
-    for (let index = from - 1; index < count; index += 1) add({ key: `skill:${index + 1}:`, finish: index + 1, action: "skill", layout: null, acquire: null, raw: rolls[index], totals: null });
+    for (let index = from - 1; index < count; index += 1) add(index + 1, "skill", rolls[index]);
   } else {
-    const rolls = provider.reset(target, 0, count);
-    const raw = (values, index) => Array.from(values.subarray(index * 5, index * 5 + 5));
-    const layouts = new Map();
-    const initial = target.planner.currentBonuses ? layoutOf(target.planner.currentBonuses) : target.keepCategories;
-    if (validLayout(initial, target)) layouts.set(layoutKey(initial), { layout: initial, positions: [], initial: true });
-    const resets = !filters.some((filter) => filter.key === "action" && filter.value !== "reset");
-    for (let index = 0; index < count; index += 1) {
-      const result = raw(rolls, index);
-      if (resets && index + 1 >= from) add({ key: `reset:${index + 1}:`, finish: index + 1, action: "reset", layout: null, acquire: null, raw: result, totals: bonusTotals(result, target) });
-      const layout = layoutOf(result);
-      const lk = layoutKey(layout);
-      if (!layouts.has(lk)) layouts.set(lk, { layout, positions: [], initial: false });
-      layouts.get(lk).positions.push(index + 1);
-    }
-    const keeps = !filters.some((filter) => filter.key === "action" && filter.value !== "keep");
-    const direct = filters.some((filter) => filter.key === "direct");
-    let li = 0;
-    for (const { layout, positions, initial: known } of keeps ? layouts.values() : []) {
-      if (direct && !known) continue;
-      // Skip layouts whose loosest possible gains miss a stat filter.
-      const maximum = bonusTotals(layout.map((category) => [15, 16, 14, 10][category]), target);
-      const minimum = bonusTotals(layout.map((category) => [8, 9, 11, 6][category]), target);
-      const possible = filters.every((filter) => {
-        const ends = [minimum[filter.key], maximum[filter.key]].filter(Number.isFinite);
-        if (!ends.length || (filter.min === undefined && filter.max === undefined)) return true;
-        return (filter.min === null || Math.max(...ends) >= filter.min) && (filter.max === null || Math.min(...ends) <= filter.max);
-      });
-      if (!possible) continue;
-      const kept = provider.keep(target, 0, count, layout);
-      for (let index = Math.max(known ? 0 : positions[0], from - 1); index < count; index += 1) {
-        const result = raw(kept, index);
-        add({ key: `keep:${index + 1}:${layoutKey(layout)}`, finish: index + 1, action: "keep", layout,
-          acquire: known ? null : positions.find((position) => position < index + 1) ?? null, raw: result, totals: bonusTotals(result, target) });
-      }
-      if (++li % 24 === 0) { await pause(); report({ phase: "layouts", layouts: li, total: layouts.size }); }
-    }
+    const allows = (action) => filters.every((filter) => filter.key !== "action" || filter.value === action);
+    await visitBonusRolls(target, count, provider.reset(target, 0, count), provider, {
+      from,
+      onReset: allows("reset") ? (finish, raw) => add(finish, "reset", raw) : null,
+      onKeep: allows("keep") ? (finish, raw, layout, acquisitions) =>
+        add(finish, "keep", Array.from(raw), layout, acquisitions?.[0] ?? null) : null,
+      directOnly: filters.some((filter) => filter.key === "direct"),
+      canKeep: (low, high) => filters.every(({ key, min, max }) =>
+        !Number.isFinite(low[key]) || (min === undefined && max === undefined)
+        || ((min === null || high[key] >= min) && (max === null || low[key] <= max))),
+      batchSize: 24,
+      onBatch: async (layouts, total) => {
+        await pause();
+        report({ phase: "layouts", layouts, total });
+      },
+    });
   }
   // Too many matches keep the best by the browser's sort, then the earliest.
   const sorted = sortFinishOptions(found, options.sort ?? []).map(({ option }) => option);
