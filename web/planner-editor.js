@@ -1,6 +1,7 @@
 import { createWeaponProfile } from "./weapon-profiles.js";
 import { createPlannerWorker, errorText, terminatePlannerWorker } from "./planner-worker-client.js";
-import { goalFormMarkup, readGoalForm, skillPairRow, writeGoalTier } from "./planner-goal-form.js";
+import { captureGoalFields, goalFormMarkup, writeGoalFields } from "./planner-goal-form.js";
+import { copyDraftGoals, createEditorDraft, readEditorDraft, setDraftTier } from "./planner-editor-state.js";
 import { finishBrowserMarkup } from "./planner-finish-view.js";
 import { copiedPlanner, filtersToTier, finishSortKeys, hasGoal, normalizedPlanner, rowFilters, savedFinishFromOption, savedFinishId, tierFinishFilters } from "./planner-model.js";
 import { weaponName } from "./planner-markup.js";
@@ -10,7 +11,7 @@ import { pl } from "./planner-text.js";
 export function createWeaponEditor(dialog, { metadata, getTargets, getState, settingsFor, usedFinish, savedPickRow, onSave }) {
   const q = (selector) => dialog.querySelector(selector);
   const nameOf = (target) => weaponName(target, metadata);
-  let draft = null;
+  let edit = null;
   let adding = false;
   let draftSourceId = null;
   let editorTab = "goals";
@@ -23,10 +24,9 @@ export function createWeaponEditor(dialog, { metadata, getTargets, getState, set
 
   function open(target, options) {
     if (!target) return;
-    if (draft?.id !== target.id) {
+    if (edit?.weapon.id !== target.id) {
       resetFinishViews();
-      draft = structuredClone(target);
-      draft.planner = normalizedPlanner(draft);
+      edit = createEditorDraft(target);
       adding = false;
       draftSourceId = null;
     }
@@ -35,8 +35,9 @@ export function createWeaponEditor(dialog, { metadata, getTargets, getState, set
   function add(source) {
     resetFinishViews();
     const weaponType = source?.weaponType ?? 3;
-    draft = createWeaponProfile({ weaponType, attributeForce: source?.attributeForce ?? 1, skillCombinations: metadata.defaultSkills(weaponType) });
+    const draft = createWeaponProfile({ weaponType, attributeForce: source?.attributeForce ?? 1, skillCombinations: metadata.defaultSkills(weaponType) });
     draft.planner = source ? copiedPlanner(source, draft) : normalizedPlanner(draft);
+    edit = createEditorDraft(draft);
     draftSourceId = source?.id ?? null;
     adding = true;
     renderEditor();
@@ -47,7 +48,8 @@ export function createWeaponEditor(dialog, { metadata, getTargets, getState, set
     finishList = null;
   }
   function renderEditor({ tab = "goals", stream = "bonus" } = {}) {
-    dialog.innerHTML = goalFormMarkup(draft, { isNew: adding, sources: getTargets().filter((v) => v.id !== draft.id), nameOf, metadata });
+    dialog.innerHTML = goalFormMarkup(edit.weapon, { isNew: adding, sources: getTargets().filter((v) => v.id !== edit.weapon.id), nameOf, metadata });
+    projectFields();
     q("#pl-goal-form").addEventListener("submit", submitGoals);
     if (!dialog.open) dialog.showModal();
     switchEditorTab(tab, stream);
@@ -57,32 +59,29 @@ export function createWeaponEditor(dialog, { metadata, getTargets, getState, set
     if (dialog.open) dialog.close();
     dialog.replaceChildren();
     resetFinishViews();
-    draft = null;
+    edit = null;
   }
-  // Fills the open form only; nothing is stored until the goals are saved.
+  // Copy into the raw draft; nothing is stored until the weapon is saved.
   function copyGoals(sourceId) {
     const raw = getTargets().find((target) => target.id === sourceId);
-    const current = draft;
-    const form = q("#pl-goal-form");
-    if (!raw || !current || !form) return;
+    if (!raw || !edit) return;
     if (adding) draftSourceId = sourceId;
-    const p = copiedPlanner(raw, current);
-    form.elements.bonusEnabled.checked = p.bonusEnabled;
-    form.elements.skillEnabled.checked = p.skillEnabled;
-    for (const tier of ["acceptable", "preferred"]) writeGoalTier(form, tier, p[tier], metadata);
-    if (form.elements.element0 && raw.weaponType === current.weaponType && raw.attributeForce === current.attributeForce) [0, 1].forEach((i) => { form.elements[`element${i}`].value = p.elementValues[i] ?? ""; });
+    copyDraftGoals(edit, raw);
+    projectFields();
   }
   // Another type or element changes which stats exist: goals copied from a weapon are copied again for the new kind, otherwise they start over.
   function changeDraftKind(form) {
     if (!adding) return;
     resetFinishViews();
-    draft.label = form.elements.label.value.trim();
+    const draft = edit.weapon;
+    draft.label = edit.fields.label.trim();
     draft.weaponType = Number(form.elements.weaponType.value); draft.attributeForce = Number(form.elements.attributeForce.value);
     const savedFinishes = draft.planner.savedFinishes;
     draft.skillCombinations = metadata.defaultSkills(draft.weaponType); delete draft.planner;
     const source = getTargets().find((v) => v.id === draftSourceId);
     draft.planner = source ? copiedPlanner(source, draft) : normalizedPlanner(draft);
     draft.planner.savedFinishes = savedFinishes;
+    edit = createEditorDraft(draft);
     renderEditor();
   }
   function uniqueLabel(baseName) {
@@ -90,14 +89,15 @@ export function createWeaponEditor(dialog, { metadata, getTargets, getState, set
     while (getTargets().some((v) => nameOf(v) === label)) label = `${baseName} ${++count}`;
     return label;
   }
-  const readEditorTarget = (options) => readGoalForm(q("#pl-goal-form"), draft, options);
+  const readEditorTarget = (options) => readEditorDraft(edit, options);
+  const projectFields = () => writeGoalFields(q("#pl-goal-form"), edit.fields, metadata);
   function editorError(error) {
     const message = ["goals", "statusValues", "excluded", "minAboveMax", "targets", "limits", "state"].includes(error.message) ? errorText(error.message) : error.message;
     q("#pl-editor-error").textContent = message; q("#pl-editor-error").hidden = false;
   }
   function submitGoals(event) {
     event.preventDefault();
-    if (!draft) return;
+    if (!edit) return;
     try {
       const target = readEditorTarget();
       if (adding && !target.label) target.label = uniqueLabel(nameOf(target));
@@ -121,8 +121,9 @@ export function createWeaponEditor(dialog, { metadata, getTargets, getState, set
     for (const view of Object.values(finishViews)) view.loading = false;
   }
   function switchEditorTab(tab, stream) {
-    if (!draft) return;
+    if (!edit) return;
     if (tab === "finishes") {
+      let draft;
       try {
         draft = readEditorTarget({ validate: false });
       } catch (error) { editorError(error); return; }
@@ -133,7 +134,7 @@ export function createWeaponEditor(dialog, { metadata, getTargets, getState, set
       finishList = finishViews[nextStream] ??= { stream: nextStream, from: 1, to: Math.max(1, settingsFor(draft, nextStream).limit), active: "acceptable", trying: null, notice: "", visible: 50, options: null, error: "" };
     }
     editorTab = tab;
-    q(".section-heading .pl-muted").textContent = nameOf(draft);
+    q(".section-heading .pl-muted").textContent = nameOf({ ...edit.weapon, label: edit.fields.label.trim() });
     filterMenuOpen = false; filterEditing = null; sortMenuOpen = false;
     q("#pl-editor-error").hidden = true;
     for (const name of ["goals", "finishes"]) {
@@ -143,28 +144,26 @@ export function createWeaponEditor(dialog, { metadata, getTargets, getState, set
     }
     dialog.scrollTop = 0;
     renderFinishModal();
-    if (tab === "finishes" && !finishList.loading && (!finishList.options || finishList.signature !== finishSearchSignature(draft, finishList.stream))) searchEditorFinishes();
+    if (tab === "finishes" && !finishList.loading && (!finishList.options || finishList.signature !== finishSearchSignature(readEditorTarget({ validate: false }), finishList.stream))) searchEditorFinishes();
   }
   // A row's chips: Top and OK read the draft goals, so they are always in sync.
-  function rowChips(row) {
+  function rowChips(row, target = readEditorTarget({ validate: false })) {
     if (row === "trying") return finishList.trying?.filters ?? [];
-    return tierFinishFilters(draft, row, finishList.stream);
+    return tierFinishFilters(target, row, finishList.stream);
   }
-  function activeFilters() {
+  function activeFilters(target) {
     const row = finishList.active === "trying" && !finishList.trying ? "acceptable" : finishList.active;
-    return rowFilters(rowChips(row));
+    return rowFilters(rowChips(row, target));
   }
   // Sets a row's chips. On a goal row this edits the draft goal; an invalid
   // goal (such as a minimum above what five slots can gain) is rolled back.
   function setRowChips(row, chips) {
     if (row === "trying") { finishList.trying.filters = chips; return true; }
-    const before = tierFinishFilters(draft, row, finishList.stream);
-    writeGoalTier(q("#pl-goal-form"), row, filtersToTier(chips, finishList.stream), metadata);
     try {
-      draft = readEditorTarget({ validate: false });
+      setDraftTier(edit, row, filtersToTier(chips, finishList.stream));
+      projectFields();
       return true;
     } catch (error) {
-      writeGoalTier(q("#pl-goal-form"), row, filtersToTier(before, finishList.stream), metadata);
       finishList.error = error.message; renderFinishModal();
       return false;
     }
@@ -183,9 +182,11 @@ export function createWeaponEditor(dialog, { metadata, getTargets, getState, set
     refreshFinishes();
   }
   function renderFinishModal() {
-    if (!draft || !q("#pl-finishes-panel")) return;
-    const count = Object.values(draft.planner.savedFinishes ?? {}).reduce((sum, picks) => sum + picks.length, 0);
+    if (!edit || !q("#pl-finishes-panel")) return;
+    const count = Object.values(edit.weapon.planner.savedFinishes ?? {}).reduce((sum, picks) => sum + picks.length, 0);
     q("#pl-tab-finishes").textContent = count ? pl("Finishes ({n})", { n: count }) : pl("Finishes");
+    if (editorTab !== "finishes") return;
+    const draft = readEditorTarget({ validate: false });
     const panel = q("#pl-finishes-panel");
     const scroll = dialog.scrollTop;
     const favoritesOpen = panel.querySelector(".pl-browser-favorites")?.open ?? false;
@@ -193,13 +194,15 @@ export function createWeaponEditor(dialog, { metadata, getTargets, getState, set
     if (!list) { panel.replaceChildren(); dialog.scrollTop = scroll; return; }
     const current = list.signature === finishSearchSignature(draft, list.stream);
     panel.innerHTML = finishBrowserMarkup(draft, list, { levels: list.sort ?? settingsFor(draft, list.stream).sort,
-      current, inRoute: current ? usedFinish(draft.id, list.stream) : null, filterEditing, filterMenuOpen, sortMenuOpen, metadata, rowChips, filters: activeFilters(), savedPickRow });
+      current, inRoute: current ? usedFinish(draft.id, list.stream) : null, filterEditing, filterMenuOpen, sortMenuOpen, metadata,
+      rowChips: (row) => rowChips(row, draft), filters: activeFilters(draft), savedPickRow });
     const favorites = panel.querySelector(".pl-browser-favorites");
     if (favorites) favorites.open = favoritesOpen;
     dialog.scrollTop = scroll;
   }
   function updateFinishSort(change) {
-    if (!finishList || !draft) return;
+    if (!finishList || !edit) return;
+    const draft = readEditorTarget({ validate: false });
     const levels = structuredClone(finishList.sort ?? settingsFor(draft, finishList.stream).sort);
     change(levels, finishSortKeys(finishList.stream, draft));
     finishList.sort = levels;
@@ -211,9 +214,9 @@ export function createWeaponEditor(dialog, { metadata, getTargets, getState, set
     if (finishList?.options || finishList?.loading) searchEditorFinishes(); else renderFinishModal();
   }
   function searchEditorFinishes() {
-    if (!finishList || !draft) return;
+    if (!finishList || !edit) return;
     try {
-      draft = readEditorTarget({ validate: false });
+      const draft = readEditorTarget({ validate: false });
       for (const key of ["from", "to"]) {
         const input = q(`[data-browser-range="${key}"]`);
         if (input) finishList[key] = Number(input.value);
@@ -226,6 +229,7 @@ export function createWeaponEditor(dialog, { metadata, getTargets, getState, set
       const list = finishList;
       list.loading = true; list.error = ""; list.visible = 50;
       const signature = finishSearchSignature(draft, list.stream);
+      list.searchSignature = signature;
       const from = list.from;
       finishWorker = createPlannerWorker((data) => {
         stopFinishSearch();
@@ -234,18 +238,21 @@ export function createWeaponEditor(dialog, { metadata, getTargets, getState, set
       }, (message) => {
         stopFinishSearch(); list.error = message; renderFinishModal();
       });
-      finishWorker.postMessage({ kind: "collect", request, stream: list.stream, targetId: target.id, from, filters: activeFilters(), sort: list.sort ?? settingsFor(draft, list.stream).sort });
+      finishWorker.postMessage({ kind: "collect", request, stream: list.stream, targetId: target.id, from, filters: activeFilters(draft), sort: list.sort ?? settingsFor(draft, list.stream).sort });
       q("#pl-editor-error").hidden = true; renderFinishModal();
-    } catch (error) { finishList.error = ["goals", "state", "limits", "statusValues", "excluded", "minAboveMax"].includes(error.message) ? errorText(error.message) : error.message; renderFinishModal(); }
+    } catch (error) { stopFinishSearch(); finishList.error = ["goals", "state", "limits", "statusValues", "excluded", "minAboveMax"].includes(error.message) ? errorText(error.message) : error.message; renderFinishModal(); }
   }
   function toggleSavedPick(index) {
     const list = finishList; const option = list?.options?.[index];
-    if (!draft || !option || list.loading || list.signature !== finishSearchSignature(draft, list.stream)) return;
+    if (!edit || !option || list.loading) return;
+    const draft = readEditorTarget({ validate: false });
+    if (list.signature !== finishSearchSignature(draft, list.stream)) return;
     const pick = savedFinishFromOption(draft, list.stream, option, list.origin);
     if (!pick) return;
     const picks = draft.planner.savedFinishes ??= { bonus: [], skill: [] };
     const id = savedFinishId(pick);
     picks[list.stream] = picks[list.stream].some((value) => savedFinishId(value) === id) ? picks[list.stream].filter((value) => savedFinishId(value) !== id) : [...picks[list.stream], pick];
+    edit.weapon.planner.savedFinishes = picks;
     renderFinishModal(); (q(`[data-pl-save-pick="${index}"]`) ?? q("#pl-tab-finishes"))?.focus({ preventScroll: true });
   }
   function applyBrowserFilter() {
@@ -322,13 +329,13 @@ export function createWeaponEditor(dialog, { metadata, getTargets, getState, set
     },
     "draft-route-pick"({ pick }) {
       const { stream } = finishList;
-      const selected = draft.planner.routePick ??= { bonus: null, skill: null };
+      const selected = edit.weapon.planner.routePick ??= { bonus: null, skill: null };
       selected[stream] = selected[stream] === pick ? null : pick;
       renderFinishModal();
     },
     "draft-remove-pick"({ pick }) {
       const { stream } = finishList;
-      const picks = draft.planner.savedFinishes;
+      const picks = edit.weapon.planner.savedFinishes;
       picks[stream] = picks[stream].filter((value) => savedFinishId(value) !== pick);
       renderFinishModal();
     },
@@ -362,8 +369,12 @@ export function createWeaponEditor(dialog, { metadata, getTargets, getState, set
         const wrap = button.closest(".pl-copy-wrap");
         wrap.querySelector(".pl-copy-menu").hidden = true;
         wrap.querySelector(".pl-copy-chip").setAttribute("aria-expanded", "false");
-      } else if (action === "add-pair") q(`[data-pairs="${data.tier}"]`).insertAdjacentHTML("beforeend", skillPairRow(metadata));
-      else if (action === "remove-pair") button.closest(".pl-combo").remove();
+      } else if (action === "add-pair") {
+        edit.fields[data.tier].skills.push({ seriesIndex: "11", groupIndex: "13" }); projectFields();
+      } else if (action === "remove-pair") {
+        const row = button.closest(".pl-combo"), container = row.parentElement;
+        edit.fields[container.dataset.pairs].skills.splice([...container.children].indexOf(row), 1); projectFields();
+      }
     }
     // A result click can also dismiss a menu before toggling the pick.
     const pick = target.closest("[data-pl-save-pick]");
@@ -381,7 +392,13 @@ export function createWeaponEditor(dialog, { metadata, getTargets, getState, set
       if (filterEditing) applyBrowserFilter(); else searchEditorFinishes();
     }
   }
-  dialog.addEventListener("change", ({ target }) => {
+  function captureInput({ target }) {
+    if (edit && target.closest("#pl-goals-panel")) edit.fields = captureGoalFields(q("#pl-goal-form"));
+  }
+  dialog.addEventListener("input", captureInput);
+  dialog.addEventListener("change", (event) => {
+    captureInput(event);
+    const { target } = event;
     if (target.matches("[data-pl-new-type]")) changeDraftKind(target.form);
     else if (target.matches("[data-pl-finish-stream]")) switchEditorTab("finishes", target.value);
     else if (target.matches("[data-browser-range]")) finishList[target.dataset.browserRange] = Number(target.value);
@@ -395,13 +412,16 @@ export function createWeaponEditor(dialog, { metadata, getTargets, getState, set
 
   return {
     open, add, close, click, keydown, refresh: renderFinishModal,
-    get id() { return draft?.id; },
-    clearFinishResults({ loadingOnly = false } = {}) {
-      if (!loadingOnly || finishList?.loading) finishList = null;
+    get id() { return edit?.weapon.id; },
+    syncContext() {
+      if (!edit || !finishList?.loading) return;
+      try {
+        if (finishList.searchSignature !== finishSearchSignature(readEditorTarget({ validate: false }), finishList.stream)) stopFinishSearch();
+      } catch { stopFinishSearch(); }
     },
     submitIfOpen() {
-      if (draft) q("#pl-goal-form").requestSubmit();
-      return !draft;
+      if (edit) q("#pl-goal-form").requestSubmit();
+      return !edit;
     },
   };
 }

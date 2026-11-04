@@ -1,5 +1,5 @@
 import { localizedTargetName, t } from "./i18n.js";
-import { availableStats, BONUS_CATEGORY } from "./planner-model.js";
+import { availableStats, BONUS_CATEGORY, hasBonusGoal } from "./planner-model.js";
 import { pl } from "./planner-text.js";
 
 export const esc = (text) => String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -58,3 +58,24 @@ export function resultMarkup(result, stream, target, { series, groups, bonusName
   }).join("");
   return `<strong class="pl-totals">${esc(statsText(totals, target))}</strong><div class="pl-chips">${chips}</div>`;
 }
+
+export const goalFor = (target, mode, stream) => {
+  const p = target.planner;
+  const other = p[mode === "preferred" ? "acceptable" : "preferred"];
+  if (stream === "bonus") return hasBonusGoal(p[mode]) ? p[mode] : other;
+  return p[mode].skills.length ? p[mode].skills : other.skills;
+};
+// "Attack +30", "Attack ≤ +40", "Attack +30–40", or "No Attack" for max 0.
+// A minimum of 0 is always met, so it reads like no bound.
+const rangeText = (tier, target) => availableStats(target).map((key) => {
+  const unit = key === "affinity" ? "%" : "";
+  const name = statName(key, target);
+  const min = tier.stats[key] || null;
+  const max = tier.maxStats[key];
+  if (max === 0) return pl("No {stat}", { stat: name });
+  if (max === undefined) return min === null ? "" : `${name} +${min}${unit}`;
+  return min === null ? `${name} ≤ +${max}${unit}` : `${name} +${min}–${max}${unit}`;
+}).filter(Boolean).join(" · ");
+export const bonusGoalText = (target, mode) => rangeText(goalFor(target, mode, "bonus"), target);
+
+export const stateCode = (state) => state.baseSeed === null ? pl("Unknown") : `GSF2-B${state.baseSeed}-G${state.bonusCounter ?? "?"}-S${state.skillCounter ?? "?"}`;

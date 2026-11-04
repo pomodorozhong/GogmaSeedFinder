@@ -1,4 +1,4 @@
-import { availableStats, BONUS_CATEGORY, layoutOf, normalizedPlanner, statMaximum, statRollValues, validBonuses, validLayout, validatePlannerRequest } from "./planner-model.js";
+import { availableStats, BONUS_CATEGORY, statMaximum, statRollValues } from "./planner-model.js";
 import { categoryStat, comboOptions, esc, html, options, pairOptions, statName, tierName } from "./planner-markup.js";
 import { pl } from "./planner-text.js";
 
@@ -79,52 +79,46 @@ export function goalFormMarkup(target, { isNew, sources, nameOf, metadata }) {
     <div class="pl-editor-footer"><button class="text-button" type="button" data-pl-action="cancel-edit">${html("Cancel")}</button><button class="primary" type="submit">${html(isNew ? "Add weapon" : "Save weapon")}</button></div></form>`;
 }
 
-const optionalNumber = (input) => input.value === "" ? null : Number(input.value);
+// DOM adapters capture input and project draft values. A partial number keeps
+// the raw draft invalid until the user finishes editing it.
+const inputValue = (input) => input.validity.badInput ? "-" : input.value;
 
-function readTier(form, tier) {
+function captureTier(form, tier) {
   const bounds = (bound) => Object.fromEntries([...form.querySelectorAll(`[data-tier="${tier}"][data-bound="${bound}"]`)]
-    .filter((input) => input.value !== "").map((input) => [input.dataset.stat, Number(input.value)]));
+    .map((input) => [input.dataset.stat, inputValue(input)]));
   const skills = [...form.querySelectorAll(`[data-pairs="${tier}"] .pl-combo`)].map((row) => ({
-    seriesIndex: optionalNumber(row.querySelector('[data-pair="series"]')),
-    groupIndex: optionalNumber(row.querySelector('[data-pair="group"]')),
+    seriesIndex: row.querySelector('[data-pair="series"]').value,
+    groupIndex: row.querySelector('[data-pair="group"]').value,
   }));
   return { stats: bounds("min"), maxStats: bounds("max"), skills };
 }
 
-// Browsing may leave a goal empty (to list every roll); saving still checks it.
-export function readGoalForm(form, editorTarget, { validate = true } = {}) {
-  if ([...form.querySelectorAll("#pl-goals-panel input, #pl-goals-panel select, [name=label]")].some((input) => !input.checkValidity())) throw new Error(pl("Check the goal fields before continuing."));
-  const target = { ...editorTarget, planner: normalizedPlanner(editorTarget) };
-  const p = target.planner;
-  target.label = form.elements.label.value.trim();
-  p.bonusEnabled = form.elements.bonusEnabled.checked;
-  p.skillEnabled = form.elements.skillEnabled.checked;
-  for (const tier of ["acceptable", "preferred"]) p[tier] = readTier(form, tier);
-  const slots = (selector) => [...form.querySelectorAll(selector)].map(optionalNumber);
-  const current = slots("[data-current-bonus]");
-  p.currentBonuses = current.every((v) => v === null) ? null : current;
-  if (p.currentBonuses?.includes(null)) throw new Error(pl("Enter either all five current bonuses or leave all five unknown."));
-  target.keepCategories = p.currentBonuses ? layoutOf(p.currentBonuses) : slots("[data-current-category]");
-  if ((p.currentBonuses && !validBonuses(p.currentBonuses, target)) || (target.keepCategories.every((v) => v !== null) && !validLayout(target.keepCategories, target))) throw new Error(pl("The current bonus layout is not valid for this weapon."));
-  const series = optionalNumber(form.elements.currentSeries), group = optionalNumber(form.elements.currentGroup);
-  if ((series === null) !== (group === null)) throw new Error(pl("Select both current skills or leave both unknown."));
-  p.currentSkill = series === null ? null : series * 14 + group;
-  if (target.attributeForce >= 6 && target.weaponType < 12) p.elementValues = [form.elements.element0, form.elements.element1].map(optionalNumber);
-  for (const mode of ["acceptable", "preferred"]) {
-    for (const [key, min] of Object.entries(p[mode].stats)) {
-      const max = statMaximum(key, target);
-      if (max !== null && min > max) throw new Error(pl("{stat} can gain at most +{max} from five slots.", { stat: statName(key, target), max: `${max}${key === "affinity" ? "%" : ""}` }));
-    }
-  }
-  // Validate goals without requiring a discovered seed in the editor.
-  if (validate) validatePlannerRequest({ origin: { baseSeed: 0, bonusCounter: 0, skillCounter: 0 }, targets: [target], limits: { bonus: 0, skill: 0 } });
-  return target;
+export function captureGoalFields(form) {
+  return {
+    label: form.elements.label.value, bonusEnabled: form.elements.bonusEnabled.checked, skillEnabled: form.elements.skillEnabled.checked,
+    acceptable: captureTier(form, "acceptable"), preferred: captureTier(form, "preferred"),
+    currentBonuses: [...form.querySelectorAll("[data-current-bonus]")].map(inputValue),
+    keepCategories: [...form.querySelectorAll("[data-current-category]")].map(inputValue),
+    currentSeries: form.elements.currentSeries.value, currentGroup: form.elements.currentGroup.value,
+    elementValues: [form.elements.element0, form.elements.element1].map((input) => input ? inputValue(input) : ""),
+  };
 }
 
-// Copying goals writes both streams; editing a finish filter writes only its own stream.
-export function writeGoalTier(form, tier, { stats, maxStats, skills }, metadata) {
-  if (skills) form.querySelector(`[data-pairs="${tier}"]`).innerHTML = skills.map((pair) => skillPairRow(metadata, pair)).join("");
-  if (stats) for (const input of form.querySelectorAll(`[data-tier="${tier}"][data-stat]`)) {
-    input.value = (input.dataset.bound === "min" ? stats : maxStats)[input.dataset.stat] ?? "";
+export function writeGoalFields(form, fields, metadata) {
+  const writeValue = (input, value) => { if (value !== "-") input.value = value; };
+  form.elements.label.value = fields.label;
+  form.elements.bonusEnabled.checked = fields.bonusEnabled;
+  form.elements.skillEnabled.checked = fields.skillEnabled;
+  for (const tier of ["acceptable", "preferred"]) {
+    const values = fields[tier];
+    form.querySelector(`[data-pairs="${tier}"]`).innerHTML = values.skills.map((pair) => skillPairRow(metadata, {
+      seriesIndex: pair.seriesIndex === "" ? null : Number(pair.seriesIndex),
+      groupIndex: pair.groupIndex === "" ? null : Number(pair.groupIndex),
+    })).join("");
+    for (const input of form.querySelectorAll(`[data-tier="${tier}"][data-stat]`)) writeValue(input, (input.dataset.bound === "min" ? values.stats : values.maxStats)[input.dataset.stat] ?? "");
   }
+  for (const [selector, values] of [["[data-current-bonus]", fields.currentBonuses], ["[data-current-category]", fields.keepCategories]]) [...form.querySelectorAll(selector)].forEach((input, i) => { input.value = values[i]; });
+  form.elements.currentSeries.value = fields.currentSeries;
+  form.elements.currentGroup.value = fields.currentGroup;
+  fields.elementValues.forEach((value, i) => { if (form.elements[`element${i}`]) writeValue(form.elements[`element${i}`], value); });
 }
