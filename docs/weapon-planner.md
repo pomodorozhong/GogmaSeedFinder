@@ -298,25 +298,40 @@ included.
 ## Reviewing the implementation
 
 - **Shared save data:** [weapon-profiles.js](../web/weapon-profiles.js) creates individual weapons and restores legacy profiles. [save-position.js](../web/save-position.js) handles the Gogma seed and its two counters. Local storage recovers valid fields independently; an invalid planner import rejects the whole position. Base Artian uses its own state.
-- **Weapon editing.** The editor owns one draft for the Goals and Finishes tabs. Changing a filter can edit a draft goal. Save validates the form and passes the weapon and its sort choices to the planner. Cancel drops the draft and stops its finish search. [Editor controller](../web/planner-editor.js) · [Form fields](../web/planner-goal-form.js)
+- **Weapon editing.** [The draft state](../web/planner-editor-state.js) owns raw field values, including blanks and temporarily invalid numbers, for the Goals and Finishes tabs. Input events capture those values; form controls project them. Browsing and Save derive a validated weapon from the draft. Filter edits validate a candidate tier before replacing it, without a write/read/rollback through hidden controls. Cancel drops the draft and stops its finish search. [Editor controller](../web/planner-editor.js) · [Form adapters](../web/planner-goal-form.js)
 - **Finish browsing.** The editor derives the active filters for both the worker request and the visible results. The view builds the result buttons, filter chips and sort controls. The model defines how goals match results and how saved finishes are identified. [Finish view](../web/planner-finish-view.js) · [Planner model](../web/planner-model.js)
 - **Search:** [planner-worker.js](../web/planner-worker.js) supplies the WASM predictors. The route optimizer and finish browser in [planner-engine.js](../web/planner-engine.js) share [one Reset/Keep traversal](../web/planner-bonus-rolls.js). They apply different rules: a finish may be worth browsing even when it cannot fit a route.
-- **Execution:** [planner-progress.js](../web/planner-progress.js) derives each row’s status from the two saved-step counts. In [planner-ui.js](../web/planner-ui.js), matching a draw records a bookmark; confirming a save calls `saveStep` in [app.js](../web/app.js), which checks the seed and the affected stream again before writing.
+- **Execution:** [The route session](../web/planner-route-session.js) owns route search, compatibility, inspection, bookmarks and saved-step progress. [The route view](../web/planner-route-view.js) renders snapshots and measures the tables and guide pointer. [planner-progress.js](../web/planner-progress.js) derives each row’s status from the two saved-step counts. Matching a draw records a bookmark; confirming a save calls `saveStep` in [app.js](../web/app.js), which checks the seed and the affected stream again before writing. [planner-ui.js](../web/planner-ui.js) connects these owners to shared weapons, browser storage, import/export and UI events.
+- **Search lifecycle:** Route and finish searches own separate workers, results and errors. Failure or cancellation of one does not clear the other's view. An external position or weapon change updates each owner explicitly; a finish search with an obsolete position is stopped, and previously loaded finishes remain visibly stale until searched again.
 
 The arrows below follow a weapon edit. Each search starts its own worker instance.
 
 ```mermaid
 flowchart LR
     Planner["Planner UI"] -->|opens weapon| Editor["Weapon editor · one draft"]
-    Editor -->|reads and writes fields| Goals["Goal form"]
+    Editor -->|edits raw values| Draft["Editor draft"]
+    Goals["Goal form adapters"] -->|input events| Draft
+    Draft -->|projects fields| Goals
     Editor -->|renders results| View["Finish view"]
     Editor -->|searches finishes| Client["Worker client"]
-    Planner -->|builds routes| Client
+    Planner --> Session["Route session"]
+    Session -->|searches routes| Client
+    Session -->|snapshots| RouteView["Route view"]
     Client -. starts .-> Worker["Planner worker"]
     Editor -. validated Save .-> Planner
 ```
 
 ## Validation and data
+
+`npm run check` checks browser-module syntax and undefined identifiers. DOM
+integration tests in [planner-ui.test.mjs](../web/planner-ui.test.mjs) exercise
+real-WASM route and finish data with injected worker delivery and failures.
+They cover acquisition-guide rendering in all three languages, both save orders,
+bookmark-only matching, rejected save confirmations, raw draft validation,
+copying and duplication, saved picks, and independent search cancellation,
+failure, retry and position changes. A real-browser preview also exercises the
+actual module workers and WASM loading; DOM tests do not measure phone layout
+or performance.
 
 `npm test` covers stat equivalence, separate units, stat ranges and exclusion,
 Keep-layout pruning, Any skill pairs, ordered layout scheduling, conflicting
