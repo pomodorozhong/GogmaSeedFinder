@@ -315,6 +315,9 @@ button.pl-expected-roll:hover { background: #d6b35c10; }
 }
 .pl-modal { --pl-pad: clamp(18px, 3vw, 28px); width: min(720px, calc(100% - 24px)); max-height: calc(100vh - 48px); padding: var(--pl-pad); color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 28px 70px rgba(0, 0, 0, 0.5); }
 .pl-modal-wide { width: min(900px, calc(100% - 24px)); }
+.pl-modal-narrow { width: min(480px, calc(100% - 24px)); }
+.pl-modal-narrow h3 { margin: 0 0 10px; }
+.pl-modal-narrow .pl-editor-footer { margin-top: 18px; }
 .pl-modal::backdrop { background: rgba(8, 9, 7, 0.72); }
 .pl-modal[open] { display: flex; flex-direction: column; }
 .pl-modal > * { flex: none; }

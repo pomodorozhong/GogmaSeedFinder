@@ -37,7 +37,7 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
 
   root.innerHTML = `
     <section class="panel"><div class="section-heading"><div><p class="step">WEAPON PLANNER</p><h2>${html("Plan your weapons, roll by roll.")}</h2><p class="pl-muted">${html("Choose your weapons and minimum stat gains. Get a complete bonus and skill route.")}</p></div><span id="pl-storage" class="status-pill"></span></div>
-    <div class="pl-state-strip"><span>${html("Saved position")}</span><code id="pl-position"></code><button class="text-button" type="button" data-pl-action="state">${html("Set current state")}</button><span class="pl-transfer"><button class="text-button" type="button" data-pl-action="export">${html("Export plan")}</button><button class="text-button" type="button" data-pl-action="import">${html("Import plan")}</button><input id="pl-import-file" type="file" accept=".json,application/json" hidden></span></div></section>
+    <div class="pl-state-strip"><span>${html("Saved position")}</span><code id="pl-position"></code><button class="text-button" type="button" data-pl-action="state">${html("Set current state")}</button><span class="pl-transfer"><button class="text-button" type="button" data-pl-action="export">${html("Export plan")}</button><button class="text-button" type="button" data-pl-action="import">${html("Import plan")}</button><input id="pl-import-file" type="file" accept=".json,application/json" hidden></span></div><dialog id="pl-import-confirm" class="pl-modal pl-modal-narrow" aria-labelledby="pl-import-title"><h3 id="pl-import-title">${html("Import plan")}</h3><p>${html("Replace this browser's weapons, saved position and planner progress with the imported plan?")}</p><p class="pl-muted" id="pl-import-summary"></p><div class="pl-editor-footer"><button type="button" class="secondary" data-pl-action="import-cancel">${html("Cancel")}</button><button type="button" class="primary" data-pl-action="import-confirm">${html("Replace")}</button></div></dialog></section>
     <section class="panel" aria-labelledby="pl-weapons-title"><div class="section-heading"><div><p class="step">${html("Step {n}", { n: "01" })}</p><h2 id="pl-weapons-title">${html("Your weapons")}</h2><p class="pl-muted">${html("Select up to {max} weapons. Each copy is planned separately.", { max: MAX_SELECTED })} ${html("Mark a weapon Optional to leave it out of a route when it cannot fit.")}</p></div><button class="secondary small-button" type="button" data-pl-action="add">＋ ${html("Add weapon")}</button></div>
       <div class="pl-weapon-bars"><div id="pl-group" class="pl-sort pl-group-bar"></div><div id="pl-weapon-sort" class="pl-sort pl-group-bar"></div></div><div id="pl-weapons" class="pl-weapon-grid"></div><dialog id="pl-editor" class="pl-modal pl-modal-wide" aria-label="${html("Edit weapon goals")}"></dialog>
     </section>
@@ -208,13 +208,26 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     setStatus(pl("Plan exported. Import the file on another computer to continue."));
   }
   // Replaces this browser's weapons, saved position and planner progress.
-  // importState validates the position and weapons before changing anything.
+  // The page asks in its own dialog: native confirm() can be suppressed (as in
+  // embedded browsers), where it returns false without asking.
+  const importDialog = q("#pl-import-confirm");
+  let pendingImport = null;
+  importDialog.addEventListener("close", () => { pendingImport = null; });
   async function importPlan(file) {
     setError();
     let data;
     try { data = parsePlannerExport(await file.text()); }
     catch { setError(pl("This file is not a valid planner export.")); return; }
-    if (!window.confirm(pl("Replace this browser's weapons, saved position and planner progress with the imported plan?"))) return;
+    pendingImport = data;
+    q("#pl-import-summary").textContent = pl("{file}: base seed {seed}, G {bonus}, S {skill}, {n} weapons", { file: file.name, seed: data.state.baseSeed ?? "?", bonus: data.state.bonusCounter ?? "?", skill: data.state.skillCounter ?? "?", n: data.targets.length });
+    importDialog.showModal();
+    q('[data-pl-action="import-confirm"]').focus();
+  }
+  // importState validates the position and weapons before changing anything.
+  function applyImport() {
+    const data = pendingImport;
+    importDialog.close();
+    if (!data) return;
     session.stop();
     try { importState({ state: data.state, targets: data.targets }); }
     catch (error) { setError(error.message); return; }
@@ -262,6 +275,8 @@ export function initPlanner({ root, getState, getTargets, setTargets, saveStep, 
     else if (action === "group-remove") { cache.weaponGroups = cache.weaponGroups.filter((_, index) => index !== Number(button.dataset.index)); persist(); renderWeapons(); }
     else if (!event.target.closest("#pl-group .pl-sort-menu") && dismissGroupMenu()) { /* first click dismisses the menu */ }
     else if (action === "import") q("#pl-import-file").click();
+    else if (action === "import-confirm") applyImport();
+    else if (action === "import-cancel") importDialog.close();
     else if (action === "add") editor.add();
     else if (action === "weapon-menu") { weaponMenu = weaponMenu === button.dataset.id ? null : button.dataset.id; renderWeapons(); q(".pl-menu-list button")?.focus(); }
     else if (action === "optional") {

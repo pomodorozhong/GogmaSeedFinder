@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { JSDOM } from "jsdom";
 import { initSync, predict_gogma_rolls, predict_gogma_keep_rolls, predict_skill_rolls } from "./pkg/gogma_wasm_search.js";
-import { layoutOf, normalizedPlanner } from "./planner-model.js";
+import { layoutOf, normalizedPlanner, plannerExport } from "./planner-model.js";
 import { collectFinishOptions, planWeapons } from "./planner-engine.js";
 
 initSync({ module: readFileSync(new URL("./pkg/gogma_wasm_search_bg.wasm", import.meta.url)) });
@@ -333,4 +333,33 @@ test("after changes the old route stays followable until guides are built", asyn
   assert.equal(ui.saves.length, 1);
   assert.equal(ui.state().bonusCounter, routes.preferred.steps[index].after.bonusCounter);
   ui.dom.window.close();
+});
+
+test("importing a plan asks in the page and changes nothing until Replace", async () => {
+  const source = await mount();
+  checkFirstSteps(source, routes.preferred);
+  const text = JSON.stringify(plannerExport(source.state(), source.targets(), source.cache()));
+  const ui = await mount({ cached: false, targets: [], position: { baseSeed: null, bonusCounter: null, skillCounter: null } });
+  const choose = async (content) => {
+    const field = ui.q("#pl-import-file");
+    Object.defineProperty(field, "files", { configurable: true, value: [new ui.dom.window.File([content], "plan.json", { type: "application/json" })] });
+    field.dispatchEvent(new ui.dom.window.Event("change", { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  };
+  const before = ui.state();
+  await choose(text);
+  assert.equal(ui.q("#pl-import-confirm").open, true);
+  assert.match(ui.q("#pl-import-summary").textContent, /plan\.json: base seed 86315169/);
+  ui.click(action("import-cancel"));
+  assert.equal(ui.q("#pl-import-confirm").open, false);
+  assert.deepEqual(ui.state(), before);
+  await choose(text);
+  ui.click(action("import-confirm"));
+  assert.deepEqual(ui.state(), source.state());
+  assert.deepEqual(ui.cache().completed, source.cache().completed);
+  assert.equal(ui.root.querySelectorAll("[data-pl-step] .pl-saved-check").length, 2);
+  await choose("not a plan");
+  assert.equal(ui.q("#pl-import-confirm").open, false);
+  assert.match(ui.q("#pl-error").textContent, /not a valid planner export/);
+  source.dom.window.close(); ui.dom.window.close();
 });

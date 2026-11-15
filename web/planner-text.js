@@ -78,6 +78,8 @@ export const PLANNER_TEXT = {
   "Set current state": ["現在の状態を設定", "設定目前狀態"],
   "Export plan": ["プランを書き出す", "匯出規劃"],
   "Import plan": ["プランを読み込む", "匯入規劃"],
+  "Replace": ["置き換える", "取代"],
+  "{file}: base seed {seed}, G {bonus}, S {skill}, {n} weapons": ["{file}：ベースシード {seed}、G {bonus}、S {skill}、武器{n}本", "{file}：基礎種子 {seed}、G {bonus}、S {skill}、{n} 把武器"],
   "Plan exported. Import the file on another computer to continue.": ["プランを書き出しました。別のパソコンでこのファイルを読み込むと続きから再開できます。", "已匯出規劃。在其他電腦匯入此檔案即可繼續。"],
   "This file is not a valid planner export.": ["このファイルは武器プランナーの書き出しファイルではありません。", "此檔案不是有效的武器規劃匯出檔。"],
   "Replace this browser's weapons, saved position and planner progress with the imported plan?": ["このブラウザの武器、保存済みの位置、プランナーの進捗を読み込んだプランで置き換えますか？", "要以匯入的規劃取代此瀏覽器的武器、已儲存位置與規劃進度嗎？"],
