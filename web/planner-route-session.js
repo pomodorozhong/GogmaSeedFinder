@@ -1,8 +1,33 @@
-import { choiceKey, MAX_SELECTED, normalizedFinishSort, normalizedPlanner, normalizedProgress, routePosition, routeWeaponsMatch, samePosition, validatePlannerRequest } from "./planner-model.js";
+import { choiceKey, MAX_SELECTED, normalizedFinishSort, normalizedPlanner, normalizedProgress, routePosition, routeWeaponsMatch, samePosition, streamSteps, validatePlannerRequest } from "./planner-model.js";
 import { routeProgress } from "./planner-progress.js";
 import { createPlannerWorker, errorText, terminatePlannerWorker } from "./planner-worker-client.js";
 import { tierName } from "./planner-markup.js";
 import { pl } from "./planner-text.js";
+
+// Checked steps of earlier routes, kept when guides are built again so a plan
+// can be extended from the last checked step. Roll offsets are continuous per
+// stream: each step counts from the first route's origin.
+// `position` is where the history ends, so a later route continues from it.
+const emptyHistory = () => ({ steps: [], targets: [], position: null });
+function restoredHistory(stored) {
+  const valid = stored && Array.isArray(stored.steps) && stored.steps.length && Array.isArray(stored.targets) && stored.position && typeof stored.position === "object"
+    && stored.steps.every((step) => ["bonus", "skill"].includes(step?.stream) && Array.isArray(step.rolls) && step.rolls.length && stored.targets.some((target) => target?.id === step.targetId));
+  return valid ? { steps: stored.steps, targets: stored.targets, position: stored.position } : emptyHistory();
+}
+export const historyRolls = (history, stream) => history.steps.filter((step) => step.stream === stream).reduce((sum, step) => sum + step.rolls.length, 0);
+// Appends a route's checked steps, in route order, to the history, which then
+// ends at `position`.
+export function extendedHistory(history, route, completed, position) {
+  const done = normalizedProgress(route, completed);
+  const base = { bonus: historyRolls(history, "bonus"), skill: historyRolls(history, "skill") };
+  const saved = new Set(["bonus", "skill"].flatMap((stream) => streamSteps(route, stream).slice(0, done[stream])));
+  const shift = (step) => ({ ...step, start: step.start + base[step.stream], end: step.end + base[step.stream], rolls: step.rolls.map((roll) => ({ ...roll, offset: roll.offset + base[step.stream] })) });
+  const steps = route.steps.filter((step) => saved.has(step)).map(shift);
+  const ids = new Set(steps.map((step) => step.targetId));
+  // Each weapon keeps its newest snapshot, used to name it in the history.
+  const targets = [...history.targets.filter((target) => !ids.has(target.id)), ...route.targets.filter((target) => ids.has(target.id))];
+  return { steps: [...history.steps, ...steps], targets, position: { ...position } };
+}
 
 // The persisted shape stays compatible with existing saves and exports.
 function restoredCache(stored, targets) {
@@ -14,6 +39,7 @@ function restoredCache(stored, targets) {
     completed: stored?.completed,
     matches: stored?.matches && typeof stored.matches === "object" ? stored.matches : {},
     signature: typeof stored?.signature === "string" ? stored.signature : "",
+    history: restoredHistory(stored?.history),
     weaponSort: ["newTop", "newBottom"].includes(stored?.weaponSort) ? stored.weaponSort : "",
     weaponGroups: Array.isArray(stored?.weaponGroups) ? [...new Set(stored.weaponGroups)].filter((key) => ["type", "element", "selected"].includes(key)) : [],
     finishSort: Object.fromEntries(Object.entries(stored?.finishSort && typeof stored.finishSort === "object" ? stored.finishSort : {})
@@ -41,7 +67,13 @@ export function createRouteSession(stored, { getState, getTargets, saveStep, onC
   let worker = null;
   let activeContext = "";
   let stale = false;
-  const compatible = () => Boolean(route()) && !stale && cache.signature === signature() && samePosition(getState(), routePosition(route(), cache.completed)) && routeWeaponsMatch(route(), cache.completed, getTargets());
+  // A route stays followable while the saved position and weapon results are
+  // the ones it expects, even after goals change; it is current only until
+  // goals, weapons or limits change.
+  const atRoutePosition = () => Boolean(route()) && samePosition(getState(), routePosition(route(), cache.completed));
+  const followable = () => atRoutePosition() && routeWeaponsMatch(route(), cache.completed, getTargets());
+  const outdated = () => !worker && cache.signature !== signature();
+  const compatible = () => followable() && !stale && !outdated();
 
   function stop() {
     terminatePlannerWorker(worker);
@@ -55,6 +87,11 @@ export function createRouteSession(stored, { getState, getTargets, saveStep, onC
     const request = { origin: getState(), targets: prepared(), limits: { ...cache.limits } };
     try { validatePlannerRequest(request); } catch (error) { onError(errorText(error.message)); return; }
     stop();
+    // Building again keeps every checked step: the new route starts from the
+    // saved position right after them. A changed position starts a new plan.
+    if (route()) cache.history = atRoutePosition() ? extendedHistory(cache.history, route(), cache.completed, getState()) : emptyHistory();
+    else if (!cache.history.position || !samePosition(getState(), cache.history.position)) cache.history = emptyHistory();
+    if (!cache.history.steps.length) cache.history = emptyHistory();
     cache.routes = {}; cache.completed = { bonus: 0, skill: 0 }; cache.matches = {}; cache.mode = "acceptable"; cache.signature = signature();
     inspected = 0; stale = false; activeContext = context();
     try {
@@ -89,11 +126,11 @@ export function createRouteSession(stored, { getState, getTargets, saveStep, onC
     snapshot() {
       inspect(inspected);
       return { route: route(), routes: cache.routes, mode: cache.mode, completed: cache.completed, matches: cache.matches,
-        progress: progress(), totalDone: totalDone(), inspected, busy: worker !== null, compatible: compatible(),
-        outdated: !worker && cache.signature !== signature(), registered: getTargets() };
+        progress: progress(), totalDone: totalDone(), inspected, busy: worker !== null, compatible: followable(),
+        outdated: outdated() || stale, history: cache.history, registered: getTargets() };
     },
     invalidate() {
-      stop(); stale = Object.keys(cache.routes).length > 0; cache.signature = ""; cache.matches = {};
+      stop(); stale = Object.keys(cache.routes).length > 0; cache.signature = "";
       onStatus(pl("Build guides to apply your changes. Saved picks are kept."));
       onChange();
     },
@@ -125,13 +162,13 @@ export function createRouteSession(stored, { getState, getTargets, saveStep, onC
     },
     match(draw) {
       const row = progress().rows[inspected];
-      if (!row?.current || !compatible() || !Number.isInteger(draw) || draw < 1 || draw > row.step.rolls.length) return false;
+      if (!row?.current || !followable() || !Number.isInteger(draw) || draw < 1 || draw > row.step.rolls.length) return false;
       cache.matches[inspected] = draw;
       return true;
     },
     confirm(index = inspected) {
       const r = route();
-      if (worker || !r?.complete || !compatible() || !progress().rows[index]?.current) return;
+      if (worker || !r?.complete || !followable() || !progress().rows[index]?.current) return;
       const step = r.steps[index];
       try {
         saveStep(step, r.targets.find((target) => target.id === step.targetId));

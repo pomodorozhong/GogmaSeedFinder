@@ -393,13 +393,13 @@ export function routeWeaponsMatch(route, completed, registered) {
 export const PLAN_EXPORT_FORMAT = "gogma-weapon-planner";
 
 export function plannerExport(state, targets, planner) {
-  const { selected, limits, routes, mode, completed, matches, signature } = planner;
+  const { selected, limits, routes, mode, completed, matches, signature, history } = planner;
   return {
     format: PLAN_EXPORT_FORMAT,
     version: 1,
     state: { baseSeed: state.baseSeed, bonusCounter: state.bonusCounter, skillCounter: state.skillCounter },
     targets,
-    planner: { selected, limits, routes, mode, completed, matches, signature },
+    planner: { selected, limits, routes, mode, completed, matches, signature, history },
   };
 }
 

@@ -257,3 +257,80 @@ test("a failed saved-step recheck leaves progress unchanged", async () => {
   assert.deepEqual(ui.state(), position); assert.match(ui.q("#pl-error").textContent, /position recheck failed/);
   ui.dom.window.close();
 });
+
+// Saves the first step of each stream, as a player partway through a plan.
+function checkFirstSteps(ui, route) {
+  for (const stream of ["bonus", "skill"]) {
+    const index = route.steps.findIndex((step) => step.stream === stream);
+    ui.click(`[data-pl-step="${index}"]`); ui.click(action("done"));
+  }
+}
+async function buildFromWorker(ui) {
+  ui.q("#pl-limits").requestSubmit();
+  const worker = WorkerStub.instances.at(-1), { request } = worker.request;
+  const next = await planWeapons(request, provider(request.origin));
+  worker.emit({ type: "done", routes: next });
+  return { request, next };
+}
+
+test("building again keeps checked steps and plans the rest from the last one", async () => {
+  const ui = await mount();
+  const first = routes.preferred, checked = first.steps.filter((step) => ["bonus", "skill"].some((stream) => step === first.steps.find((v) => v.stream === stream)));
+  checkFirstSteps(ui, first);
+  const position = ui.state();
+  const { request, next } = await buildFromWorker(ui);
+  assert.deepEqual(request.origin, position);
+  const route = next.acceptable, history = ui.cache().history;
+  assert.deepEqual(history.steps.map((step) => [step.targetId, step.stream, step.start]), checked.map((step) => [step.targetId, step.stream, step.start]));
+  assert.deepEqual(history.position, position);
+  assert.equal(ui.root.querySelectorAll(".is-history").length, checked.length);
+  assert.equal(ui.q("#pl-saved-count").textContent, `${checked.length} of ${checked.length + route.steps.length} steps saved`);
+  // Roll labels continue after the checked rolls of the same stream.
+  const rolls = (stream) => checked.filter((step) => step.stream === stream).reduce((sum, step) => sum + step.rolls.length, 0);
+  const step = route.steps[0], label = `${step.stream === "bonus" ? "G" : "S"}${step.start + rolls(step.stream)}`;
+  assert.ok(ui.q('[data-pl-step="0"] .pl-roll-range').textContent.startsWith(label));
+  assert.match(ui.q(".pl-guide-kicker").textContent, new RegExp(`Step ${checked.length + 1} of ${checked.length + route.steps.length}`));
+  // The new route's steps confirm against the shared position as usual.
+  ui.click(action("done"));
+  assert.equal(ui.state()[`${step.stream}Counter`], step.after[`${step.stream}Counter`]);
+  const restored = await mount({ stored: ui.cache(), targets: ui.targets(), position: ui.state() });
+  assert.equal(restored.root.querySelectorAll(".is-history").length, checked.length);
+  // A second build appends this route's checked step after the earlier ones.
+  const again = await buildFromWorker(restored);
+  const extended = restored.cache().history.steps;
+  assert.equal(extended.length, checked.length + 1);
+  assert.equal(extended.at(-1).start, step.start + rolls(step.stream));
+  assert.deepEqual(again.request.origin, restored.state());
+  // A position that no longer follows the plan starts a new one.
+  restored.changePosition({ ...origin });
+  await buildFromWorker(restored);
+  assert.deepEqual(restored.cache().history.steps, []);
+  assert.equal(restored.root.querySelectorAll(".is-history").length, 0);
+  restored.dom.window.close(); ui.dom.window.close();
+});
+
+test("a cancelled build keeps the checked steps for the next build", async () => {
+  const ui = await mount();
+  checkFirstSteps(ui, routes.preferred);
+  ui.q("#pl-limits").requestSubmit(); ui.click(action("cancel"));
+  assert.equal(ui.cache().history.steps.length, 2);
+  await buildFromWorker(ui);
+  assert.equal(ui.cache().history.steps.length, 2);
+  ui.dom.window.close();
+});
+
+test("after changes the old route stays followable until guides are built", async () => {
+  const ui = await mount();
+  const index = routes.preferred.steps.findIndex((step) => step.stream === "bonus");
+  ui.click(`[data-pl-step="${index}"]`); ui.click('[data-pl-match="1"]');
+  ui.input('#pl-limits [name="bonus"]', 300, "change");
+  assert.equal(ui.q("#pl-workspace").hidden, false);
+  assert.match(ui.q("#pl-route-note").textContent, /Your changes are not in this route yet/);
+  assert.equal(ui.cache().matches[index], 1);
+  assert.equal(ui.q(action("done")).disabled, false);
+  assert.equal(ui.q("#pl-alternatives").hidden, true);
+  ui.click(action("done"));
+  assert.equal(ui.saves.length, 1);
+  assert.equal(ui.state().bonusCounter, routes.preferred.steps[index].after.bonusCounter);
+  ui.dom.window.close();
+});

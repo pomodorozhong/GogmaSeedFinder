@@ -211,6 +211,7 @@
 
 .pl-route-table td { padding: 15px 10px; border-top: 1px solid #34372e; vertical-align: top; overflow-wrap: anywhere; }
 .pl-route-table tbody tr { cursor: pointer; }
+.pl-route-table tbody tr.is-history { cursor: default; }
 .pl-route-table tbody tr:hover { background: #272a20; }
 .pl-route-table .is-inspected { background: #d6b35c0c; box-shadow: inset 3px 0 var(--gold); }
 .pl-route-table .is-inspected td { border-top-color: #897444; }

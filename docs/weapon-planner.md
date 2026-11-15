@@ -157,12 +157,13 @@ predicted G/S snapshot to the shared app state. The saved weapon's known result
 and ordered layout are updated too. The tool does not interact with the game or
 independently verify that the player performed these actions.
 
-Goals, routes, matches and confirmed progress persist in browser storage. A
-changed seed, counters, selected weapon, goal, or known layout blocks further
-confirmations on an incompatible route. When goals, weapons or limits change
-after a build, the old route is hidden behind a warning, even after a reload,
-so it cannot be mistaken for a current result. Build new guides from the current saved
-state to change a route already in progress. State-code formats are unchanged.
+Goals, routes, matches and confirmed progress persist in browser storage. A changed seed, counters, selected weapon or known result blocks further confirmations on an incompatible route. When goals, weapons or limits change after a build, the route stays usable with a note that the changes are not in it yet, so you can keep following it while you edit; alternative routes are hidden until you build again. State-code formats are unchanged.
+
+## Extending a plan in progress
+
+To add weapons or change goals partway through a plan, edit them and press **Build guides** again. Every checked step is kept, and the new route starts right after the last checked step of each table, from the saved G and S counters. Everything not yet checked is planned again from each weapon's current result, including a layout acquired by an earlier Reset. Places marked inside an unchecked step are cleared.
+
+Checked steps from earlier builds appear at the top of each table as a read-only record. Step numbers and G/S roll labels continue after them, and the route card notes how many checked rolls the route continues after. Each build appends that route's checked steps, so a plan can be extended any number of times. If the saved position no longer follows the plan, for example after editing the counters by hand, the next build starts a new plan without history. History is stored with the planner and included in plan exports.
 
 ## Saving finish alternatives
 
@@ -288,7 +289,7 @@ A changed sort is remembered for that weapon in this browser.
 (`gogma-planner-B<seed>-G<bonus>-S<skill>.json`) holding the base seed and both
 Gogma counters, every registered weapon with its goals, saved finish alternatives, known current results
 and Keep layout, and the planner's selection, roll limits, built routes, chosen
-route, matches and saved-step progress. **Import plan** on another browser asks
+route, matches, saved-step progress and checked steps kept from earlier builds. **Import plan** on another browser asks
 for confirmation, then replaces that browser's weapons, saved position and
 planner progress, so the guide resumes at the same step. A file that is not a
 planner export (format `gogma-weapon-planner`, version 1) is rejected without
@@ -301,7 +302,7 @@ included.
 - **Weapon editing.** [The draft state](../web/planner-editor-state.js) owns raw field values, including blanks and temporarily invalid numbers, for the Goals and Finishes tabs. Input events capture those values; form controls project them. Browsing and Save derive a validated weapon from the draft. Filter edits validate a candidate tier before replacing it, without a write/read/rollback through hidden controls. Cancel drops the draft and stops its finish search. [Editor controller](../web/planner-editor.js) · [Form adapters](../web/planner-goal-form.js)
 - **Finish browsing.** The editor derives the active filters for both the worker request and the visible results. The view builds the result buttons, filter chips and sort controls. The model defines how goals match results and how saved finishes are identified. [Finish view](../web/planner-finish-view.js) · [Planner model](../web/planner-model.js)
 - **Search:** [planner-worker.js](../web/planner-worker.js) supplies the WASM predictors. The route optimizer and finish browser in [planner-engine.js](../web/planner-engine.js) share [one Reset/Keep traversal](../web/planner-bonus-rolls.js). They apply different rules: a finish may be worth browsing even when it cannot fit a route.
-- **Execution:** [The route session](../web/planner-route-session.js) owns route search, compatibility, inspection, bookmarks and saved-step progress. [The route view](../web/planner-route-view.js) renders snapshots and measures the tables and guide pointer. [planner-progress.js](../web/planner-progress.js) derives each row’s status from the two saved-step counts. Matching a draw records a bookmark; confirming a save calls `saveStep` in [app.js](../web/app.js), which checks the seed and the affected stream again before writing. [planner-ui.js](../web/planner-ui.js) connects these owners to shared weapons, browser storage, import/export and UI events.
+- **Execution:** [The route session](../web/planner-route-session.js) owns route search, compatibility, inspection, bookmarks, saved-step progress and the history of checked steps that a rebuild carries over. A route is followable while the saved position and weapon results match it, even after goal edits. [The route view](../web/planner-route-view.js) renders snapshots and measures the tables and guide pointer. [planner-progress.js](../web/planner-progress.js) derives each row’s status from the two saved-step counts. Matching a draw records a bookmark; confirming a save calls `saveStep` in [app.js](../web/app.js), which checks the seed and the affected stream again before writing. [planner-ui.js](../web/planner-ui.js) connects these owners to shared weapons, browser storage, import/export and UI events.
 - **Search lifecycle:** Route and finish searches own separate workers, results and errors. Failure or cancellation of one does not clear the other's view. An external position or weapon change updates each owner explicitly; a finish search with an obsolete position is stopped, and previously loaded finishes remain visibly stale until searched again.
 
 The arrows below follow a weapon edit. Each search starts its own worker instance.
