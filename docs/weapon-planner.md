@@ -169,8 +169,8 @@ Checked steps from earlier builds appear at the top of each table as a read-only
 
 Each Stage 1 weapon card owns a **Saved picks** collection, with separate
 bonus and skill lists. The weapon editing modal has **Goals** and **Finishes**
-tabs. The pencil opens Goals; **Browse finishes** on a card or guide opens
-Finishes in the same modal. The cards retain their existing summaries.
+tabs. The pencil opens Goals; **Browse finishes** on a card or on any guide step opens
+Finishes in the same modal for that weapon and stream. On a finish step the guide also shows the route's finish and its saved picks, including after steps are checked; choosing a pick there builds again, keeping checked steps. The cards retain their existing summaries.
 
 Both tabs share a draft. Goals contains the existing stat bounds, skill pairs,
 and current-weapon fields. Finishes lists every result in a roll range,

@@ -363,3 +363,27 @@ test("importing a plan asks in the page and changes nothing until Replace", asyn
   assert.match(ui.q("#pl-error").textContent, /not a valid planner export/);
   source.dom.window.close(); ui.dom.window.close();
 });
+
+test("every guide step can open its weapon's finishes, before and after checked steps", async () => {
+  const ui = await mount();
+  const route = routes.preferred, guideButton = () => ui.root.querySelector(`#pl-guide ${action("finishes")}`);
+  const visit = () => {
+    for (const [index, step] of route.steps.entries()) {
+      ui.click(`[data-pl-step="${index}"]`);
+      assert.ok(guideButton(), `step ${index} (${step.intent})`);
+      assert.equal(Boolean(ui.root.querySelector("#pl-guide .pl-finish-card")), step.intent === "finish");
+    }
+  };
+  visit();
+  checkFirstSteps(ui, route);
+  visit();
+  ui.input('#pl-limits [name="bonus"]', 300, "change");
+  visit();
+  const step = route.steps.at(-1);
+  ui.click(`[data-pl-step="${route.steps.length - 1}"]`); ui.click(`#pl-guide ${action("finishes")}`);
+  assert.equal(ui.q("#pl-editor").open, true);
+  assert.equal(ui.q("#pl-tab-finishes").getAttribute("aria-selected"), "true");
+  assert.equal(ui.q("#pl-finishes-panel").hidden, false);
+  assert.equal(WorkerStub.instances.at(-1).request.stream, step.stream);
+  ui.dom.window.close();
+});

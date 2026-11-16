@@ -146,18 +146,21 @@ export function createRouteView(root, { metadata, savedPickRow }) {
       <footer class="pl-guide-footer">${current ? `<div><strong>${html("{matched}/{total} matched · {remaining} remaining", { matched, total: step.rolls.length, remaining: step.rolls.length - matched })}</strong><button type="button" class="primary" data-pl-action="done"${!ok || state.busy ? " disabled" : ""}>${html("Done & saved")} →</button></div><p class="pl-fine">${html("Finish this block and save in game, then confirm here. Matching a result only marks your place; it never saves a step or advances the counters.")}</p>` : state.totalDone < r.steps.length ? `<button type="button" class="secondary" data-pl-action="current">← ${html("Back to current step")}</button>` : `<span class="pl-teal">✓ ${r.dropped?.length ? html("Route complete. Weapons left out: {names}", { names: shortNames(r) }) : html("Route complete. All chosen goals are met.")}</span>`}</footer><details class="pl-state-details"><summary>${html("Saved state details")}</summary><p>${html("Before")} <code>${esc(stateCode(stepState(r, step, "before")))}</code></p><p>${html("After")} <code>${esc(stateCode(stepState(r, step, "after")))}</code></p></details></div>`;
     schedulePointer();
   }
-  // A weapon's finish can be swapped for any other that keeps the stream's
-  // roll count, until a step in that stream is saved.
+  // Every step can open the weapon's finishes for its stream. A finish step
+  // also shows the route's finish and its saved picks; choosing a pick builds
+  // again, which keeps checked steps and plans the rest around it.
   function finishMarkup(r, step, ok) {
-    if (step.intent !== "finish" || !r.complete || state.busy || !ok || state.outdated || state.completed[step.stream] !== 0) return "";
     const raw = state.registered.find((target) => target.id === step.targetId);
     const target = raw ? { ...raw, planner: normalizedPlanner(raw) } : null;
+    if (!target || !hasGoal(target, step.stream)) return "";
+    const browse = `<button type="button" class="pl-finish-toggle" data-pl-action="finishes">${html("Browse finishes")}</button>`;
+    if (step.intent !== "finish" || !r.complete || state.busy || !ok) return `<div class="pl-guide-browse">${browse}</div>`;
     const picks = target?.planner.savedFinishes?.[step.stream] ?? [];
     const text = !picks.length ? pl("Automatic — no saved picks") : target.planner.routePick?.[step.stream] ? pl("The route uses the pick you chose.")
       : picks.length > 1 ? pl("The route uses one of this weapon's {n} saved picks. Choose one to use it instead.", { n: picks.length }) : pl("The route uses this weapon's saved pick.");
     const rows = picks.length > 1 ? `<ul class="pl-saved-picks">${picks.map((pick) => savedPickRow(target, step.stream, pick, `data-pl-action="remove-pick" data-id="${esc(target.id)}" data-stream="${step.stream}"`, `data-pl-action="route-pick" data-rebuild="true" data-id="${esc(target.id)}" data-stream="${step.stream}"`)).join("")}</ul>` : "";
     const prefix = step.stream === "bonus" ? "G" : "S";
-    return `<div class="pl-finish-card"><div class="pl-finish-card-top"><div><span class="pl-guide-label pl-gold">${html("Finish")}</span><div class="pl-finish-value">${prefix}${step.rolls.at(-1).offset + base(step.stream)} ${badge(step)}</div></div><button type="button" class="pl-finish-toggle" data-pl-action="finishes">${html("Browse finishes")}</button></div><p class="pl-finish-sub">${esc(text)}</p>${rows}</div>`;
+    return `<div class="pl-finish-card"><div class="pl-finish-card-top"><div><span class="pl-guide-label pl-gold">${html("Finish")}</span><div class="pl-finish-value">${prefix}${step.rolls.at(-1).offset + base(step.stream)} ${badge(step)}</div></div>${browse}</div><p class="pl-finish-sub">${esc(text)}</p>${rows}</div>`;
   }
 
   function schedulePointer() {
